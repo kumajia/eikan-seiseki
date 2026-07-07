@@ -1,7 +1,7 @@
 {
   "name": "栄冠スタッツ",
   "short_name": "栄冠スタッツ",
-  "start_url": "./eikan-stats.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone"],

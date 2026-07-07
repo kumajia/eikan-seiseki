@@ -1,6 +1,6 @@
-const CACHE = "eikan-stats-v2";
+const CACHE = "eikan-stats-v3";
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./eikan-stats.html", "./manifest.json"])));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./index.html", "./manifest.json"])));
   self.skipWaiting();
 });
 self.addEventListener("activate", e => {
