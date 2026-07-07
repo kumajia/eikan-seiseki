@@ -244,9 +244,16 @@
         <div class="field" style="max-width:130px"><label>入学年</label>
           <input type="number" id="playerEnrollYear" placeholder="例: 2030">
         </div>
+        <div class="field" style="max-width:120px"><label>ポジション</label>
+          <select id="playerPosition"></select>
+        </div>
         <div class="field" style="justify-content:flex-end">
           <label>&nbsp;</label>
           <button class="mini ghost" id="bulkEnrollBtn">まとめて入学年設定</button>
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <label>&nbsp;</label>
+          <button class="mini ghost" id="bulkPositionBtn">まとめてポジション設定</button>
         </div>
       </div>
     </section>
@@ -409,6 +416,30 @@
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="ghost" id="bulkEnrollCancel">キャンセル</button>
       <button class="primary" id="bulkEnrollApply">設定する</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalOverlay" id="bulkPositionModal" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <h2 style="font-family:var(--mincho);font-size:17px;margin:0 0 14px">ポジションをまとめて設定</h2>
+    <div class="field">
+      <label>ポジション</label>
+      <select id="bulkPosition"></select>
+    </div>
+    <div class="field" style="margin-bottom:6px">
+      <label class="inline" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+        <input type="checkbox" id="bulkPositionShowAll"> 設定済みの選手も表示
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button type="button" class="mini ghost" id="bulkPositionAll">全選択</button>
+      <button type="button" class="mini ghost" id="bulkPositionNone">全解除</button>
+    </div>
+    <div id="bulkPositionList" class="chipList" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="ghost" id="bulkPositionCancel">キャンセル</button>
+      <button class="primary" id="bulkPositionApply">設定する</button>
     </div>
   </div>
 </div>
@@ -904,12 +935,45 @@ function renderBulkEnrollList(){
   const el=$("#bulkEnrollList"); if(!el) return;
   DB.playerMeta = DB.playerMeta || {};
   const showAll=$("#bulkEnrollShowAll").checked;
-  const roster=playerRoster().filter(([key])=> showAll || !DB.playerMeta[key]);
+  const roster=playerRoster().filter(([key])=> showAll || DB.playerMeta[key]?.enrollYear==null);
   if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がおらんで（全員設定済みかも）</div>`; return; }
   el.innerHTML=roster.map(([key,nm])=>{
     const cur=DB.playerMeta[key]?.enrollYear;
     const sel=bulkSelectedKeys.has(key);
     return `<button type="button" class="chip${sel?' selected':''}" data-key="${esc(key)}">${esc(nm)}${cur?`<span class="en">${cur}年</span>`:''}</button>`;
+  }).join("");
+}
+
+/* ---------- ポジション ---------- */
+const POSITIONS=["投手","捕手","一塁","二塁","三塁","遊撃","外野"];
+function fillPositionSelects(){
+  const opts=`<option value="">－</option>`+POSITIONS.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  const sel=$("#playerPosition"); if(sel) sel.innerHTML=opts;
+  const bulk=$("#bulkPosition"); if(bulk) bulk.innerHTML=POSITIONS.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("");
+}
+
+/* ---------- ポジションまとめて設定 ---------- */
+let bulkPositionSelectedKeys=new Set();
+function openBulkPositionModal(){
+  const m=$("#bulkPositionModal"); if(!m) return;
+  $("#bulkPositionShowAll").checked=false;
+  bulkPositionSelectedKeys=new Set();
+  renderBulkPositionList();
+  m.style.display="flex";
+}
+function closeBulkPositionModal(){
+  const m=$("#bulkPositionModal"); if(m) m.style.display="none";
+}
+function renderBulkPositionList(){
+  const el=$("#bulkPositionList"); if(!el) return;
+  DB.playerMeta = DB.playerMeta || {};
+  const showAll=$("#bulkPositionShowAll").checked;
+  const roster=playerRoster().filter(([key])=> showAll || !DB.playerMeta[key]?.position);
+  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がおらんで（全員設定済みかも）</div>`; return; }
+  el.innerHTML=roster.map(([key,nm])=>{
+    const cur=DB.playerMeta[key]?.position;
+    const sel=bulkPositionSelectedKeys.has(key);
+    return `<button type="button" class="chip${sel?' selected':''}" data-key="${esc(key)}">${esc(nm)}${cur?`<span class="en">${esc(cur)}</span>`:''}</button>`;
   }).join("");
 }
 function playerSeasonBatTableHtml(rows){
@@ -973,10 +1037,12 @@ function playerLogTableHtml(rows,enrollYear){
 function renderPlayerContent(){
   const el=$("#playerContent"); if(!el) return;
   const key=currentPlayerKey();
-  if(!key){ el.innerHTML=`<div class="empty">選手データがまだないで（入力欄で選手名を選んでな）。</div>`; $("#playerEnrollYear").value=""; return; }
+  if(!key){ el.innerHTML=`<div class="empty">選手データがまだないで（入力欄で選手名を選んでな）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; return; }
   DB.playerMeta = DB.playerMeta || {};
   const enrollYear = DB.playerMeta[key]?.enrollYear ?? null;
+  const position = DB.playerMeta[key]?.position ?? "";
   $("#playerEnrollYear").value = enrollYear ?? "";
+  $("#playerPosition").value = position;
   const seasonBatRows=[], seasonPitRows=[], logRows=[], careerGames=[];
   for(const [sname,s] of seasonEntries()){
     const gamesWithPlayer = s.games.filter(g=>
@@ -1008,8 +1074,9 @@ function renderPlayerContent(){
   const careerPit=aggPitching(careerGames).find(r=>nameKey(r.name)===key);
   const dispName = careerBat? careerBat.name : (careerPit? careerPit.name : "");
   const curGrade = lastLog? gradeInfo(enrollYear, lastLog.season, gameYear({date:lastLog.date})).label : "";
+  const badgeBits=[curGrade,position].filter(Boolean).join("・");
 
-  let html=`<section class="card"><h2 style="font-size:16px">${esc(dispName)}${curGrade?`　<span class="dim" style="font-size:13px;font-weight:400">(${curGrade})</span>`:''}　通算</h2><div class="kpis">`;
+  let html=`<section class="card"><h2 style="font-size:16px">${esc(dispName)}${badgeBits?`　<span class="dim" style="font-size:13px;font-weight:400">(${esc(badgeBits)})</span>`:''}　通算</h2><div class="kpis">`;
   if(careerBat) html+= kpi("試合",careerBat.G)+kpi("打率",avg3(careerBat.AVG),"a")+kpi("OPS",avg3(careerBat.OPS))+kpi("本塁打",careerBat.HR,"g")+kpi("打点",careerBat.RBI)+kpi("盗塁",careerBat.SB);
   if(careerPit) html+= kpi("登板",careerPit.G)+kpi("防御率",careerPit.ipNum?careerPit.ERA.toFixed(2):"-","a")+kpi("勝利",careerPit.W)+kpi("奪三振",careerPit.K)+kpi("投球回",careerPit.IPstr);
   html+=`</div></section>`;
@@ -1434,6 +1501,7 @@ async function init(){
   DB=await loadDB();
   if(!DB){DB=seed(); await saveDB();}
   fillSeasons();
+  fillPositionSelects();
   render();
 
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){switchTab(b.dataset.tab);if(b.dataset.tab==="add"&&editIndex<0)resetForm();}});
@@ -1503,9 +1571,35 @@ async function init(){
     const year=parseInt(yv,10);
     if(!bulkSelectedKeys.size){ toast("選手を選んでな",true); return; }
     DB.playerMeta = DB.playerMeta || {};
-    bulkSelectedKeys.forEach(key=>{ DB.playerMeta[key]={enrollYear:year}; });
+    bulkSelectedKeys.forEach(key=>{ DB.playerMeta[key]={...(DB.playerMeta[key]||{}), enrollYear:year}; });
     await saveDB(); closeBulkEnrollModal(); renderPlayerContent();
     toast(`${bulkSelectedKeys.size}人に設定したで`);
+  });
+  $("#bulkPositionBtn").addEventListener("click",openBulkPositionModal);
+  $("#bulkPositionCancel").addEventListener("click",closeBulkPositionModal);
+  $("#bulkPositionModal").addEventListener("click",e=>{ if(e.target.id==="bulkPositionModal") closeBulkPositionModal(); });
+  $("#bulkPositionShowAll").addEventListener("change",renderBulkPositionList);
+  $("#bulkPositionList").addEventListener("click",e=>{
+    const chip=e.target.closest(".chip"); if(!chip) return;
+    const key=chip.dataset.key;
+    if(bulkPositionSelectedKeys.has(key)) bulkPositionSelectedKeys.delete(key); else bulkPositionSelectedKeys.add(key);
+    chip.classList.toggle("selected");
+  });
+  $("#bulkPositionAll").addEventListener("click",()=>{
+    $$("#bulkPositionList .chip").forEach(c=>{ c.classList.add("selected"); bulkPositionSelectedKeys.add(c.dataset.key); });
+  });
+  $("#bulkPositionNone").addEventListener("click",()=>{
+    $$("#bulkPositionList .chip").forEach(c=>c.classList.remove("selected"));
+    bulkPositionSelectedKeys.clear();
+  });
+  $("#bulkPositionApply").addEventListener("click",async()=>{
+    const pos=$("#bulkPosition").value;
+    if(!pos){ toast("ポジションを選んでな",true); return; }
+    if(!bulkPositionSelectedKeys.size){ toast("選手を選んでな",true); return; }
+    DB.playerMeta = DB.playerMeta || {};
+    bulkPositionSelectedKeys.forEach(key=>{ DB.playerMeta[key]={...(DB.playerMeta[key]||{}), position:pos}; });
+    await saveDB(); closeBulkPositionModal(); renderPlayerContent();
+    toast(`${bulkPositionSelectedKeys.size}人に設定したで`);
   });
 
   // sorting
@@ -1534,7 +1628,18 @@ async function init(){
     const key=currentPlayerKey(); if(!key) return;
     DB.playerMeta = DB.playerMeta || {};
     const v=$("#playerEnrollYear").value.trim();
-    if(v) DB.playerMeta[key]={enrollYear:parseInt(v,10)}; else delete DB.playerMeta[key];
+    const cur={...(DB.playerMeta[key]||{})};
+    if(v) cur.enrollYear=parseInt(v,10); else delete cur.enrollYear;
+    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
+    await saveDB(); renderPlayerContent();
+  });
+  $("#playerPosition").addEventListener("change",async()=>{
+    const key=currentPlayerKey(); if(!key) return;
+    DB.playerMeta = DB.playerMeta || {};
+    const v=$("#playerPosition").value;
+    const cur={...(DB.playerMeta[key]||{})};
+    if(v) cur.position=v; else delete cur.position;
+    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
     await saveDB(); renderPlayerContent();
   });
   $("#playerContent").addEventListener("click",e=>{
