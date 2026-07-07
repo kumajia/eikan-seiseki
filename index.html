@@ -247,6 +247,9 @@
         <div class="field" style="max-width:120px"><label>ポジション</label>
           <select id="playerPosition"></select>
         </div>
+        <div class="field" style="max-width:120px"><label>サブポジション</label>
+          <select id="playerSubPosition"></select>
+        </div>
         <div class="field" style="justify-content:flex-end">
           <label>&nbsp;</label>
           <button class="mini ghost" id="bulkEnrollBtn">まとめて入学年設定</button>
@@ -254,6 +257,10 @@
         <div class="field" style="justify-content:flex-end">
           <label>&nbsp;</label>
           <button class="mini ghost" id="bulkPositionBtn">まとめてポジション設定</button>
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <label>&nbsp;</label>
+          <button class="mini ghost" id="bulkSubPositionBtn">まとめてサブポジ設定</button>
         </div>
       </div>
     </section>
@@ -440,6 +447,30 @@
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="ghost" id="bulkPositionCancel">キャンセル</button>
       <button class="primary" id="bulkPositionApply">設定する</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalOverlay" id="bulkSubPositionModal" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <h2 style="font-family:var(--mincho);font-size:17px;margin:0 0 14px">サブポジションをまとめて設定</h2>
+    <div class="field">
+      <label>サブポジション</label>
+      <select id="bulkSubPosition"></select>
+    </div>
+    <div class="field" style="margin-bottom:6px">
+      <label class="inline" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+        <input type="checkbox" id="bulkSubPositionShowAll"> 設定済みの選手も表示
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button type="button" class="mini ghost" id="bulkSubPositionAll">全選択</button>
+      <button type="button" class="mini ghost" id="bulkSubPositionNone">全解除</button>
+    </div>
+    <div id="bulkSubPositionList" class="chipList" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="ghost" id="bulkSubPositionCancel">キャンセル</button>
+      <button class="primary" id="bulkSubPositionApply">設定する</button>
     </div>
   </div>
 </div>
@@ -960,8 +991,11 @@ function renderBulkEnrollList(){
 const POSITIONS=["投手","捕手","一塁","二塁","三塁","遊撃","外野"];
 function fillPositionSelects(){
   const opts=`<option value="">－</option>`+POSITIONS.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  const bulkOpts=POSITIONS.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("");
   const sel=$("#playerPosition"); if(sel) sel.innerHTML=opts;
-  const bulk=$("#bulkPosition"); if(bulk) bulk.innerHTML=POSITIONS.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  const subSel=$("#playerSubPosition"); if(subSel) subSel.innerHTML=opts;
+  const bulk=$("#bulkPosition"); if(bulk) bulk.innerHTML=bulkOpts;
+  const bulkSub=$("#bulkSubPosition"); if(bulkSub) bulkSub.innerHTML=bulkOpts;
 }
 
 /* ---------- ポジションまとめて設定 ---------- */
@@ -985,6 +1019,31 @@ function renderBulkPositionList(){
   el.innerHTML=roster.map(([key,nm])=>{
     const cur=DB.playerMeta[key]?.position;
     const sel=bulkPositionSelectedKeys.has(key);
+    return `<button type="button" class="chip${sel?' selected':''}" data-key="${esc(key)}">${esc(nm)}${cur?`<span class="en">${esc(cur)}</span>`:''}</button>`;
+  }).join("");
+}
+
+/* ---------- サブポジションまとめて設定 ---------- */
+let bulkSubPositionSelectedKeys=new Set();
+function openBulkSubPositionModal(){
+  const m=$("#bulkSubPositionModal"); if(!m) return;
+  $("#bulkSubPositionShowAll").checked=false;
+  bulkSubPositionSelectedKeys=new Set();
+  renderBulkSubPositionList();
+  m.style.display="flex";
+}
+function closeBulkSubPositionModal(){
+  const m=$("#bulkSubPositionModal"); if(m) m.style.display="none";
+}
+function renderBulkSubPositionList(){
+  const el=$("#bulkSubPositionList"); if(!el) return;
+  DB.playerMeta = DB.playerMeta || {};
+  const showAll=$("#bulkSubPositionShowAll").checked;
+  const roster=playerRoster().filter(([key])=> showAll || !DB.playerMeta[key]?.subPosition);
+  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がおらんで（全員設定済みかも）</div>`; return; }
+  el.innerHTML=roster.map(([key,nm])=>{
+    const cur=DB.playerMeta[key]?.subPosition;
+    const sel=bulkSubPositionSelectedKeys.has(key);
     return `<button type="button" class="chip${sel?' selected':''}" data-key="${esc(key)}">${esc(nm)}${cur?`<span class="en">${esc(cur)}</span>`:''}</button>`;
   }).join("");
 }
@@ -1049,12 +1108,14 @@ function playerLogTableHtml(rows,enrollYear){
 function renderPlayerContent(){
   const el=$("#playerContent"); if(!el) return;
   const key=currentPlayerKey();
-  if(!key){ el.innerHTML=`<div class="empty">選手データがまだないで（入力欄で選手名を選んでな）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; return; }
+  if(!key){ el.innerHTML=`<div class="empty">選手データがまだないで（入力欄で選手名を選んでな）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; $("#playerSubPosition").value=""; return; }
   DB.playerMeta = DB.playerMeta || {};
   const enrollYear = DB.playerMeta[key]?.enrollYear ?? null;
   const position = DB.playerMeta[key]?.position ?? "";
+  const subPosition = DB.playerMeta[key]?.subPosition ?? "";
   $("#playerEnrollYear").value = enrollYear ?? "";
   $("#playerPosition").value = position;
+  $("#playerSubPosition").value = subPosition;
   const seasonBatRows=[], seasonPitRows=[], logRows=[], careerGames=[];
   for(const [sname,s] of seasonEntries()){
     const gamesWithPlayer = s.games.filter(g=>
@@ -1090,7 +1151,8 @@ function renderPlayerContent(){
   const latestOverall=latestGameGlobally();
   const latestRef = (latestOverall && (!lastLog || latestOverall.date >= lastLog.date)) ? latestOverall : lastLog;
   const curGrade = latestRef? gradeInfo(enrollYear, latestRef.season, gameYear({date:latestRef.date})).label : "";
-  const badgeBits=[curGrade,position].filter(Boolean).join("・");
+  const posStr = position? (subPosition? `${position}(${subPosition})` : position) : "";
+  const badgeBits=[curGrade,posStr].filter(Boolean).join("・");
 
   let html=`<section class="card"><h2 style="font-size:16px">${esc(dispName)}${badgeBits?`　<span class="dim" style="font-size:13px;font-weight:400">(${esc(badgeBits)})</span>`:''}　通算</h2><div class="kpis">`;
   if(careerBat) html+= kpi("試合",careerBat.G)+kpi("打率",avg3(careerBat.AVG),"a")+kpi("OPS",avg3(careerBat.OPS))+kpi("本塁打",careerBat.HR,"g")+kpi("打点",careerBat.RBI)+kpi("盗塁",careerBat.SB);
@@ -1617,6 +1679,32 @@ async function init(){
     await saveDB(); closeBulkPositionModal(); renderPlayerContent();
     toast(`${bulkPositionSelectedKeys.size}人に設定したで`);
   });
+  $("#bulkSubPositionBtn").addEventListener("click",openBulkSubPositionModal);
+  $("#bulkSubPositionCancel").addEventListener("click",closeBulkSubPositionModal);
+  $("#bulkSubPositionModal").addEventListener("click",e=>{ if(e.target.id==="bulkSubPositionModal") closeBulkSubPositionModal(); });
+  $("#bulkSubPositionShowAll").addEventListener("change",renderBulkSubPositionList);
+  $("#bulkSubPositionList").addEventListener("click",e=>{
+    const chip=e.target.closest(".chip"); if(!chip) return;
+    const key=chip.dataset.key;
+    if(bulkSubPositionSelectedKeys.has(key)) bulkSubPositionSelectedKeys.delete(key); else bulkSubPositionSelectedKeys.add(key);
+    chip.classList.toggle("selected");
+  });
+  $("#bulkSubPositionAll").addEventListener("click",()=>{
+    $$("#bulkSubPositionList .chip").forEach(c=>{ c.classList.add("selected"); bulkSubPositionSelectedKeys.add(c.dataset.key); });
+  });
+  $("#bulkSubPositionNone").addEventListener("click",()=>{
+    $$("#bulkSubPositionList .chip").forEach(c=>c.classList.remove("selected"));
+    bulkSubPositionSelectedKeys.clear();
+  });
+  $("#bulkSubPositionApply").addEventListener("click",async()=>{
+    const pos=$("#bulkSubPosition").value;
+    if(!pos){ toast("サブポジションを選んでな",true); return; }
+    if(!bulkSubPositionSelectedKeys.size){ toast("選手を選んでな",true); return; }
+    DB.playerMeta = DB.playerMeta || {};
+    bulkSubPositionSelectedKeys.forEach(key=>{ DB.playerMeta[key]={...(DB.playerMeta[key]||{}), subPosition:pos}; });
+    await saveDB(); closeBulkSubPositionModal(); renderPlayerContent();
+    toast(`${bulkSubPositionSelectedKeys.size}人に設定したで`);
+  });
 
   // sorting
   $("#batTbl").addEventListener("click",e=>{
@@ -1655,6 +1743,15 @@ async function init(){
     const v=$("#playerPosition").value;
     const cur={...(DB.playerMeta[key]||{})};
     if(v) cur.position=v; else delete cur.position;
+    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
+    await saveDB(); renderPlayerContent();
+  });
+  $("#playerSubPosition").addEventListener("change",async()=>{
+    const key=currentPlayerKey(); if(!key) return;
+    DB.playerMeta = DB.playerMeta || {};
+    const v=$("#playerSubPosition").value;
+    const cur={...(DB.playerMeta[key]||{})};
+    if(v) cur.subPosition=v; else delete cur.subPosition;
     if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
     await saveDB(); renderPlayerContent();
   });
