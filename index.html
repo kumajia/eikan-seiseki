@@ -802,6 +802,18 @@ function renderPeriod(){
 function seasonEntries(){
   return Object.entries(DB.seasons).filter(([name])=>!name.includes("練習"));
 }
+function latestGameGlobally(){
+  // そのプレイヤー自身の最終出場ではなく、DB全体で一番新しい試合日を基準にする
+  // （3年引退後は本人の記録が増えんくなるだけやから、本人基準やと引退判定が一生反映されへん）
+  let latest=null;
+  for(const [sname,s] of seasonEntries()){
+    for(const g of (s.games||[])){
+      if(!g.date) continue;
+      if(!latest || g.date > latest.date) latest={date:g.date, season:sname};
+    }
+  }
+  return latest;
+}
 function playerRoster(){
   const map=new Map();
   for(const [,s] of seasonEntries()){
@@ -1073,7 +1085,11 @@ function renderPlayerContent(){
   const careerBat=aggBatting(careerGames).find(r=>nameKey(r.name)===key);
   const careerPit=aggPitching(careerGames).find(r=>nameKey(r.name)===key);
   const dispName = careerBat? careerBat.name : (careerPit? careerPit.name : "");
-  const curGrade = lastLog? gradeInfo(enrollYear, lastLog.season, gameYear({date:lastLog.date})).label : "";
+  // 学年/引退判定は「本人の最終出場」じゃなくて「DB全体で一番新しい試合」を基準にする
+  // (退部・引退後は本人の記録が増えんから、本人基準やと引退・卒業に一生ならへん)
+  const latestOverall=latestGameGlobally();
+  const latestRef = (latestOverall && (!lastLog || latestOverall.date >= lastLog.date)) ? latestOverall : lastLog;
+  const curGrade = latestRef? gradeInfo(enrollYear, latestRef.season, gameYear({date:latestRef.date})).label : "";
   const badgeBits=[curGrade,position].filter(Boolean).join("・");
 
   let html=`<section class="card"><h2 style="font-size:16px">${esc(dispName)}${badgeBits?`　<span class="dim" style="font-size:13px;font-weight:400">(${esc(badgeBits)})</span>`:''}　通算</h2><div class="kpis">`;
