@@ -184,6 +184,7 @@
     <button data-tab="summary" class="on">シーズン成績</button>
     <button data-tab="period">期間集計</button>
     <button data-tab="player">選手</button>
+    <button data-tab="enrollYear">入学年</button>
     <button data-tab="seasonCompare">シーズン比較</button>
     <button data-tab="games">試合ログ</button>
     <button data-tab="add">試合を追加</button>
@@ -265,6 +266,15 @@
       </div>
     </section>
     <div id="playerContent"></div>
+  </div>
+
+  <!-- ENROLL YEAR -->
+  <div id="tab-enrollYear" style="display:none">
+    <section class="card">
+      <h2>入学年</h2>
+      <div class="note">タップで展開。入学年ごとに選手をまとめて表示するで。選手名タップで個別ページへ。</div>
+      <div id="enrollYearList"></div>
+    </section>
   </div>
 
   <!-- SEASON COMPARE -->
@@ -767,6 +777,7 @@ function render(){
   renderPeriod();
   fillPlayerSel();
   renderPlayerContent();
+  renderEnrollYearTab();
   renderSeasonCompare();
 }
 
@@ -879,6 +890,68 @@ function fillPlayerSel(){
   if(!roster.length){ dl.innerHTML=""; inp.value=""; inp.placeholder="(選手がおらん)"; return; }
   dl.innerHTML=roster.map(([,nm])=>`<option value="${esc(nm)}"></option>`).join("");
   if(!currentPlayerKey()) inp.value=roster[0][1];
+}
+function careerGamesForKey(key){
+  const out=[];
+  for(const [,s] of seasonEntries()){
+    for(const g of s.games){
+      if((g.batters||[]).some(b=>nameKey(b.name)===key) || (g.pitchers||[]).some(p=>nameKey(p.name)===key)) out.push(g);
+    }
+  }
+  return out;
+}
+function renderEnrollYearTab(){
+  const el=$("#enrollYearList"); if(!el) return;
+  DB.playerMeta = DB.playerMeta || {};
+  const roster=playerRoster();
+  if(!roster.length){ el.innerHTML=`<div class="empty">選手データがまだないで。</div>`; return; }
+  const latestOverall=latestGameGlobally();
+  const groups=new Map();
+  for(const [key,nm] of roster){
+    const ey=DB.playerMeta[key]?.enrollYear ?? null;
+    const gkey = ey==null? "none" : ey;
+    if(!groups.has(gkey)) groups.set(gkey, []);
+    groups.get(gkey).push([key,nm]);
+  }
+  const years=[...groups.keys()].filter(k=>k!=="none").sort((a,b)=>b-a);
+  const orderedKeys = groups.has("none")? [...years,"none"] : years;
+  el.innerHTML = orderedKeys.map(gkey=>{
+    const members=groups.get(gkey);
+    const label = gkey==="none"? "入学年未設定" : `${gkey}年入学`;
+    const gradeLabel = (gkey!=="none" && latestOverall)
+      ? gradeInfo(gkey, latestOverall.season, gameYear({date:latestOverall.date})).label : "";
+    const batters=[], pitchers=[];
+    for(const [key,nm] of members){
+      const meta=DB.playerMeta[key]||{};
+      const posStr=[meta.position, meta.subPosition].filter(Boolean).join("/");
+      const cGames=careerGamesForKey(key);
+      const cb=aggBatting(cGames).find(r=>nameKey(r.name)===key);
+      const cp=aggPitching(cGames).find(r=>nameKey(r.name)===key);
+      if(cb && cb.G) batters.push({key,nm,posStr,stat:`打率${avg3(cb.AVG)} / ${cb.G}試合`});
+      if(cp && cp.G) pitchers.push({key,nm,posStr,stat:`防御率${cp.ipNum?cp.ERA.toFixed(2):'-'} / ${cp.G}登板`});
+    }
+    const rowHtml=(p)=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;border-bottom:1px solid var(--line);padding:6px 2px">
+        <span><span class="plink" data-key="${esc(p.key)}">${esc(p.nm)}</span>${p.posStr?`<span class="dim" style="font-size:12px">　${esc(p.posStr)}</span>`:''}</span>
+        <span class="dim" style="font-size:12px">${esc(p.stat)}</span>
+      </div>`;
+    const colHtml=(title,list)=> list.length? `<div>
+        <div class="dim" style="font-size:12px;font-weight:600;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--line)">${title}</div>
+        ${list.map(rowHtml).join("")}
+      </div>` : "";
+    const battersCol=colHtml("打者",batters);
+    const pitchersCol=colHtml("投手",pitchers);
+    const bodyHtml = (batters.length && pitchers.length)
+      ? `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">${battersCol}${pitchersCol}</div>`
+      : (battersCol + pitchersCol);
+    return `<div class="game">
+      <div class="ghead" onclick="this.parentElement.classList.toggle('open')">
+        <span class="chev">▸</span>
+        <span class="opp">${esc(label)}</span>
+        <span class="dim" style="font-size:12px;margin-left:auto">${members.length}人${gradeLabel?`・現在${esc(gradeLabel)}`:''}</span>
+      </div>
+      <div class="gbody">${bodyHtml}</div>
+    </div>`;
+  }).join("");
 }
 function seasonYearOf(sname,games){
   const my=(String(sname).match(/^(\d{4})/)||[])[1];
@@ -1560,7 +1633,7 @@ function validateEntry(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","player","seasonCompare","games","add","data"];
+const TAB_NAMES=["summary","period","player","enrollYear","seasonCompare","games","add","data"];
 function switchTab(name,mode){
   if(!TAB_NAMES.includes(name)) name="summary";
   $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
