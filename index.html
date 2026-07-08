@@ -319,6 +319,11 @@
           <input type="hidden" id="gOpp"></div>
         <div class="field"><label>味方得点</label><input type="number" id="gRs" min="0" style="width:80px"></div>
         <div class="field"><label>相手得点</label><input type="number" id="gRa" min="0" style="width:80px"></div>
+        <div class="field" style="justify-content:flex-end">
+          <label class="inline" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="gColdGame"> コールド
+          </label>
+        </div>
       </div>
       <div class="row" style="margin-bottom:12px;align-items:center">
         <input type="text" id="gRoundCustom" placeholder="ラウンド名を入力（その他選択時）" style="display:none;max-width:220px">
@@ -906,9 +911,14 @@ function updateGOppFromParts(){
   const info=roundInfoForSeason(DB.current);
   const prefix=(info&&round)?info.prefix:"";
   const roundPart = round? `${prefix}${round}` : "";
-  const combined = roundPart? (name? `${roundPart} vs ${name}` : roundPart) : name;
+  let combined = roundPart? (name? `${roundPart} vs ${name}` : roundPart) : name;
+  if(combined && $("#gColdGame").checked) combined += " (コールド)";
   $("#gOpp").value=combined;
   $("#gOppPreview").textContent = combined? `→ ${combined}` : "";
+}
+function stripColdTag(oppStr){
+  const m=String(oppStr||"").match(/^(.*?)\s*\(コールド\)\s*$/);
+  return m? {clean:m[1], isCold:true} : {clean:oppStr||"", isCold:false};
 }
 function parseOpponentForSeason(sname,oppStr){
   const info=roundInfoForSeason(sname);
@@ -1305,7 +1315,7 @@ function resetForm(prefillNames=true){
   clearShotFiles(); $("#ocrStatus").innerHTML="";
   const vb=$("#valBanner"); if(vb)vb.innerHTML="";
   $("#gDate").value=""; $("#gOpp").value=""; $("#gRs").value=""; $("#gRa").value="";
-  fillRoundSelForSeason(); $("#gRoundSel").value=""; $("#gRoundCustom").value=""; $("#gRoundCustom").style.display="none"; $("#gOppName").value=""; $("#gOppPreview").textContent="";
+  fillRoundSelForSeason(); $("#gRoundSel").value=""; $("#gRoundCustom").value=""; $("#gRoundCustom").style.display="none"; $("#gOppName").value=""; $("#gColdGame").checked=false; $("#gOppPreview").textContent="";
   const rosterMap=new Map(); curGames().flatMap(g=>(g.batters||[])).forEach(b=>{if(b.name)rosterMap.set(nameKey(b.name),String(b.name).trim());});
   const roster=[...rosterMap.values()];
   const prows = prefillNames && roster.length ? roster.map(nm=>batRow({name:nm})).join("") : batRow();
@@ -1343,9 +1353,11 @@ window.editGame=function(seasonName,i){
   switchTab("add");
   $("#gDate").value=g.date||""; $("#gOpp").value=g.opponent||"";
   fillRoundSelForSeason();
-  const parsed=parseOpponentForSeason(DB.current, g.opponent||"");
+  const {clean:oppClean, isCold}=stripColdTag(g.opponent||"");
+  const parsed=parseOpponentForSeason(DB.current, oppClean);
   $("#gRoundSel").value=parsed.round; $("#gOppName").value=parsed.name;
   $("#gRoundCustom").value=parsed.custom||""; $("#gRoundCustom").style.display = parsed.round==="__custom"? "":"none";
+  $("#gColdGame").checked=isCold;
   $("#gOppPreview").textContent = g.opponent? `→ ${g.opponent}` : "";
   $("#gRs").value=g.runsFor??""; $("#gRa").value=g.runsAgainst??"";
   $("#batEntry").innerHTML=batEntryHead()+`<tbody>${(g.batters||[]).map(batRow).join("")||batRow()}</tbody>`;
@@ -1451,28 +1463,38 @@ function setShotFiles(fileList){
   updateFileHint();
 }
 
-const OCR_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』の試合結果スクショを読み取るOCRです。渡された画像（野手記録・投手記録・打席結果/スコアボード等）から、後攻チーム（プレイヤー側）の記録を抽出し、JSONのみを出力してください。前置き・説明・マークダウンは禁止。
+const OCR_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』の試合結果スクショを読み取るOCRです。渡された画像（野手記録・投手記録・打席結果/スコアボード等）から、後攻チーム（プレイヤー側）の記録を抽出します。
+
+【手順】
+1. まず野手記録の各選手の行を、見えた数値のまま1行ずつテキストで書き出す（選手名: 打数,得点,安打,二塁打,三塁打,本塁打,打点,三振,四死球,犠打,盗塁,併殺,失策 の順）。合計行も同様に書き出す。
+2. 書き出した各選手の行を列ごとに合計し、合計行の数値と一致するか確認する。ズレている列があれば、どの選手の値を読み間違えたか見直して修正する。
+3. 最後に、修正後の値で下記のJSONだけを ```json ``` のコードブロックで出力する（コードブロックの前後に説明文は書かない）。
 
 【野手記録の列順（左から）】打数,得点,安打,二塁打,三塁打,本塁打,打点,三振,四死球,犠打,盗塁,併殺,失策
-- 列の並び順を記憶だけで当てはめるな。各数値を読む前に、画像内でその数値が実際にどの列見出し（打点／三振など）の真下にあるかを目で確認してから記入すること。特に「打点」と「三振」は見た目が近く取り違えやすいので、1行ごとに列見出しとの位置を照合すること。
-- 空セルは0。列を絶対にズラさないこと。
+- 空セルは0。列を絶対にズラさないこと。特に「打点」と「三振」を取り違えないよう注意。
 - 野手記録が上下2枚に分かれている場合は打順どおりに1つのリストに統合し、重複選手は1行にまとめる。打数0の選手も打順の位置に含める。
 - ただし例外: 投手記録にも載っている選手（＝その試合の投手）が野手記録欄にも出ていて、かつ全項目が0（打数0・得点0・安打0…すべて0）の場合は、batters配列には入れない（投手として登板しただけで実際は打席に立っていない扱い）。その投手が実際に打席に立った形跡（打数1以上、四死球・犠打・盗塁などいずれか非ゼロ）があるなら、二刀流の実出場として通常の打者と同様にbatters配列へ含める。
 
 【投手記録の列順】投球回,球数,打者,被安打,奪三振,四死球,失点,自責点,暴投,被本塁,防御率
 - 投球回は "8"(=8回) / "8.1"(=8回1/3、8⅓) / "0.2"(=0回2/3、0⅔) の形式で。左端に「勝」マークがある投手は "W":true。
 
-【得点】スコアボードのR列。後攻(下段/自チーム)の得点を runsFor、先攻(上段/相手)を runsAgainst。無ければ0。
+【得点】スコアボードのR(計)列の値をそのまま使う。コールドゲームで7回打ち切りなどイニングが途中までしかなくても、各回を自分で足し算せずR列の最終値をそのまま runsFor/runsAgainst に使うこと。後攻(下段/自チーム)がrunsFor、先攻(上段/相手)がrunsAgainst。無ければ0。
+
+【コールドゲーム判定】スコアボードの回表示(一,二,三…九)を見て、値が入っている最後の回を確認する。
+- 九回まで値があり、九回裏だけ空欄(後攻が勝っていて裏の攻撃が不要だった通常の決着)は普通の試合。cold:false。
+- 九回より前(七回・八回など)で両チームとも数値が途切れて、それ以降が空欄になっている場合はコールドゲーム。cold:trueにする。
+- 判断つかない場合は cold:false にする。
 
 【出力JSON】
 {
  "date":"",
  "runsFor":0,"runsAgainst":0,
+ "cold":false,
  "batters":[{"name":"","AB":0,"R":0,"H":0,"2B":0,"3B":0,"HR":0,"RBI":0,"SO":0,"BB":0,"SH":0,"SB":0,"GDP":0,"E":0}],
  "pitchers":[{"name":"","IP":"0","BF":0,"H":0,"K":0,"BB":0,"R":0,"ER":0,"WP":0,"HR":0,"W":false}],
  "batTotals":{"AB":0,"R":0,"H":0,"2B":0,"3B":0,"HR":0,"RBI":0,"SO":0,"BB":0,"SH":0,"SB":0,"GDP":0,"E":0}
 }
-batTotals は野手記録の「合計」行の数値をそのまま入れる（検算用）。合計行でも「打点」と「三振」の列を取り違えやすいので、個別選手の行と同じ列順（…本塁打,打点,三振,四死球…）で必ず数え直してから入れること。dateは画像に無ければ空文字。`;
+batTotals は野手記録の「合計」行の数値をそのまま入れる（検算用）。dateは画像に無ければ空文字。`;
 
 async function runOcr(){
   const key=$("#gemKey").value.trim();
@@ -1488,11 +1510,15 @@ async function runOcr(){
     for(const f of files){parts.push({inline_data:{mime_type:f.type||"image/jpeg",data:await fileToB64(f)}});}
     const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
     const resp=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0,response_mime_type:"application/json"}})});
+      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})});
     if(!resp.ok){const t=await resp.text();throw new Error("API "+resp.status+": "+t.slice(0,180));}
     const data=await resp.json();
     let txt=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
-    txt=txt.replace(/```json|```/g,"").trim();
+    // 下書き(手順1・2の書き出し)の後にJSONが来る想定。フェンス付きならその中身、無ければ最初の{〜最後の}を拾う
+    const fence=txt.match(/```json([\s\S]*?)```/) || txt.match(/```([\s\S]*?)```/);
+    if(fence) txt=fence[1];
+    else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0 && e>s) txt=txt.slice(s,e+1); }
+    txt=txt.trim();
     const g=JSON.parse(txt);
     ocrBatTotals=g.batTotals||null;
     fillFormFromOcr(g);
@@ -1504,9 +1530,10 @@ async function runOcr(){
 function fillFormFromOcr(g){
   editIndex=-1;
   $("#gDate").value=g.date||"";
-  $("#gOpp").value=$("#gOpp").value||""; // 相手名はゲーム内に無いので触らない
   $("#gRs").value=(g.runsFor??"")===""?"":g.runsFor;
   $("#gRa").value=(g.runsAgainst??"")===""?"":g.runsAgainst;
+  $("#gColdGame").checked=!!g.cold;
+  updateGOppFromParts(); // 相手名(ラウンド/名前)は今の入力を維持しつつ、コールド判定だけ反映
   const brows=(g.batters||[]).map(batRow).join("")||batRow();
   $("#batEntry").innerHTML=batEntryHead()+`<tbody>${brows}</tbody>`;
   const prows=(g.pitchers||[]).map(pitRow).join("")||pitRow();
@@ -1597,6 +1624,7 @@ async function init(){
   });
   $("#gRoundCustom").addEventListener("input",updateGOppFromParts);
   $("#gOppName").addEventListener("input",updateGOppFromParts);
+  $("#gColdGame").addEventListener("change",updateGOppFromParts);
   $("#newSeason").addEventListener("click",openSeasonModal);
   $("#seasonModalCancel").addEventListener("click",closeSeasonModal);
   $("#seasonModal").addEventListener("click",e=>{ if(e.target.id==="seasonModal") closeSeasonModal(); });
