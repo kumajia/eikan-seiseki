@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>栄冠ナイン 成績帳</title>
+<title>栄冠ノート</title>
 <style>
   :root{
     color-scheme:dark;
@@ -170,12 +170,75 @@
     header.top h1{font-size:22px}.season-pick{margin-left:0;width:100%}
     .kpi .val{font-size:22px}
   }
+
+  /* ---------- 攻略メモ ---------- */
+  :root{ --gm-blue:#5c9fd6; --gm-clay:#e08350; }
+  #tab-guide .sec-title{font-size:14px;font-weight:700;color:var(--ink);margin:0 0 10px;
+    display:flex;align-items:center;gap:8px;}
+  #tab-guide .sec-title::before{content:"";width:14px;height:2px;background:var(--amber);flex:none;}
+  .gtabbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
+  .gtabbar button.on{background:var(--panel2);color:var(--ink);border-color:var(--line2);}
+  .gnote{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:9px 12px;line-height:1.6;margin-bottom:14px;}
+  .gcard{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--line2);
+    border-radius:10px;margin-bottom:12px;overflow:hidden;}
+  .gcard.blue{border-left-color:var(--gm-blue);} .gcard.clay{border-left-color:var(--gm-clay);}
+  .gcard.gold{border-left-color:var(--amber);} .gcard.white{border-left-color:var(--muted);}
+  .gc-top{display:flex;align-items:stretch;border-bottom:1px dashed var(--line);}
+  .gc-date{flex:none;min-width:92px;background:var(--bg);display:flex;flex-direction:column;
+    justify-content:center;align-items:center;padding:10px;text-align:center;
+    border-right:1px solid var(--line);font-family:var(--mono);font-size:13px;font-weight:700;}
+  .gc-main{padding:9px 12px;display:flex;flex-direction:column;justify-content:center;gap:4px;}
+  .gc-tag{display:inline-block;align-self:flex-start;font-size:10.5px;font-weight:700;
+    padding:2px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);}
+  .gcard.blue .gc-tag{color:var(--gm-blue);} .gcard.clay .gc-tag{color:var(--gm-clay);}
+  .gcard.gold .gc-tag{color:var(--amber);}
+  .gc-title{font-size:14px;font-weight:700;}
+  .gc-body{padding:10px 12px 12px;font-size:13px;color:var(--muted);}
+  .gc-body ul{list-style:none;display:flex;flex-direction:column;gap:6px;}
+  .gc-body li{position:relative;padding-left:14px;}
+  .gc-body li::before{content:"";position:absolute;left:0;top:.6em;width:5px;height:5px;
+    border-radius:50%;background:var(--line2);}
+  .gc-body b{color:var(--ink);}
+  .gc-note{margin-top:8px;font-size:11.5px;color:var(--muted);background:var(--bg);
+    border:1px solid var(--line);border-radius:8px;padding:7px 10px;line-height:1.6;}
+  .gc-note b{color:var(--ink);}
+  .gc-pick{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}
+  .gc-pick .ph{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:4px;}
+  .gc-pick .opt{font-size:12px;margin-bottom:3px;}
+  .gc-pick .opt b{color:var(--ink);}
+  .gcaution{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;margin-top:6px;}
+  .gcaution h3{font-size:13px;margin-bottom:8px;color:var(--amber);}
+  .gcaution p{font-size:12.5px;color:var(--muted);margin-bottom:7px;line-height:1.6;}
+  .gcaution p b{color:var(--ink);}
+  .gxp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  @media(max-width:520px){.gxp-grid{grid-template-columns:1fr}}
+  .gxp-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .gxp-h{display:flex;align-items:center;justify-content:space-between;padding:8px 11px;
+    background:var(--panel2);border-bottom:1px solid var(--line);}
+  .gxp-h .nm{font-size:13px;font-weight:700;}
+  .gxp-h .badge{font-size:10px;font-weight:700;color:var(--amber);background:var(--bg);
+    border-radius:999px;padding:2px 7px;}
+  .gxp-row{display:flex;justify-content:space-between;padding:6px 11px;font-size:12.5px;
+    border-top:1px solid var(--line);}
+  .gxp-row:first-of-type{border-top:none;}
+  .gxp-row .pv{font-weight:700;font-family:var(--mono);}
+  .gxp-row .pv.max{color:var(--amber);}
+  .gxp-foot{font-size:11px;color:var(--muted);padding:7px 11px;border-top:1px solid var(--line);}
+  table.grate{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:4px;}
+  table.grate th,table.grate td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line);}
+  table.grate th{background:var(--panel2);color:var(--ink);font-size:11px;}
+  table.grate td:first-child{text-align:left;color:var(--muted);}
+  table.grate tr:last-child td{border-bottom:none;}
+  table.grate td b{color:var(--amber);}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <h1><span class="ball">⚾</span> 栄冠ナイン 成績帳</h1>
+    <h1><span class="ball">⚾</span> 栄冠ノート</h1>
     <div class="sub" id="rec">—</div>
     <div class="season-pick">
       <label class="inline" for="seasonSel">シーズン</label>
@@ -193,6 +256,7 @@
     <button data-tab="seasonCompare">シーズン比較</button>
     <button data-tab="games">試合ログ</button>
     <button data-tab="add">試合を追加</button>
+    <button data-tab="guide">攻略メモ</button>
     <button data-tab="data">データ</button>
   </nav>
 
@@ -367,6 +431,254 @@
         形式: <code>{"date","opponent","runsFor","runsAgainst","batters":[{"name","AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"}],"pitchers":[{"name","IP","BF","H","K","BB","R","ER","WP","HR","W"}]}</code></div>
       <textarea id="importGame" placeholder='ここにJSONを貼り付け'></textarea>
       <div style="margin-top:8px"><button class="primary" id="doImportGame">取り込む</button></div>
+    </section>
+  </div>
+
+  <!-- GUIDE -->
+  <div id="tab-guide" style="display:none">
+    <section class="card">
+      <div class="gtabbar" id="gtabbar">
+        <button class="mini on" data-gtab="days">止まるべき日</button>
+        <button class="mini" data-gtab="xp">練習の経験値</button>
+        <button class="mini" data-gtab="scout">スカウト先</button>
+      </div>
+
+      <div id="gpanel-days">
+        <div class="gnote">自分用のメモ書き。年間スケジュールは6月始まり基準で、日付は目安として使ってな。</div>
+
+        <div class="gcard white"><div class="gc-top"><div class="gc-date">6/11<br>〜6/17</div><div class="gc-main"><span class="gc-tag">白パネル・低確率</span><span class="gc-title">試験前イベント</span></div></div>
+          <div class="gc-body">選べるのは「練習こそ大事」の一択。選ぶと全員の練習効率が中くらい上がるけど、対象になった選手は信頼度が少し下がり、1〜3人は学力も少し落ちる。</div></div>
+
+        <div class="gcard blue"><div class="gc-top"><div class="gc-date">6/26<br>〜7/2</div><div class="gc-main"><span class="gc-tag">青パネル・低確率</span><span class="gc-title">技術指導（弱点特能を消せる）</span></div></div>
+          <div class="gc-body"><div class="gc-pick"><div class="ph">4つから1つ選択</div>
+            <div class="opt"><b>打撃指導</b>：50%の確率で「三振」が消える</div>
+            <div class="opt"><b>守備指導</b>：50%の確率で「エラー」が消え、送球G・送球Fが1段階上がる</div>
+            <div class="opt"><b>走塁指導</b>：50%の確率で盗塁E〜G・走塁E〜Gが1段階上がる</div>
+            <div class="opt"><b>投球指導</b>：20%の確率で「寸前」「一発」「四球」「スロースターター」「力配分」「短気」「抜け球」「軽い球」「乱調」のうちどれか1つが消える</div></div>
+            <div class="gc-note">同じイベントが9/8〜9/14にもう一度来る。</div></div></div>
+
+        <div class="gcard blue"><div class="gc-top"><div class="gc-date">7/21<br>〜7/30</div><div class="gc-main"><span class="gc-tag">青パネル・夏の甲子園出場時</span><span class="gc-title">夏の出場インタビュー</span></div></div>
+          <div class="gc-body">選んだ分野に応じて青特能を取れることがある（確率制・1人1個まで）。発生自体は低確率。
+            <div class="gc-pick"><div class="ph">選べる分野と主な狙い</div>
+            <div class="opt"><b>打撃力</b>：ミートBあればアベレージヒッターが10%、パワーBあればパワーヒッター/プルヒッターが10% など</div>
+            <div class="opt"><b>機動力</b>：走力Cあれば走塁+1・盗塁+1・内野安打○・かく乱などが10%</div>
+            <div class="opt"><b>守備力</b>：肩力Bあればレーザービームが10%、守備Bあれば守備職人が10%</div>
+            <div class="opt"><b>投手力</b>：球速150以上でジャイロ/重い球が10%、変化4以上でキレ○が10%</div>
+            <div class="opt"><b>選手の努力</b>：特能は付かないが、代わりに全員の信頼度が中くらい上がる</div></div>
+            <div class="gc-note">春の甲子園出場が決まった時（2/1〜2/10）にも同じ内容のインタビューが来る。青パネル限定。</div></div></div>
+
+        <div class="gcard clay"><div class="gc-top"><div class="gc-date">8/21</div><div class="gc-main"><span class="gc-tag">夏の敗退時</span><span class="gc-title">特訓パネルが出現</span></div></div>
+          <div class="gc-body"><ul><li>夏の県大会か甲子園で負けたタイミングで発生</li><li>80%の確率で3〜4日ぶん特訓パネルに変わる</li><li>残り20%は緑（回復）パネルに変わる</li></ul>
+            <div class="gc-note">夏休みの開始日が早い地域は発生タイミングもズレる。北海道・岩手・宮城・山形・福島・長野は8/10、青森・秋田は8/15が基準。</div></div></div>
+
+        <div class="gcard blue"><div class="gc-top"><div class="gc-date">9/8<br>〜9/14</div><div class="gc-main"><span class="gc-tag">青パネル・低確率</span><span class="gc-title">技術指導（2回目）</span></div></div>
+          <div class="gc-body">内容は6/26〜7/2の技術指導とまったく同じ。弱点特能を消すチャンスがもう一度来る。</div></div>
+
+        <div class="gcard white"><div class="gc-top"><div class="gc-date">11/18<br>〜11/24</div><div class="gc-main"><span class="gc-tag">白パネル・低確率</span><span class="gc-title">試験前イベント（2回目）</span></div></div>
+          <div class="gc-body">内容は6月の試験前イベントと同じ。「練習こそ大事」で練習効率アップを取れる。</div></div>
+
+        <div class="gcard clay"><div class="gc-top"><div class="gc-date">12/24</div><div class="gc-main"><span class="gc-tag">この日は狙って止まりたい</span><span class="gc-title">クリスマスイブ</span></div></div>
+          <div class="gc-body"><div class="gc-pick"><div class="ph">3パターンのうちどれかが発生</div>
+            <div class="opt"><b>40%</b>：全員の体力が回復し、数人のテンションも上がる</div>
+            <div class="opt"><b>40%</b>：全員の練習効率が大きく上がり、数人のテンションも上がる</div>
+            <div class="opt"><b>20%</b>：3〜4日ぶん特訓パネルに変わる</div></div></div></div>
+
+        <div class="gcard blue"><div class="gc-top"><div class="gc-date">2/1<br>〜2/10</div><div class="gc-main"><span class="gc-tag">青パネル・春の甲子園出場時</span><span class="gc-title">春の出場インタビュー</span></div></div>
+          <div class="gc-body">センバツ出場が決まったときに発生。中身は夏のインタビューと同じで青特能が狙える。夏より青パネルが多く出やすいという話もあり、狙い目とされている。</div></div>
+
+        <div class="gcard white"><div class="gc-top"><div class="gc-date">2/18<br>〜2/24</div><div class="gc-main"><span class="gc-tag">白パネル・低確率</span><span class="gc-title">試験前イベント（3回目）</span></div></div>
+          <div class="gc-body">内容は同じ。練習効率アップ狙いなら「練習こそ大事」一択。</div></div>
+
+        <div class="gcard clay"><div class="gc-top"><div class="gc-date">2/28<br>or 2/29</div><div class="gc-main"><span class="gc-tag">2月最終日・毎年</span><span class="gc-title">特訓パネルが出現</span></div></div>
+          <div class="gc-body">2月の最終日に止まると3〜4日ぶん特訓パネルに変わる。
+            <div class="gc-note">前作まではうるう年の2/29限定だったけど、今作からは平年の2/28でも同じ効果が出るようになったので、毎年止まる価値がある。</div></div></div>
+
+        <div class="gcard gold"><div class="gc-top"><div class="gc-date">3/7</div><div class="gc-main"><span class="gc-tag">強制イベント</span><span class="gc-title">卒業式</span></div></div>
+          <div class="gc-body">止まらなくても発生し、全員の練習効率が少し上がる。</div></div>
+
+        <div class="gcard blue"><div class="gc-top"><div class="gc-date">3/8<br>〜3/31</div><div class="gc-main"><span class="gc-tag">青パネル・春の敗退時</span><span class="gc-title">OBの指導イベント</span></div></div>
+          <div class="gc-body">春の甲子園に出られなかった、または負けた場合、卒業式の後に発生。プロ入りしたOBが指導に来て、そのOBが持ってる特能の中からランダムで1つ習得できる。
+            <div class="gc-note">今作で新しく追加された、春に負けたときの救済イベント。</div></div></div>
+
+        <div class="gcard gold"><div class="gc-top"><div class="gc-date">3/15</div><div class="gc-main"><span class="gc-tag">4年に1度</span><span class="gc-title">世界大会</span></div></div>
+          <div class="gc-body">WBCの開催年に合わせて発生。今作は「うるう年の2年後」というルールに変わったので、2026年始まりのセーブなら最初の開催は2030年になる。
+            <div class="gc-pick"><div class="ph">日本代表の結果でボーナスが変わる</div>
+            <div class="opt"><b>優勝（30%）</b>：1〜3人のテンションが上がり、全員の練習効率も大きく上がる</div>
+            <div class="opt"><b>準優勝（30%）</b>：全員の練習効率が中くらい上がる</div>
+            <div class="opt"><b>決勝トーナメント敗退（20%）</b>：全員の練習効率が少し上がる</div>
+            <div class="opt"><b>予選敗退（20%）</b>：1〜3人のテンションが下がる</div></div></div></div>
+
+        <div class="gcard gold"><div class="gc-top"><div class="gc-date">4/1</div><div class="gc-main"><span class="gc-tag">学年アップ</span><span class="gc-title">進級ボーナス</span></div></div>
+          <div class="gc-body">止まると全員の練習効率が少し上がる。</div></div>
+
+        <div class="gcaution" style="margin-top:10px">
+          <h3>気にしておきたいこと</h3>
+          <p><b>青パネルが一番おいしい。</b>弱点特能を消せる技術指導も、青特能が狙える出場インタビューも、どちらも青パネルでしか発生しない。日程を見て青で止まれるように意識するだけで効率がだいぶ変わる。</p>
+          <p><b>出場インタビューは体感かなり低確率。</b>甲子園に出ても発生しない年・発生しない回はざらにある。狙うなら出場が決まる前の時点でセーブを分けておくと、発生しなかった時にやり直しやすい（春は1月下旬の電話で出場が決まる）。</p>
+          <p><b>期間指定のイベントはその範囲内のどこかで来る。</b>たとえば6/26〜7/2なら7日間のうちどこか1日。範囲中はできるだけ毎日青パネルで止まれる状態を作っておくのが理想。</p>
+          <p><b>青パネルの「OBの励まし」が強化されている。</b>全員のテンションが上がるのに加えて、練習効率も中くらい上がるようになった。</p>
+          <p><b>リセットは避ける。</b>セーブせずに終了したりリセットしたりすると、ペナルティで能力が下がることがある。終わるときは必ずセーブしてから終了する。</p>
+        </div>
+      </div>
+
+      <div id="gpanel-xp" style="display:none">
+        <div class="gnote">練習の進行アイコンでもらえる基礎経験値の一覧。数値はバージョンごとの基準値で、グラウンドLv・体力・天候・性格・効率アップの補正が乗るほど実際の獲得量は増える。条件が良い時（グラウンドLv99・体力満タンなど）は表の値のだいたい2.4倍、個別練習なら1日あたり240前後が目安になる。</div>
+
+        <div class="gxp-grid">
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">特打</span><span class="badge">打撃力重視限定</span></div>
+            <div class="gxp-row"><span>ミート</span><span class="pv max">+100</span></div>
+            <div class="gxp-row"><span>パワー</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">特守</span><span class="badge">守備投手力限定</span></div>
+            <div class="gxp-row"><span>守備</span><span class="pv max">+100</span></div>
+            <div class="gxp-row"><span>捕球</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">総合練習</span></div>
+            <div class="gxp-row"><span>全能力</span><span class="pv">各+20</span></div>
+            <div class="gxp-foot">投手はミート/パワー/走力/肩力/守備/捕球が半分になる</div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">バント練習</span></div>
+            <div class="gxp-row"><span>ミート・走力・守備</span><span class="pv">各+40</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">ストレッチ</span></div>
+            <div class="gxp-row"><span>走力</span><span class="pv">+20</span></div>
+            <div class="gxp-row"><span>捕球</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>スタミナ</span><span class="pv">+60</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">紅白戦</span><span class="badge">金枠</span></div>
+            <div class="gxp-row"><span>ランダムな能力1つ</span><span class="pv">+60</span></div></div>
+        </div>
+
+        <div class="sec-title" style="margin-top:22px">個別練習（野手系）</div>
+        <div class="gxp-grid">
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">ミート</span></div>
+            <div class="gxp-row"><span>素振り</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>ミートバッティング</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>ティーバッティング</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>マシン打撃</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">パワー</span></div>
+            <div class="gxp-row"><span>腕立て・腹筋</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>指立て伏せ</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>ダンベル</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>ベンチプレス</span><span class="pv max">+100</span></div>
+            <div class="gxp-foot">スタミナも少し付く。握力強化だけは例外的にパワー+100</div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">走力</span></div>
+            <div class="gxp-row"><span>ダッシュ</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>インターバル走</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>ベースランニング</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>ハードル</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">肩力</span></div>
+            <div class="gxp-row"><span>スローイング</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>遠投</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>チューブトレーニング</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>ラットマシン</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">守備</span></div>
+            <div class="gxp-row"><span>ペッパー</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>守備連携</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>ノック</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>マシンガンノック</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">捕球</span></div>
+            <div class="gxp-row"><span>座禅</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>メンタルトレーニング</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>アロマテラピー</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>いやしのひととき</span><span class="pv max">+100</span></div></div>
+        </div>
+
+        <div class="sec-title" style="margin-top:22px">個別練習（投手系）</div>
+        <div class="gxp-grid">
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">球速</span></div>
+            <div class="gxp-row"><span>フォームチェック（球速）</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>投げ込み</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>球速測定</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>マッスラー</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">コントロール</span></div>
+            <div class="gxp-row"><span>フォームチェック（制球）</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>コース投げ込み</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>的当て</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>コース的当て</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">スタミナ</span></div>
+            <div class="gxp-row"><span>スクワット</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>走り込み</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>タイヤ引き</span><span class="pv">+80</span></div>
+            <div class="gxp-row"><span>ローラー</span><span class="pv max">+100</span></div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">変化球</span></div>
+            <div class="gxp-row"><span>フォームチェック（変化球）</span><span class="pv">+40</span></div>
+            <div class="gxp-row"><span>変化球投げ込み</span><span class="pv">+60</span></div>
+            <div class="gxp-row"><span>変化球研究</span><span class="pv max">+100</span></div>
+            <div class="gxp-foot">経験値は、その時点で一番Lvが低い変化球1つに入る</div></div>
+        </div>
+
+        <div class="sec-title" style="margin-top:22px">育成方針ごとのアイコン出現率</div>
+        <table class="grate">
+          <tr><th>能力</th><th>バランス</th><th>打撃力重視</th><th>機動力重視</th><th>守備投手力重視</th></tr>
+          <tr><td>ミート系</td><td>9%</td><td><b>18%</b></td><td>12%</td><td>2.25%</td></tr>
+          <tr><td>パワー系</td><td>9%</td><td><b>15%</b></td><td>7.5%</td><td>2.25%</td></tr>
+          <tr><td>走力系</td><td>7.5%</td><td>5.25%</td><td><b>18.75%</b></td><td>7.5%</td></tr>
+          <tr><td>肩力系</td><td>7.5%</td><td>5.25%</td><td>5.25%</td><td><b>9.75%</b></td></tr>
+          <tr><td>守備系</td><td>7.5%</td><td>5.25%</td><td>5.25%</td><td><b>9.75%</b></td></tr>
+          <tr><td>捕球系</td><td>7.5%</td><td>5.25%</td><td>5.25%</td><td>7.5%</td></tr>
+          <tr><td>球速系</td><td>6.75%</td><td>5.25%</td><td>5.25%</td><td><b>9%</b></td></tr>
+          <tr><td>コントロール系</td><td>6.75%</td><td>5.25%</td><td>5.25%</td><td><b>9%</b></td></tr>
+          <tr><td>スタミナ系</td><td>6.75%</td><td>5.25%</td><td>5.25%</td><td><b>9%</b></td></tr>
+          <tr><td>変化球系</td><td>6.75%</td><td>5.25%</td><td>5.25%</td><td><b>9%</b></td></tr>
+          <tr><td>その他</td><td>25%</td><td>25%</td><td>25%</td><td>25%</td></tr>
+        </table>
+
+        <div class="gcaution" style="margin-top:16px">
+          <h3>育成方針は打撃力重視が個人的におすすめ</h3>
+          <p><b>特打が強い。</b>ミート+100・パワー+100を同時にくれる特打は、打撃力重視のときしか出てこない。</p>
+          <p><b>ミート・パワーは必要経験値がそもそも多い。</b>走力・肩力・守備の必要量を100とすると、ミート・パワーは130必要（捕球は70）。練習だけでは稼ぎにくい分、出現率を底上げできる打撃力重視だと効率がいい。</p>
+          <p><b>合宿でも有利。</b>ミート系アイコンを合宿に持ち込むと、レベル6条件の特能を取りやすくなる。</p>
+          <p><b>半減ルールに注意。</b>投手がミート/パワー/走力の練習をすると効果は半分。逆に野手が投手系（球速/コントロール/スタミナ/変化球）を練習しても半分。総合練習も、投手が受けると野手系の能力が半減する。</p>
+        </div>
+      </div>
+
+      <div id="gpanel-scout" style="display:none">
+        <div class="gnote">スカウトは11月〜翌2月末の期間で、最大10回・最大8人まで声をかけられる。見送っても反応が悪くても1回消費されるので、無駄にできる回数は実質2回くらいしかない。評判が上がるほど行ける都道府県が増え、成功率も上がる。</div>
+
+        <div class="sec-title">どの地区に行くか（在籍ポジションで判断）</div>
+
+        <div class="gcard blue"><div class="gc-top"><div class="gc-date">野手<br>探し</div><div class="gc-main"><span class="gc-tag">狙い目</span><span class="gc-title">投手が少ない地区へ</span></div></div>
+          <div class="gc-body"><ul>
+            <li>投手が0〜1人（0人が一番よい）</li>
+            <li>投手以外のポジションには選手がいる（例：投0/捕4/内2/外2）</li>
+            <li>育成傾向が「様々な～」か「一芸～」のどちらか</li></ul>
+            <div class="gc-note">この3つが揃った地区は強い野手に当たりやすい。二遊間が欲しい時は守備評価が高めの地区も候補に。</div></div></div>
+
+        <div class="gcard clay"><div class="gc-top"><div class="gc-date">投手<br>探し</div><div class="gc-main"><span class="gc-tag">狙い目</span><span class="gc-title">投手が多い地区へ</span></div></div>
+          <div class="gc-body"><ul>
+            <li>投手が4〜6人</li>
+            <li>捕手・内野・外野のどれか1つが0人（例：投5/捕2/内1/外0）</li>
+            <li>育成傾向が「様々な～」か「一芸～」のどちらか</li></ul></div></div>
+
+        <div class="gcard white"><div class="gc-top"><div class="gc-date">避けたい<br>地区</div><div class="gc-main"><span class="gc-tag">評判が強豪以上の時</span><span class="gc-title">こういう地区は後回し</span></div></div>
+          <div class="gc-body"><ul>
+            <li>選手が0人のポジションが2つ以上</li>
+            <li>育成傾向が「バランス～」</li></ul>
+            <div class="gc-note">この条件の地区は外れやすい。転生選手もほぼ来ないので、優先順位を下げていい。</div></div></div>
+
+        <div class="sec-title">見るべきは戦績よりステータスバー</div>
+        <div class="gcaution">
+          <p><b>戦績（全国大会出場など）そのものは選手の強さと直接関係ない。</b>戦績は画面右のステータスバー（事前評価）に良い色が出やすくなる確率に影響するだけ。</p>
+          <p>たとえば全部オレンジの「県ベスト4」は、全部緑の「全国大会出場」より強いことがある。判断基準は戦績の見た目じゃなくて、ステータスバーがオレンジ以上かどうか。</p>
+        </div>
+
+        <div class="sec-title" style="margin-top:22px">狙いたい特能（レベル6条件が軸）</div>
+        <div class="gxp-grid">
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">野手</span><span class="badge">優先度順</span></div>
+            <div class="gxp-row"><span>キャッチャーA</span><span class="pv max">最優先</span></div>
+            <div class="gxp-row"><span>内野安打○／バント○</span><span class="pv">◎</span></div>
+            <div class="gxp-row"><span>ムード○／盗塁A／送球A</span><span class="pv">◎</span></div>
+            <div class="gxp-row"><span>威圧感（野手）／天才肌</span><span class="pv">◎</span></div>
+            <div class="gxp-foot">キャッチャーAは特訓・合宿で後から取るのが難しい割に効果が大きいので、スカウトの時点で確保しておきたい</div></div>
+          <div class="gxp-card"><div class="gxp-h"><span class="nm">投手</span></div>
+            <div class="gxp-row"><span>威圧感（投手）／天才肌</span><span class="pv max">◎</span></div>
+            <div class="gxp-row"><span>内角攻め／リリース○</span><span class="pv">L6</span></div>
+            <div class="gxp-row"><span>緩急○／低め○</span><span class="pv">L6</span></div>
+            <div class="gxp-foot">投手は当たりを引けないことも多いので、野手を7人集めて投手は転生OB待ちにする、という割り切り方もある</div></div>
+        </div>
+
+        <div class="sec-title" style="margin-top:22px">転生・留学生狙いなら</div>
+        <div class="gcaution">
+          <p><b>転生OB</b>は出身都道府県が固定なので、狙う選手がいる地区へ行く。<b>外国人留学生</b>は都道府県に関係なくランダムに出現する（設定の出現頻度を「多い」にしておくと会いやすい）。</p>
+          <p>序盤から強い選手が出やすいと言われる県の例：岩手（大谷・菊池のモデルがいる）、宮崎（山本由伸のモデルがいる）、秋田（投手の当たりが多い）、鳥取（転生選手4人が全員投手）、京都（強力な捕手が転生）など。</p>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -1693,7 +2005,7 @@ function validateEntry(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","player","enrollYear","seasonCompare","games","add","data"];
+const TAB_NAMES=["summary","period","player","enrollYear","seasonCompare","games","add","guide","data"];
 function switchTab(name,mode){
   if(!TAB_NAMES.includes(name)) name="summary";
   $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
@@ -1941,6 +2253,13 @@ async function init(){
     const v=e.target.value.trim();
     periodAnchor = v? parseInt(v,10) : null;
     renderPeriod();
+  });
+
+  // 攻略メモ内のサブタブ切替
+  $("#gtabbar").addEventListener("click",e=>{
+    const b=e.target.closest("button[data-gtab]"); if(!b) return;
+    $$("#gtabbar button").forEach(x=>x.classList.toggle("on",x===b));
+    ["days","xp","scout"].forEach(k=>{ $("#gpanel-"+k).style.display = k===b.dataset.gtab? "" : "none"; });
   });
 
   $("#gameList").addEventListener("click",e=>{
