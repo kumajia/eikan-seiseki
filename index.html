@@ -964,14 +964,18 @@ function seasonYearOf(sname,games){
 }
 /* ---------- 大会ラウンドのテンプレ（対戦相手の入力補助） ---------- */
 const ROUND_TEMPLATES=[
-  ["夏県予選","県予選",["1回戦","2回戦","3回戦","4回戦","5回戦","準々決勝","準決勝","決勝"]],
+  [["夏県予選","夏の予選"],"県予選",["1回戦","2回戦","3回戦","4回戦","5回戦","準々決勝","準決勝","決勝"]],
   ["夏甲子園","甲子園",["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]],
   ["春甲子園","甲子園",["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]],
   ["秋県予選・地区大会","地区大会",["1回戦","決勝"]],
   ["神宮大会","神宮大会",["1回戦","準決勝","決勝"]]
 ];
 function roundInfoForSeason(sname){
-  for(const [key,prefix,rounds] of ROUND_TEMPLATES) if(String(sname||"").includes(key)) return {prefix,rounds};
+  const s=String(sname||"");
+  for(const [key,prefix,rounds] of ROUND_TEMPLATES){
+    const keys=Array.isArray(key)?key:[key];
+    if(keys.some(k=>s.includes(k))) return {prefix,rounds};
+  }
   return null;
 }
 function fillRoundSelForSeason(){
@@ -1015,9 +1019,13 @@ function parseOpponentForSeason(sname,oppStr){
   }
   return {round:"", custom:"", name:oppStr||""};
 }
-const SEASON_RANK_MAP=[["夏県予選",0],["夏甲子園",1],["秋県予選",2],["地区大会",2],["神宮大会",3],["春甲子園",4]];
+const SEASON_RANK_MAP=[[["夏県予選","夏の予選"],0],["夏甲子園",1],["秋県予選",2],["地区大会",2],["神宮大会",3],["春甲子園",4]];
 function seasonRank(sname){
-  for(const [key,rank] of SEASON_RANK_MAP) if(String(sname||"").includes(key)) return rank;
+  const s=String(sname||"");
+  for(const [key,rank] of SEASON_RANK_MAP){
+    const keys=Array.isArray(key)?key:[key];
+    if(keys.some(k=>s.includes(k))) return rank;
+  }
   return null;
 }
 function gradeLabel(enrollYear,yr){
