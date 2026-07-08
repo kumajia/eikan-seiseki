@@ -964,18 +964,20 @@ function seasonYearOf(sname,games){
 }
 /* ---------- 大会ラウンドのテンプレ（対戦相手の入力補助） ---------- */
 const ROUND_TEMPLATES=[
-  [["夏県予選","夏の予選"],"県予選",["1回戦","2回戦","3回戦","4回戦","5回戦","準々決勝","準決勝","決勝"]],
-  ["夏甲子園","甲子園",["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]],
-  ["春甲子園","甲子園",["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]],
-  ["秋県予選・地区大会","地区大会",["1回戦","決勝"]],
-  ["神宮大会","神宮大会",["1回戦","準決勝","決勝"]]
+  {test:s=>s.includes("夏")&&!s.includes("甲子園")&&(s.includes("予選")||s.includes("県")),
+   prefix:"県予選", rounds:["1回戦","2回戦","3回戦","4回戦","5回戦","準々決勝","準決勝","決勝"]},
+  {test:s=>s.includes("夏")&&s.includes("甲子園"),
+   prefix:"甲子園", rounds:["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]},
+  {test:s=>s.includes("春")&&s.includes("甲子園"),
+   prefix:"甲子園", rounds:["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]},
+  {test:s=>s.includes("秋")&&(s.includes("予選")||s.includes("地区")),
+   prefix:"地区大会", rounds:["1回戦","決勝"]},
+  {test:s=>s.includes("神宮"),
+   prefix:"神宮大会", rounds:["1回戦","準決勝","決勝"]}
 ];
 function roundInfoForSeason(sname){
   const s=String(sname||"");
-  for(const [key,prefix,rounds] of ROUND_TEMPLATES){
-    const keys=Array.isArray(key)?key:[key];
-    if(keys.some(k=>s.includes(k))) return {prefix,rounds};
-  }
+  for(const t of ROUND_TEMPLATES) if(t.test(s)) return {prefix:t.prefix,rounds:t.rounds};
   return null;
 }
 function fillRoundSelForSeason(){
@@ -1019,13 +1021,16 @@ function parseOpponentForSeason(sname,oppStr){
   }
   return {round:"", custom:"", name:oppStr||""};
 }
-const SEASON_RANK_MAP=[[["夏県予選","夏の予選"],0],["夏甲子園",1],["秋県予選",2],["地区大会",2],["神宮大会",3],["春甲子園",4]];
+const SEASON_RANK_TESTS=[
+  {test:s=>s.includes("夏")&&!s.includes("甲子園")&&(s.includes("予選")||s.includes("県")), rank:0},
+  {test:s=>s.includes("夏")&&s.includes("甲子園"), rank:1},
+  {test:s=>s.includes("秋")&&(s.includes("予選")||s.includes("地区")), rank:2},
+  {test:s=>s.includes("神宮"), rank:3},
+  {test:s=>s.includes("春")&&s.includes("甲子園"), rank:4}
+];
 function seasonRank(sname){
   const s=String(sname||"");
-  for(const [key,rank] of SEASON_RANK_MAP){
-    const keys=Array.isArray(key)?key:[key];
-    if(keys.some(k=>s.includes(k))) return rank;
-  }
+  for(const t of SEASON_RANK_TESTS) if(t.test(s)) return t.rank;
   return null;
 }
 function gradeLabel(enrollYear,yr){
