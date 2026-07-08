@@ -798,11 +798,20 @@ function gameYear(g){
   if(g.date){const y=parseInt(String(g.date).slice(0,4),10); if(!isNaN(y)) return y;}
   return null;
 }
+function periodYearOf(g){
+  // 期間集計は4月始まりの年度区切り（1〜3月の試合は前年度扱い）
+  if(!g || !g.date) return null;
+  const s=String(g.date);
+  const y=parseInt(s.slice(0,4),10); if(isNaN(y)) return null;
+  const m=parseInt(s.slice(5,7),10);
+  if(isNaN(m)) return y;
+  return m>=4 ? y : y-1;
+}
 function renderPeriod(){
   const el=$("#periodContent"); if(!el) return;
   const all=allGamesFlat();
   if(!all.length){ el.innerHTML=`<div class="empty">集計できる試合データがまだないで（練習試合シーズンは除外されるで）。</div>`; return; }
-  const years=all.map(gameYear).filter(y=>y!=null);
+  const years=all.map(periodYearOf).filter(y=>y!=null);
   const minY = years.length? Math.min(...years) : null;
   const buckets=new Map();
   for(const g of all){
@@ -810,12 +819,12 @@ function renderPeriod(){
     if(periodBlock<=0){
       label="全期間（無制限）";
     }else{
-      const y=gameYear(g);
+      const y=periodYearOf(g);
       if(y==null || minY==null){ label="年不明"; }
       else{
         const idx=Math.floor((y-minY)/periodBlock);
         const from=minY+idx*periodBlock, to=from+periodBlock-1;
-        label = periodBlock===1? `${from}年` : `${from}〜${to}年`;
+        label = periodBlock===1? `${from}年度` : `${from}〜${to}年度`;
       }
     }
     if(!buckets.has(label)) buckets.set(label,[]);
@@ -965,34 +974,48 @@ function seasonYearOf(sname,games){
 /* ---------- 大会ラウンドのテンプレ（対戦相手の入力補助） ---------- */
 const ROUND_TEMPLATES=[
   {test:s=>s.includes("夏")&&!s.includes("甲子園")&&(s.includes("予選")||s.includes("県")),
-   prefix:"県予選", rounds:["1回戦","2回戦","3回戦","4回戦","5回戦","準々決勝","準決勝","決勝"]},
+   customPrefix:"県予選",
+   rounds:["1回戦","2回戦","3回戦","4回戦","5回戦","準々決勝","準決勝","決勝"].map(label=>({prefix:"県予選",label}))},
   {test:s=>s.includes("夏")&&s.includes("甲子園"),
-   prefix:"甲子園", rounds:["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]},
+   customPrefix:"甲子園",
+   rounds:["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"].map(label=>({prefix:"甲子園",label}))},
   {test:s=>s.includes("春")&&s.includes("甲子園"),
-   prefix:"甲子園", rounds:["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"]},
+   customPrefix:"甲子園",
+   rounds:["1回戦","2回戦","3回戦","準々決勝","準決勝","決勝"].map(label=>({prefix:"甲子園",label}))},
   {test:s=>s.includes("秋")&&(s.includes("予選")||s.includes("地区")),
-   prefix:"地区大会", rounds:["1回戦","決勝"]},
+   customPrefix:"",
+   rounds:[
+     ...["1回戦","決勝"].map(label=>({prefix:"県大会",label})),
+     ...["1回戦","決勝"].map(label=>({prefix:"地区大会",label}))
+   ]},
   {test:s=>s.includes("神宮"),
-   prefix:"神宮大会", rounds:["1回戦","準決勝","決勝"]}
+   customPrefix:"神宮大会",
+   rounds:["1回戦","準決勝","決勝"].map(label=>({prefix:"神宮大会",label}))}
 ];
 function roundInfoForSeason(sname){
   const s=String(sname||"");
-  for(const t of ROUND_TEMPLATES) if(t.test(s)) return {prefix:t.prefix,rounds:t.rounds};
+  for(const t of ROUND_TEMPLATES) if(t.test(s)) return t;
   return null;
 }
 function fillRoundSelForSeason(){
   const sel=$("#gRoundSel"); if(!sel) return;
   const info=roundInfoForSeason(DB.current);
   const rounds=info?info.rounds:[];
-  sel.innerHTML=`<option value="">－（ラウンドなし）</option>`+rounds.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join("")+`<option value="__custom">その他（自由入力）</option>`;
+  sel.innerHTML=`<option value="">－（ラウンドなし）</option>`+rounds.map((r,i)=>`<option value="${i}">${esc(r.prefix+r.label)}</option>`).join("")+`<option value="__custom">その他（自由入力）</option>`;
 }
 function updateGOppFromParts(){
   const sel=$("#gRoundSel").value;
-  const round = sel==="__custom" ? $("#gRoundCustom").value.trim() : sel;
-  const name=$("#gOppName").value.trim();
   const info=roundInfoForSeason(DB.current);
-  const prefix=(info&&round)?info.prefix:"";
-  const roundPart = round? `${prefix}${round}` : "";
+  let roundPart="";
+  if(sel==="__custom"){
+    const custom=$("#gRoundCustom").value.trim();
+    const cp=info?info.customPrefix:"";
+    roundPart = custom? `${cp}${custom}` : "";
+  }else if(sel!==""){
+    const r=info&&info.rounds[parseInt(sel,10)];
+    if(r) roundPart=`${r.prefix}${r.label}`;
+  }
+  const name=$("#gOppName").value.trim();
   let combined = roundPart? (name? `${roundPart} vs ${name}` : roundPart) : name;
   if(combined && $("#gColdGame").checked) combined += " (コールド)";
   $("#gOpp").value=combined;
@@ -1005,14 +1028,15 @@ function stripColdTag(oppStr){
 function parseOpponentForSeason(sname,oppStr){
   const info=roundInfoForSeason(sname);
   if(info && oppStr){
-    const rounds=[...info.rounds].sort((a,b)=>b.length-a.length);
-    for(const r of rounds){
-      const pfx=`${info.prefix}${r} vs `;
-      if(oppStr.startsWith(pfx)) return {round:r, custom:"", name:oppStr.slice(pfx.length)};
-      if(oppStr===`${info.prefix}${r}`) return {round:r, custom:"", name:""};
+    const candidates=info.rounds.map((r,i)=>({idx:i, text:`${r.prefix}${r.label}`})).sort((a,b)=>b.text.length-a.text.length);
+    for(const c of candidates){
+      const pfx=`${c.text} vs `;
+      if(oppStr.startsWith(pfx)) return {round:String(c.idx), custom:"", name:oppStr.slice(pfx.length)};
+      if(oppStr===c.text) return {round:String(c.idx), custom:"", name:""};
     }
-    if(oppStr.startsWith(info.prefix)){
-      const rest=oppStr.slice(info.prefix.length);
+    const cp=info.customPrefix||"";
+    if(cp && oppStr.startsWith(cp)){
+      const rest=oppStr.slice(cp.length);
       const vsIdx=rest.indexOf(" vs ");
       const roundTxt = vsIdx>=0? rest.slice(0,vsIdx) : rest;
       const nameTxt = vsIdx>=0? rest.slice(vsIdx+4) : "";
