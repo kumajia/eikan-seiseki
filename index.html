@@ -337,6 +337,19 @@
         </div>
       </div>
     </section>
+    <section class="card">
+      <h2>📷 新入生スクショから登録 <span class="tag p">Gemini</span></h2>
+      <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録するで。登録した選手は入学年タブと選手一覧に載る（試合に出るまで通算成績には出えへん）。APIキーは「試合を追加」タブで設定したのを使う。</div>
+      <div class="row" style="align-items:center">
+        <div id="freshDropZone" class="dropzone">
+          <input type="file" id="freshFiles" accept="image/*" multiple>
+          <div class="dz-txt">新入生画面の画像を選択またはドラッグ＆ドロップ（複数OK）</div>
+        </div>
+        <button class="primary" id="runFreshOcr">解析する</button>
+      </div>
+      <div id="freshStatus" class="hint" style="margin-top:10px"></div>
+      <div id="freshResult" style="margin-top:10px"></div>
+    </section>
     <div id="playerContent"></div>
   </div>
 
@@ -381,7 +394,7 @@
       <div class="row" style="align-items:center">
         <div id="dropZone" class="dropzone">
           <input type="file" id="shotFiles" accept="image/*" multiple>
-          <div class="dz-txt">画像をここにドラッグ＆ドロップ、またはクリックして選択</div>
+          <div class="dz-txt">画像をここにドラッグ＆ドロップ、クリックして選択、またはコピーしてCtrl+Vで貼り付け</div>
         </div>
         <button class="primary" id="runOcr">解析する</button>
       </div>
@@ -690,10 +703,22 @@
       <div class="note">端末を変えても・自前ホストに移しても、このJSONで丸ごと引っ越せる。</div>
       <div class="toolbar">
         <button class="primary" id="exportAll">全データを書き出し（ダウンロード）</button>
+        <button class="ghost" id="shareAll">共有で書き出し（スマホ向け）</button>
         <label class="ghost" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--line2);border-radius:8px;cursor:pointer">
           ファイルから読み込み<input type="file" id="importFile" accept=".json" style="display:none"></label>
       </div>
       <div class="hint">読み込むと全シーズン置き換えるで（現在のデータは書き出しでバックアップ推奨）。</div>
+    </section>
+    <section class="card">
+      <h2>マージ取り込み（足りない試合だけ追加）</h2>
+      <div class="note">別端末（スマホ等）で書き出したJSONから、この端末に無い試合だけを追加するで。既存データは消えへん。無いシーズンは新規作成、選手の入学年/ポジションは未設定の項目だけ補完する。</div>
+      <div class="toolbar">
+        <label class="ghost" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--line2);border-radius:8px;cursor:pointer">
+          ファイルからマージ<input type="file" id="mergeFile" accept=".json" style="display:none"></label>
+      </div>
+      <textarea id="mergeBulk" placeholder='書き出したJSON全体を貼り付けでもOK'></textarea>
+      <div style="margin-top:8px"><button class="primary" id="doMergeBulk">マージする</button></div>
+      <div id="mergeResult" class="hint" style="margin-top:8px"></div>
     </section>
     <section class="card">
       <h2>まるごと貼り付けインポート</h2>
@@ -917,6 +942,7 @@ function aggBatting(games){
   rows.sort((a,b)=>b.OPS-a.OPS||b.AB-a.AB);
   return rows;
 }
+const hasPA=r=>(n(r.AB)+n(r.BB)+n(r.SH))>0; // 打席あり＝打数+四死球+犠打>0
 function aggPitching(games){
   const m=new Map();
   for(const g of games) for(const p of (g.pitchers||[])){
@@ -1089,8 +1115,8 @@ function render(){
     ${kpi("試合数",games.length)}
   `;
 
-  // batting table
-  const brows=aggBatting(games);
+  // batting table（打席ゼロ＝守備のみ/名簿登録のみの選手は通算表に出さない）
+  const brows=aggBatting(games).filter(hasPA);
   $("#leaderKpis").innerHTML=leaderKpisHtml(brows,games.length);
   $("#batTbl").innerHTML=battingTableHtml(brows,T,sortState.summaryBat,detailedView);
 
@@ -1162,7 +1188,7 @@ function renderPeriod(){
   el.innerHTML = labels.map(label=>{
     const gs=buckets.get(label);
     const T=teamTotals(gs);
-    const brows=aggBatting(gs);
+    const brows=aggBatting(gs).filter(hasPA);
     const prows=aggPitching(gs);
     let bst=sortState.periodBat.get(label); if(!bst){bst={key:null,dir:-1}; sortState.periodBat.set(label,bst);}
     let pst=sortState.periodPit.get(label); if(!pst){pst={key:null,dir:-1}; sortState.periodPit.set(label,pst);}
@@ -1204,6 +1230,10 @@ function playerRoster(){
       for(const b of (g.batters||[])) if(b.name) map.set(nameKey(b.name),String(b.name).trim());
       for(const p of (g.pitchers||[])) if(p.name) map.set(nameKey(p.name),String(p.name).trim());
     }
+  }
+  // 試合記録が無くても、名簿登録済み（nameを持つplayerMeta）の選手は名簿に含める（新入生対応）
+  for(const [key,meta] of Object.entries(DB.playerMeta||{})){
+    if(meta && meta.name && !map.has(key)) map.set(key, String(meta.name).trim());
   }
   return [...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],"ja"));
 }
@@ -1303,6 +1333,9 @@ function renderEnrollYearTab(){
       const cp=aggPitching(cGames).find(r=>nameKey(r.name)===key);
       if(cb && cb.G) batters.push({key,nm,posStr,stat:`打率${avg3(cb.AVG)} / ${cb.G}試合`});
       if(cp && cp.G) pitchers.push({key,nm,posStr,stat:`防御率${cp.ipNum?cp.ERA.toFixed(2):'-'} / ${cp.G}登板`});
+      if(!(cb&&cb.G) && !(cp&&cp.G)){ // 名簿登録のみ（新入生など）も入学年タブには出す
+        (meta.position==="投手"? pitchers : batters).push({key,nm,posStr,stat:"出場なし"});
+      }
     }
     const rowHtml=(p)=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;border-bottom:1px solid var(--line);padding:6px 2px">
         <span><span class="plink" data-key="${esc(p.key)}">${esc(p.nm)}</span>${p.posStr?`<span class="dim" style="font-size:12px">　${esc(p.posStr)}</span>`:''}</span>
@@ -1657,7 +1690,7 @@ function renderPlayerContent(){
   const lastLog = logRows[logRows.length-1];
   const careerBat=aggBatting(careerGames).find(r=>nameKey(r.name)===key);
   const careerPit=aggPitching(careerGames).find(r=>nameKey(r.name)===key);
-  const dispName = careerBat? careerBat.name : (careerPit? careerPit.name : "");
+  const dispName = careerBat? careerBat.name : (careerPit? careerPit.name : ((playerRoster().find(([k])=>k===key)||[])[1]||""));
   // 学年/引退判定は「本人の最終出場」じゃなくて「DB全体で一番新しい試合」を基準にする
   // (退部・引退後は本人の記録が増えんから、本人基準やと引退・卒業に一生ならへん)
   const latestOverall=latestGameGlobally();
@@ -1669,14 +1702,16 @@ function renderPlayerContent(){
   let html=`<section class="card"><h2 style="font-size:16px">${esc(dispName)}${badgeBits?`　<span class="dim" style="font-size:13px;font-weight:400">(${esc(badgeBits)})</span>`:''}　通算</h2><div class="kpis">`;
   if(careerBat) html+= kpi("試合",careerBat.G)+kpi("打率",avg3(careerBat.AVG),"a")+kpi("OPS",avg3(careerBat.OPS))+kpi("本塁打",careerBat.HR,"g")+kpi("打点",careerBat.RBI)+kpi("盗塁",careerBat.SB);
   if(careerPit) html+= kpi("登板",careerPit.G)+kpi("防御率",careerPit.ipNum?careerPit.ERA.toFixed(2):"-","a")+kpi("勝利",careerPit.W)+kpi("奪三振",careerPit.K)+kpi("投球回",careerPit.IPstr);
-  html+=`</div></section>`;
+  html+=`</div>`;
+  if(!careerBat && !careerPit) html+=`<div class="empty" style="padding:10px">まだ出場記録がないで（名簿登録のみ）。<div style="margin-top:8px"><button class="mini danger" id="removeRosterOnly" data-key="${esc(key)}">名簿から削除</button></div></div>`;
+  html+=`</section>`;
   html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
 
   if(seasonBatRows.length) html+=`<section class="card"><h2 style="font-size:15px"><span class="tag">打</span> シーズン別打撃成績</h2>
     <div class="scroll" data-kind="playerSeasonBat"><table>${playerSeasonBatTableHtml(seasonBatRows)}</table></div></section>`;
   if(seasonPitRows.length) html+=`<section class="card"><h2 style="font-size:15px"><span class="tag p">投</span> シーズン別投手成績</h2>
     <div class="scroll" data-kind="playerSeasonPit"><table>${playerSeasonPitTableHtml(seasonPitRows)}</table></div></section>`;
-  html+=`<section class="card"><h2 style="font-size:15px">試合ログ</h2>
+  if(logRows.length) html+=`<section class="card"><h2 style="font-size:15px">試合ログ</h2>
     <div class="scroll" data-kind="playerLog"><table>${playerLogTableHtml(logRows,enrollYear)}</table></div></section>`;
 
   el.innerHTML=html;
@@ -1921,6 +1956,53 @@ function normDB(d){
   for(const s of Object.values(d.seasons||{})) s.games=(s.games||[]).map(normGame);
   return d;
 }
+function mergeDB(d){
+  // 別端末のエクスポートを追加取り込み。id一致の試合はスキップ、無いシーズンは作成、
+  // playerMetaは未設定の項目だけ補完（この端末の設定は上書きしない）
+  if(!d || !d.seasons) throw new Error("形式ちゃう（seasonsが無い）");
+  const existing=new Set();
+  for(const s of Object.values(DB.seasons)) for(const g of s.games) if(g.id!=null) existing.add(String(g.id));
+  const lines=[]; let totalAdded=0;
+  for(const [sname,s] of Object.entries(d.seasons)){
+    const games=(s&&s.games)||[];
+    const isNew=!DB.seasons[sname];
+    let added=0,skipped=0;
+    for(const o of games){
+      if(o.id!=null && existing.has(String(o.id))){skipped++;continue;}
+      if(!DB.seasons[sname]) DB.seasons[sname]={games:[]};
+      const ng=normGame(o); existing.add(String(ng.id));
+      DB.seasons[sname].games.push(ng); added++;
+    }
+    totalAdded+=added;
+    if(added||skipped) lines.push(`「${sname}」: ${(isNew&&added)?"新規作成・":""}${added}試合追加${skipped?`（${skipped}件は既存）`:""}`);
+  }
+  let metaFilled=0;
+  if(d.playerMeta){
+    DB.playerMeta=DB.playerMeta||{};
+    for(const [key,meta] of Object.entries(d.playerMeta)){
+      if(!meta) continue;
+      const cur={...(DB.playerMeta[key]||{})};
+      let touched=false;
+      for(const k of ["name","enrollYear","position","subPosition"]){
+        if(cur[k]==null && meta[k]!=null){ cur[k]=meta[k]; touched=true; }
+      }
+      if(touched){ DB.playerMeta[key]=cur; metaFilled++; }
+    }
+  }
+  if(metaFilled) lines.push(`選手メタ: ${metaFilled}人分を補完`);
+  return {lines,totalAdded};
+}
+async function applyMerge(text){
+  const el=$("#mergeResult");
+  try{
+    const d=JSON.parse(text);
+    const r=mergeDB(d);
+    await saveDB(); fillSeasons(); render();
+    el.innerHTML = r.lines.length? "✅ マージ完了<br>"+r.lines.map(esc).join("<br>") : "追加できる試合は無かったで（全部取り込み済みかも）";
+    $("#mergeBulk").value="";
+    toast(r.totalAdded? `${r.totalAdded}試合をマージしたで` : "追加なし");
+  }catch(e){ el.textContent=""; toast("マージ失敗: "+e.message,true); }
+}
 
 /* ---------- OCR (Gemini) ---------- */
 const GEMKEY="eikan-gemkey", GEMMODEL="eikan-gemmodel", DEF_MODEL="gemini-3.1-flash-lite";
@@ -1996,6 +2078,30 @@ function setShotFiles(fileList){
   files.forEach(f=>dt.items.add(f));
   $("#shotFiles").files=dt.files;
   updateFileHint();
+}
+async function pickupSharedImages(){
+  // Web Share Target経由の画像を受け取る（sw.jsがCacheに置いてリダイレクトしてくる）
+  if(location.search.includes("share=1")) history.replaceState(null,"",location.pathname+location.hash);
+  if(!("caches" in window)) return;
+  try{
+    const cache=await caches.open("eikan-share-tmp");
+    const keys=(await cache.keys()).filter(r=>r.url.includes("shared-img-"))
+      .sort((a,b)=>a.url.localeCompare(b.url));
+    if(!keys.length) return;
+    const files=[];
+    for(const req of keys){
+      const res=await cache.match(req); if(!res) continue;
+      const blob=await res.blob();
+      const ext=(blob.type.split("/")[1]||"jpg").replace("jpeg","jpg");
+      files.push(new File([blob],`shared-${files.length+1}.${ext}`,{type:blob.type||"image/jpeg"}));
+    }
+    await Promise.all(keys.map(r=>cache.delete(r)));
+    if(files.length){
+      setShotFiles(files);
+      switchTab("add","replace");
+      toast(`共有から画像${files.length}枚を受け取ったで`);
+    }
+  }catch(e){}
 }
 
 const OCR_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』の試合結果スクショを読み取るOCRです。渡された画像（野手記録・投手記録・打席結果/スコアボード等）から、後攻チーム（プレイヤー側）の記録を抽出します。
@@ -2120,6 +2226,101 @@ function validateEntry(){
   el.className="valban "+(allok?"ok":"ng");
   el.innerHTML=(allok?"✅ 合計照合OK（全列一致）":"⚠️ 合計と不一致の列があるで（個人=/合計）")+"<br>"+chips.join("")+
     (allok?"":`<br><button type="button" class="mini ghost" id="acceptEntryTotals" style="margin-top:6px">個人成績を正として合計を更新</button>`);
+}
+
+/* ---------- 新入生OCR登録 ---------- */
+const FRESH_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』の新入生・入学式・部員一覧のスクショを読み取るOCRです。画像に写っている新入部員の選手名とポジションを抽出します。
+- 選手名は画面の表記どおり正確に（姓のみのことが多い）。
+- ポジションは「投手」「捕手」「一塁」「二塁」「三塁」「遊撃」「外野」のいずれかに正規化する。「内野」としか分からない場合や不明な場合は空文字""にする。
+- 画像に入学年度（20XX年）が写っていれば enrollYear に西暦の数値で入れる。無ければ null。
+- 同じ選手が複数の画像に写っていても1回だけ出力する。
+- 出力は次のJSONだけを json のコードブロック(3個のバッククォートで開始・終了)で出力する（前後に説明文は書かない）:
+{"enrollYear":null,"players":[{"name":"","position":""}]}`;
+let freshPlayers=null, freshSelected=new Set(), freshYearGuess=null;
+function uniqueRegName(name){
+  const marks=["②","③","④","⑤","⑥","⑦","⑧","⑨"];
+  let nm=name, i=0;
+  const taken=k=>playerRoster().some(([kk])=>kk===k) || !!(DB.playerMeta&&DB.playerMeta[k]);
+  while(taken(nameKey(nm))){
+    if(i>=marks.length){ nm=name+`(${i+2})`; break; }
+    nm=name+marks[i]; i++;
+  }
+  return nm;
+}
+function renderFreshResult(){
+  const el=$("#freshResult"); if(!el) return;
+  if(!freshPlayers){ el.innerHTML=""; return; }
+  const chips=freshPlayers.map((p,i)=>{
+    const dup=p.regName!==p.name;
+    const sel=freshSelected.has(i);
+    const label=dup? `${esc(p.name)}→${esc(p.regName)}` : esc(p.name);
+    return `<button type="button" class="chip${sel?' selected':''}" data-i="${i}"${dup?' title="同名が名簿にあるため別名で登録する"':''}>${dup?'⚠':''}${label}${p.position?`<span class="en">${esc(p.position)}</span>`:''}</button>`;
+  }).join("");
+  el.innerHTML=`<div class="row" style="margin-bottom:8px">
+      <div class="field" style="max-width:140px"><label>入学年</label><input type="number" id="freshYear" value="${freshYearGuess??''}" placeholder="例: 2033"></div>
+    </div>
+    <div class="chipList" style="margin-bottom:10px">${chips}</div>
+    <button class="primary" id="freshRegister">選択した選手を登録</button>`;
+}
+async function registerFresh(){
+  const yv=$("#freshYear").value.trim();
+  if(!yv){ toast("入学年を入れてな",true); return; }
+  const year=parseInt(yv,10);
+  if(!freshSelected.size){ toast("選手を選んでな",true); return; }
+  DB.playerMeta=DB.playerMeta||{};
+  let cnt=0;
+  freshPlayers.forEach((p,i)=>{
+    if(!freshSelected.has(i)) return;
+    const nm=p.regName, key=nameKey(nm);
+    const cur={...(DB.playerMeta[key]||{})};
+    cur.name=nm; cur.enrollYear=year;
+    if(p.position && !cur.position) cur.position=p.position;
+    DB.playerMeta[key]=cur; cnt++;
+  });
+  await saveDB();
+  freshPlayers=null; freshSelected=new Set(); freshYearGuess=null;
+  renderFreshResult();
+  $("#freshStatus").innerHTML='<span class="chip g">'+cnt+'人を名簿に登録</span> 入学年タブで確認できるで。';
+  $("#freshFiles").value="";
+  render();
+  toast(`${cnt}人を名簿に登録したで`);
+}
+async function runFreshOcr(){
+  const key=$("#gemKey").value.trim();
+  const model=$("#gemModel").value.trim()||DEF_MODEL;
+  const files=[...$("#freshFiles").files];
+  const st=$("#freshStatus");
+  if(!key){st.innerHTML='<span class="chip r">「試合を追加」タブでAPIキーを設定してな</span>';return;}
+  if(!files.length){st.innerHTML='<span class="chip r">画像を選んでな</span>';return;}
+  st.innerHTML='<span class="spin"></span>解析中… 画像'+files.length+'枚をGeminiに送信';
+  try{
+    const parts=[{text:FRESH_PROMPT}];
+    for(const f of files){parts.push({inline_data:{mime_type:f.type||"image/jpeg",data:await fileToB64(f)}});}
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    const resp=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})});
+    if(!resp.ok){const t=await resp.text();throw new Error("API "+resp.status+": "+t.slice(0,180));}
+    const data=await resp.json();
+    let txt=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+    const fences=[...txt.matchAll(/```(?:json)?([\s\S]*?)```/g)];
+    if(fences.length) txt=fences[fences.length-1][1];
+    else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0 && e>s) txt=txt.slice(s,e+1); }
+    const g=JSON.parse(txt.trim());
+    const players=(g.players||[]).filter(p=>p&&p.name&&String(p.name).trim());
+    if(!players.length) throw new Error("選手名が読み取れへんかった");
+    freshPlayers=players.map(p=>{
+      const name=String(p.name).trim();
+      const pos=POSITIONS.includes(p.position)? p.position : "";
+      const exists=playerRoster().some(([k])=>k===nameKey(name)) || !!(DB.playerMeta&&DB.playerMeta[nameKey(name)]);
+      return {name, position:pos, regName: exists? uniqueRegName(name) : name};
+    });
+    freshSelected=new Set(freshPlayers.map((_,i)=>i));
+    freshYearGuess=g.enrollYear||null;
+    renderFreshResult();
+    st.innerHTML='<span class="chip g">'+freshPlayers.length+'人を読み取り</span> 登録する選手と入学年を確認してな。⚠付きは同名がいるため別名で登録される。';
+  }catch(e){
+    st.innerHTML='<span class="chip r">失敗</span> '+esc(e.message);
+  }
 }
 
 /* ---------- tabs ---------- */
@@ -2373,7 +2574,15 @@ async function init(){
     if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
     await saveDB(); renderPlayerContent();
   });
-  $("#playerContent").addEventListener("click",e=>{
+  $("#playerContent").addEventListener("click",async e=>{
+    const rm=e.target.closest("#removeRosterOnly");
+    if(rm){ // 出場記録なしの名簿登録のみ選手を削除
+      if(!confirm("この選手を名簿から削除する？（試合記録は無いから成績への影響は無いで）"))return;
+      delete DB.playerMeta[rm.dataset.key];
+      $("#playerSel").value="";
+      await saveDB(); render(); toast("名簿から削除したで");
+      return;
+    }
     const th=e.target.closest("th[data-key]"); if(!th)return;
     const wrap=e.target.closest("[data-kind]"); if(!wrap)return;
     const map={playerSeasonBat:sortState.playerSeasonBat,playerSeasonPit:sortState.playerSeasonPit,playerLog:sortState.playerLog}[wrap.dataset.kind];
@@ -2431,6 +2640,29 @@ async function init(){
   $("#gDate").addEventListener("input",checkAllNameDups);
   $("#shotFiles").addEventListener("change",updateFileHint);
   $("#shotFileHint").addEventListener("click",e=>{ if(e.target.closest("#clearShotFiles")) clearShotFiles(); });
+  pickupSharedImages(); // 共有ターゲット経由の画像があれば受け取る
+
+  // 新入生OCR登録
+  $("#runFreshOcr").addEventListener("click",runFreshOcr);
+  $("#freshResult").addEventListener("click",e=>{
+    const chip=e.target.closest(".chip");
+    if(chip && chip.dataset.i!=null){
+      const i=parseInt(chip.dataset.i,10);
+      if(freshSelected.has(i)) freshSelected.delete(i); else freshSelected.add(i);
+      chip.classList.toggle("selected");
+      return;
+    }
+    if(e.target.closest("#freshRegister")) registerFresh();
+  });
+  const fdz=$("#freshDropZone");
+  ["dragenter","dragover"].forEach(ev=>fdz.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();fdz.classList.add("drag");}));
+  ["dragleave","drop"].forEach(ev=>fdz.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();fdz.classList.remove("drag");}));
+  fdz.addEventListener("drop",e=>{
+    if(!e.dataTransfer?.files?.length) return;
+    const dt=new DataTransfer();
+    [...e.dataTransfer.files].filter(f=>f.type.startsWith("image/")).forEach(f=>dt.items.add(f));
+    if(dt.files.length) $("#freshFiles").files=dt.files;
+  });
 
   // drag & drop for screenshots
   const dz=$("#dropZone");
@@ -2440,6 +2672,15 @@ async function init(){
   // ページ全体でドロップ時にブラウザが画像を開いてしまわんようガード
   window.addEventListener("dragover",e=>e.preventDefault());
   window.addEventListener("drop",e=>e.preventDefault());
+  // クリップボードから画像を貼り付け（Ctrl+V）。連続貼り付けは追加になる
+  window.addEventListener("paste",e=>{
+    const files=[...(e.clipboardData?.files||[])].filter(f=>f.type.startsWith("image/"));
+    if(!files.length) return;
+    e.preventDefault();
+    setShotFiles([...$("#shotFiles").files, ...files]);
+    if($("#tab-add").style.display==="none") switchTab("add"); // 既にaddタブなら履歴を積まない
+    toast(`画像${files.length}枚を貼り付けたで`);
+  });
 
   $("#saveGame").addEventListener("click",async()=>{
     const g=collectForm();
@@ -2475,8 +2716,29 @@ async function init(){
     const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);
     a.download=`eikan-stats-${new Date().toISOString().slice(0,10)}.json`;a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000); // 即revokeやとダウンロード開始前に無効化される環境がある
     toast("書き出したで");
+  });
+  $("#shareAll").addEventListener("click",async()=>{
+    const file=new File([JSON.stringify(DB,null,2)],`eikan-stats-${new Date().toISOString().slice(0,10)}.json`,{type:"application/json"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:"栄冠ノート データ"}); toast("共有したで"); }
+      catch(e){ if(e.name!=="AbortError") toast("共有失敗: "+e.message,true); }
+    }else{
+      toast("この端末は共有非対応やからダウンロードで書き出すで",true);
+      $("#exportAll").click();
+    }
+  });
+  $("#mergeFile").addEventListener("change",e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{ applyMerge(r.result); };
+    r.readAsText(f); e.target.value="";
+  });
+  $("#doMergeBulk").addEventListener("click",()=>{
+    const t=$("#mergeBulk").value.trim();
+    if(!t){toast("JSONを貼り付けてな",true);return;}
+    applyMerge(t);
   });
   $("#importFile").addEventListener("change",e=>{
     const f=e.target.files[0];if(!f)return;
