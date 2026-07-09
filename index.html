@@ -78,8 +78,8 @@
   th .arrow{color:var(--amber);margin-left:2px;}
   .plink{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);}
   .plink:hover{color:var(--amber);text-decoration-color:var(--amber);}
-  .slink{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);}
-  .slink:hover{color:var(--amber);text-decoration-color:var(--amber);}
+  .slink,.glink{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);}
+  .slink:hover,.glink:hover{color:var(--amber);text-decoration-color:var(--amber);}
   .dupwarn{display:none;color:var(--danger);font-size:13px;margin-left:4px;cursor:help;}
   .dupwarn.show{display:inline;}
   td.name,th.name{text-align:left;position:sticky;left:0;background:var(--panel);
@@ -105,6 +105,7 @@
   .game{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden;}
   .game .ghead{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;
     background:var(--panel2);}
+  .game .ghead:focus-visible{outline:2px solid var(--amber);outline-offset:-2px;}
   .game .ghead .date{font-family:var(--mono);color:var(--muted);font-size:12px;}
   .game .ghead .opp{font-weight:700;}
   .game .ghead .sc{margin-left:auto;font-family:var(--mono);font-weight:700;}
@@ -702,6 +703,7 @@
     <section class="card">
       <h2 style="color:var(--danger)">危険ゾーン</h2>
       <div style="margin-top:6px"><button class="danger" id="wipeSeason">このシーズンの試合を全削除</button></div>
+      <div style="margin-top:6px"><button class="danger" id="deleteSeason">このシーズン自体を削除</button></div>
     </section>
   </div>
 </div>
@@ -890,6 +892,10 @@ function curGames(){return DB.seasons[DB.current].games;}
 function nameKey(s){
   return String(s||"").normalize("NFKC").replace(/\s+/g,"").trim();
 }
+function newId(){
+  try{ if(typeof crypto!=="undefined" && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10);
+}
 
 /* ---------- aggregation ---------- */
 function aggBatting(games){
@@ -1012,7 +1018,7 @@ function leaderKpisHtml(brows,gameCount){
   return LEADER_DEFS.map(([key,label,fmt])=>{
     const leader=[...c].sort((a,b)=>b[key]-a[key])[0];
     const val= fmt==="avg3"? avg3(leader[key]) : leader[key];
-    return kpi(label,val,"a",leader.name+note);
+    return kpi(label,val,"a",esc(leader.name)+note);
   }).join("");
 }
 
@@ -1102,7 +1108,7 @@ function render(){
 
 /* ---------- 期間（年ごと）集計 ---------- */
 let periodBlock=3;
-let periodAnchor=2031; // nullなら自動（データの最古年度を起点にする）
+let periodAnchor=null; // 初期値はHTMLの#periodAnchorInputから拾う。nullなら自動（データの最古年度を起点にする）
 function allGamesFlat(){
   const out=[];
   for(const [name,s] of Object.entries(DB.seasons)){
@@ -1223,6 +1229,35 @@ function goToSeasonInLog(sname){
     grp.scrollIntoView({behavior:"smooth",block:"start"});
   });
 }
+function findGameById(id){
+  for(const [sname,s] of Object.entries(DB.seasons)){
+    const g=(s.games||[]).find(x=>String(x.id)===String(id));
+    if(g) return {season:sname, game:g};
+  }
+  return null;
+}
+function openGameById(id,mode){
+  const hit=findGameById(id);
+  switchTab("games","silent");
+  if(mode!=="silent"){
+    const hash="#games/"+encodeURIComponent(String(id));
+    if(mode==="replace") history.replaceState({tab:"games",game:String(id)},"",hash);
+    else if(location.hash!==hash) history.pushState({tab:"games",game:String(id)},"",hash);
+  }
+  if(!hit){ toast("その試合が見つからへんで",true); return; }
+  requestAnimationFrame(()=>{
+    const grp=$(`#gameList .seasongroup[data-season="${CSS.escape(hit.season)}"]`);
+    if(grp) grp.classList.add("open");
+    const el=$(`#gameList .game[data-id="${CSS.escape(String(id))}"]`);
+    if(el){ el.classList.add("open"); el.scrollIntoView({behavior:"smooth",block:"center"}); }
+  });
+}
+function copyGameLink(id){
+  const url=location.href.replace(/#.*$/,"")+"#games/"+encodeURIComponent(String(id));
+  const fallback=()=>prompt("このURLをコピーしてな",url);
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(()=>toast("試合へのリンクをコピーしたで"),fallback);
+  else fallback();
+}
 function fillPlayerSel(){
   const dl=$("#playerListDL"), inp=$("#playerSel"); if(!dl||!inp) return;
   const roster=playerRoster();
@@ -1283,7 +1318,7 @@ function renderEnrollYearTab(){
       ? `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">${battersCol}${pitchersCol}</div>`
       : (battersCol + pitchersCol);
     return `<div class="game">
-      <div class="ghead" onclick="this.parentElement.classList.toggle('open')">
+      <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
         <span class="chev">▸</span>
         <span class="opp">${esc(label)}</span>
         <span class="dim" style="font-size:12px;margin-left:auto">${members.length}人${gradeLabel?`・現在${esc(gradeLabel)}`:''}</span>
@@ -1533,7 +1568,7 @@ function playerSeasonPitTableHtml(rows){
 function playerLogTableHtml(rows,enrollYear){
   const sort=sortState.playerLog;
   const flat=rows.map(r=>({
-    date:r.date, season:r.season, opponent:r.opponent,
+    date:r.date, season:r.season, opponent:r.opponent, _gid:r._gid,
     _year: gameYear({date:r.date}),
     AB:r.b?n(r.b.AB):null, H:r.b?n(r.b.H):null, HR:r.b?n(r.b.HR):null, RBI:r.b?n(r.b.RBI):null, SB:r.b?n(r.b.SB):null,
     IP:r.p?r.p.IP:null, K:r.p?n(r.p.K):null, ER:r.p?n(r.p.ER):null, W:r.p?!!r.p.W:null,
@@ -1550,7 +1585,7 @@ function playerLogTableHtml(rows,enrollYear){
     const bTxt = r._b? `${r.AB}打${r.H}安${r.HR?` ${r.HR}本`:''} ${r.RBI}点${r.SB?` ${r.SB}盗`:''}` : '-';
     const pTxt = r._p? `${r.IP}回 ${r.K}K ${r.ER}自責${r.W?' 勝':''}` : '-';
     const grade=gradeInfo(enrollYear,r.season,r._year).label;
-    h+=`<tr><td class="name">${esc(r.date||'-')}</td><td style="text-align:left"><span class="slink" data-season="${esc(r.season)}">${esc(r.season)}</span></td><td style="text-align:left">${esc(r.opponent||'-')}</td>`+
+    h+=`<tr><td class="name"><span class="glink" data-gid="${esc(String(r._gid))}" title="この試合を試合ログで開く">${esc(r.date||'-')}</span></td><td style="text-align:left"><span class="slink" data-season="${esc(r.season)}">${esc(r.season)}</span></td><td style="text-align:left">${esc(r.opponent||'-')}</td>`+
       `<td class="num">${esc(grade||'-')}</td><td style="text-align:left">${esc(bTxt)}</td><td style="text-align:left">${esc(pTxt)}</td></tr>`;
   }
   return h+`</tbody>`;
@@ -1610,7 +1645,7 @@ function renderPlayerContent(){
     }
     for(const g of gamesWithPlayer){
       logRows.push({
-        date:g.date||"", season:sname, opponent:g.opponent||"",
+        date:g.date||"", season:sname, opponent:g.opponent||"", _gid:g.id,
         b:(g.batters||[]).find(x=>nameKey(x.name)===key),
         p:(g.pitchers||[]).find(x=>nameKey(x.name)===key)
       });
@@ -1666,7 +1701,7 @@ function renderSeasonCompare(){
   let h=`<thead><tr><th class="name" data-key="season" title="シーズン名">シーズン${sortArrow(sort,"season")}</th>`+
     cols.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
   for(const r of sorted){
-    h+=`<tr><td class="name">${esc(r.season)}</td>`+
+    h+=`<tr><td class="name"><span class="slink" data-season="${esc(r.season)}">${esc(r.season)}</span></td>`+
       cols.map(c=>{
         if(c[0]==='AVG'||c[0]==='OPS') return `<td class="num">${avg3(r[c[0]])}</td>`;
         if(c[0]==='ERA') return `<td class="num">${r.ipNum?r.ERA.toFixed(2):'-'}</td>`;
@@ -1686,12 +1721,12 @@ function renderGames(){
   el.innerHTML=entries.map(([sname,s])=>{
     if(!s.games.length) return "";
     const T=teamTotals(s.games);
-    const gamesHtml=s.games.map((g,i)=>{
+    const gamesHtml=s.games.map(g=>{
       const win=g.runsFor>g.runsAgainst, lose=g.runsFor<g.runsAgainst;
       const bt=aggBatting([g]);
       const bsum=`打 ${g.batters?.length||0}人 / ${bt.reduce((sum,r)=>sum+r.H,0)}安打`;
-      return `<div class="game" data-i="${i}">
-        <div class="ghead" onclick="this.parentElement.classList.toggle('open')">
+      return `<div class="game" data-id="${esc(String(g.id))}">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
           <span class="chev">▸</span>
           <span class="date">${g.date||'日付なし'}</span>
           <span class="opp">${esc(g.opponent||'(相手未設定)')}</span>
@@ -1701,13 +1736,14 @@ function renderGames(){
           <div class="dim" style="font-size:12px;margin-bottom:6px">${bsum}</div>
           <div class="scroll"><table>${gameBatMini(g)}</table></div>
           <div class="gactions">
-            <button class="mini ghost" data-act="edit" data-season="${esc(sname)}" data-i="${i}">編集</button>
-            <button class="mini danger" data-act="del" data-season="${esc(sname)}" data-i="${i}">削除</button>
+            <button class="mini ghost" data-act="edit" data-season="${esc(sname)}" data-id="${esc(String(g.id))}">編集</button>
+            <button class="mini ghost" data-act="link" data-id="${esc(String(g.id))}">🔗リンク</button>
+            <button class="mini danger" data-act="del" data-season="${esc(sname)}" data-id="${esc(String(g.id))}">削除</button>
           </div>
         </div></div>`;
     }).join("");
     return `<div class="game seasongroup${sname===DB.current?' open':''}" data-season="${esc(sname)}">
-      <div class="ghead" onclick="this.parentElement.classList.toggle('open')">
+      <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
         <span class="chev">▸</span>
         <span class="opp">${esc(sname)}</span>
         <span class="dim" style="font-size:12px;margin-left:auto">${s.games.length}試合 ${T.W}勝${T.L}敗${T.D?T.D+'分':''}</span>
@@ -1733,7 +1769,7 @@ function gameBatMini(g){
 }
 
 /* ---------- add / edit game form ---------- */
-let editIndex=-1;
+let editId=null; // 編集中の試合id（indexやと他の試合の削除でズレるためidで持つ）
 const BAT_INPUT=["AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"];
 const BAT_LBL={AB:"打数",R:"得点",H:"安打","2B":"二塁","3B":"三塁",HR:"本塁",RBI:"打点",SO:"三振",BB:"四死",SH:"犠打",SB:"盗塁",GDP:"併殺",E:"失策"};
 const PIT_INPUT=["IP","BF","H","K","BB","R","ER","WP","HR"];
@@ -1764,7 +1800,7 @@ function checkNameDup(input){
   const key=nameKey(nm);
   const curYear=currentEntryYear();
   if(curYear==null){ warn.classList.remove("show"); warn.textContent=""; return; }
-  const editingGame = editIndex>=0? curGames()[editIndex] : null;
+  const editingGame = editId!=null? curGames().find(g=>String(g.id)===String(editId)) : null;
   let lastY=null;
   for(const s of Object.values(DB.seasons)){
     for(const g of s.games){
@@ -1791,11 +1827,13 @@ function delEntryRow(btn){
 }
 function formIsEmpty(){
   if($("#gDate").value||$("#gRs").value||$("#gRa").value)return false;
+  if($("#gOppName").value.trim()||$("#gRoundSel").value||$("#gColdGame").checked)return false;
   if(ocrBatTotals)return false;
-  return $$("#batEntry tbody input[data-k]").every(i=>i.value.trim()==="");
+  if(!$$("#batEntry tbody input[data-k]").every(i=>i.value.trim()===""))return false;
+  return $$("#pitEntry tbody input[data-k]").every(i=>i.type==="checkbox"? !i.checked : i.value.trim()==="");
 }
 function resetForm(prefillNames=true){
-  editIndex=-1; ocrBatTotals=null;
+  editId=null; ocrBatTotals=null;
   clearShotFiles(); $("#ocrStatus").innerHTML="";
   const vb=$("#valBanner"); if(vb)vb.innerHTML="";
   $("#gDate").value=""; $("#gOpp").value=""; $("#gRs").value=""; $("#gRa").value="";
@@ -1835,9 +1873,11 @@ function collectForm(){
     batters, pitchers
   };
 }
-window.editGame=function(seasonName,i){
+window.editGame=function(seasonName,id){
   if(seasonName!==DB.current){ DB.current=seasonName; saveDB(); fillSeasons(); render(); } // 他タブが古い表示のまま残らんように
-  const g=curGames()[i]; editIndex=i;
+  const g=curGames().find(x=>String(x.id)===String(id));
+  if(!g){toast("編集対象の試合が見つからへん",true);return;}
+  editId=g.id;
   switchTab("add");
   $("#gDate").value=g.date||""; $("#gOpp").value=g.opponent||"";
   fillRoundSelForSeason();
@@ -1854,20 +1894,19 @@ window.editGame=function(seasonName,i){
   checkAllNameDups();
   toast("編集モード");
 };
-window.delGame=async function(seasonName,i){
+window.delGame=async function(seasonName,id){
   if(!confirm("この試合を削除する？"))return;
-  // 編集中の試合が消えたり、前の試合が消えてindexがズレたりせんように補正
-  if(seasonName===DB.current && editIndex>=0){
-    if(i===editIndex){editIndex=-1;resetForm();}
-    else if(i<editIndex)editIndex--;
-  }
-  DB.seasons[seasonName].games.splice(i,1); await saveDB(); render(); toast("削除したで");
+  const games=DB.seasons[seasonName].games;
+  const idx=games.findIndex(g=>String(g.id)===String(id));
+  if(idx<0)return;
+  if(editId!=null && String(editId)===String(id)){editId=null;resetForm();} // 編集中の試合を消したらフォームも解除
+  games.splice(idx,1); await saveDB(); render(); toast("削除したで");
 };
 
 /* ---------- import ---------- */
 function normGame(o){
   return {
-    id:Date.now()+Math.floor(Math.random()*1000),
+    id:o.id??newId(),
     date:o.date||"", opponent:o.opponent||o.opp||"",
     runsFor:n(o.runsFor??o.rf), runsAgainst:n(o.runsAgainst??o.ra),
     batters:(o.batters||[]).map(b=>{const x={name:b.name||""};BAT_INPUT.forEach(k=>x[k]=n(b[k]));
@@ -1876,6 +1915,11 @@ function normGame(o){
       return x;}),
     pitchers:(o.pitchers||[]).map(p=>{const x={name:p.name||""};PIT_INPUT.forEach(k=>x[k]= k==='IP'?String(p[k]??"0").replace(/⅓/g,".1").replace(/⅔/g,".2"):n(p[k]));x.W=!!p.W;return x;})
   };
+}
+function normDB(d){
+  // インポートしたJSONの型を揃える（得点が文字列やと勝敗判定が文字列比較になって狂うため）
+  for(const s of Object.values(d.seasons||{})) s.games=(s.games||[]).map(normGame);
+  return d;
 }
 
 /* ---------- OCR (Gemini) ---------- */
@@ -2027,7 +2071,7 @@ async function runOcr(){
   }
 }
 function fillFormFromOcr(g){
-  // editIndexはリセットしない：編集中に再OCRしても新規追加にならず、上書き保存の対象を維持する
+  // editIdはリセットしない：編集中に再OCRしても新規追加にならず、上書き保存の対象を維持する
   $("#gDate").value=g.date||"";
   $("#gRs").value=(g.runsFor??"")===""?"":g.runsFor;
   $("#gRa").value=(g.runsAgainst??"")===""?"":g.runsAgainst;
@@ -2049,7 +2093,7 @@ function fillFormFromOcr(g){
   $("#batEntry").innerHTML=batEntryHead()+`<tbody>${brows}</tbody>`;
   const prows=(g.pitchers||[]).map(pitRow).join("")||pitRow();
   $("#pitEntry").innerHTML=pitEntryHead()+`<tbody>${prows}</tbody>`;
-  $("#saveGame").textContent = editIndex>=0? "編集を保存" : "この試合を保存";
+  $("#saveGame").textContent = editId!=null? "編集を保存" : "この試合を保存";
   validateEntry();
   checkAllNameDups();
 }
@@ -2118,14 +2162,20 @@ function updateSeasonModalUI(){
 async function init(){
   DB=await loadDB();
   if(!DB){DB=seed(); await saveDB();}
+  { // 旧データでidの無い試合にidを付与（id参照機能のため）
+    let changed=false;
+    for(const s of Object.values(DB.seasons)) for(const g of (s.games||[])) if(g.id==null){g.id=newId();changed=true;}
+    if(changed) await saveDB();
+  }
   fillSeasons();
   fillPositionSelects();
+  {const v=$("#periodAnchorInput").value.trim(); periodAnchor=v?parseInt(v,10):null;}
   render();
 
-  $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){switchTab(b.dataset.tab);if(b.dataset.tab==="add"&&editIndex<0&&formIsEmpty())resetForm();}});
+  $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){switchTab(b.dataset.tab);if(b.dataset.tab==="add"&&editId==null&&formIsEmpty())resetForm();}});
   $("#seasonSel").addEventListener("change",e=>{
     DB.current=e.target.value;
-    if(editIndex>=0){editIndex=-1;resetForm();} // 編集中にシーズン変えたら編集モード解除（別試合の上書き防止）
+    if(editId!=null){resetForm();} // 編集中にシーズン変えたら編集モード解除（別試合の上書き防止）
     else { fillRoundSelForSeason(); $("#gRoundSel").value=""; }
     saveDB();render();
   });
@@ -2155,7 +2205,7 @@ async function init(){
     }
     if(DB.seasons[nm]){toast("その名前あるで",true);return;}
     DB.seasons[nm]={games:[]}; DB.current=nm; await saveDB(); fillSeasons(); render();
-    if(editIndex<0){ fillRoundSelForSeason(); $("#gRoundSel").value=""; }
+    if(editId==null){ fillRoundSelForSeason(); $("#gRoundSel").value=""; }
     closeSeasonModal(); toast("作ったで");
   });
   $("#renameSeason").addEventListener("click",async()=>{
@@ -2267,9 +2317,24 @@ async function init(){
     const el=e.target.closest(".plink"); if(!el)return;
     goToPlayer(el.dataset.key);
   });
+  // Escで開いてるモーダルを閉じる / Enter・Spaceで開閉ヘッダをトグル
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape"){
+      closeSeasonModal(); closeBulkEnrollModal(); closeBulkPositionModal(); closeBulkSubPositionModal();
+      return;
+    }
+    if((e.key==="Enter"||e.key===" ") && e.target.classList && e.target.classList.contains("ghead")){
+      e.preventDefault();
+      e.target.parentElement.classList.toggle("open");
+    }
+  });
   document.addEventListener("click",e=>{
     const el=e.target.closest(".slink"); if(!el)return;
     goToSeasonInLog(el.dataset.season);
+  });
+  document.addEventListener("click",e=>{
+    const el=e.target.closest(".glink"); if(!el)return;
+    openGameById(el.dataset.gid);
   });
   $("#playerSel").addEventListener("input",()=>{ if(currentPlayerKey()) renderPlayerContent(); });
   $("#playerSel").addEventListener("change",()=>{ if(currentPlayerKey()) renderPlayerContent(); });
@@ -2330,9 +2395,10 @@ async function init(){
 
   $("#gameList").addEventListener("click",e=>{
     const btn=e.target.closest("button[data-act]"); if(!btn) return;
-    const sname=btn.dataset.season, idx=parseInt(btn.dataset.i,10);
-    if(btn.dataset.act==="edit") editGame(sname,idx);
-    else if(btn.dataset.act==="del") delGame(sname,idx);
+    const sname=btn.dataset.season, id=btn.dataset.id;
+    if(btn.dataset.act==="edit") editGame(sname,id);
+    else if(btn.dataset.act==="del") delGame(sname,id);
+    else if(btn.dataset.act==="link") copyGameLink(id);
   });
   $("#addBatRow").addEventListener("click",()=>$("#batEntry tbody").insertAdjacentHTML("beforeend",batRow()));
   $("#addPitRow").addEventListener("click",()=>$("#pitEntry tbody").insertAdjacentHTML("beforeend",pitRow()));
@@ -2370,22 +2436,30 @@ async function init(){
   $("#saveGame").addEventListener("click",async()=>{
     const g=collectForm();
     if(!g.batters.length && !g.pitchers.length){toast("選手が空っぽや",true);return;}
-    if(editIndex>=0){
-      const old=curGames()[editIndex];
-      if(!old){toast("編集対象の試合が見つからへん（削除された？）",true);editIndex=-1;resetForm();return;}
-      curGames()[editIndex]={...normGame(g),id:old.id};toast("編集を保存したで");
+    if(editId!=null){
+      const games=curGames();
+      const gi=games.findIndex(x=>String(x.id)===String(editId));
+      if(gi<0){toast("編集対象の試合が見つからへん（削除された？）",true);editId=null;resetForm();return;}
+      games[gi]={...normGame(g),id:games[gi].id};toast("編集を保存したで");
     }
     else{curGames().push(normGame(g));toast("保存したで💾");}
-    await saveDB(); editIndex=-1; resetForm(); render(); switchTab("summary","replace");
+    await saveDB(); editId=null; resetForm(); render(); switchTab("summary","replace");
   });
 
   $("#doImportGame").addEventListener("click",async()=>{
     try{
       let data=JSON.parse($("#importGame").value);
       const arr=Array.isArray(data)?data:[data];
-      arr.forEach(o=>curGames().push(normGame(o)));
+      // id重複チェック：エクスポート済みデータの再取り込みで同じ試合が二重登録されるのを防ぐ
+      const existing=new Set();
+      for(const s of Object.values(DB.seasons)) for(const g of s.games) if(g.id!=null) existing.add(String(g.id));
+      let added=0,skipped=0;
+      for(const o of arr){
+        if(o.id!=null && existing.has(String(o.id))){skipped++;continue;}
+        const ng=normGame(o); existing.add(String(ng.id)); curGames().push(ng); added++;
+      }
       await saveDB(); $("#importGame").value=""; render(); switchTab("summary","replace");
-      toast(`${arr.length}試合 取り込んだで`);
+      toast(`${added}試合 取り込んだで${skipped?`（${skipped}件はid重複でスキップ）`:''}`);
     }catch(e){toast("JSONが読めへん: "+e.message,true);}
   });
 
@@ -2393,39 +2467,51 @@ async function init(){
     const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);
     a.download=`eikan-stats-${new Date().toISOString().slice(0,10)}.json`;a.click();
+    URL.revokeObjectURL(a.href);
     toast("書き出したで");
   });
   $("#importFile").addEventListener("change",e=>{
     const f=e.target.files[0];if(!f)return;
     if(!confirm("⚠️ 全シーズンを、このファイルの内容に置き換えるで。今のデータは消えるけどええか？（先にエクスポート推奨）")){e.target.value="";return;}
-    const r=new FileReader();r.onload=async()=>{try{DB=JSON.parse(r.result);if(!DB.seasons)throw new Error("形式ちゃう");if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("読み込んだで");}catch(err){toast("失敗: "+err.message,true);}};r.readAsText(f);
+    const r=new FileReader();r.onload=async()=>{try{DB=JSON.parse(r.result);if(!DB.seasons)throw new Error("形式ちゃう");normDB(DB);if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("読み込んだで");}catch(err){toast("失敗: "+err.message,true);}};r.readAsText(f);
   });
   $("#doImportBulk").addEventListener("click",async()=>{
     if(!confirm("⚠️ 全シーズンを置き換えるで。今のデータは消えるけどええか？")){return;}
-    try{const d=JSON.parse($("#importBulk").value);if(!d.seasons)throw new Error("形式ちゃう");DB=d;if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("置き換えたで");}catch(e){toast("失敗: "+e.message,true);}
+    try{const d=JSON.parse($("#importBulk").value);if(!d.seasons)throw new Error("形式ちゃう");DB=normDB(d);if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("置き換えたで");}catch(e){toast("失敗: "+e.message,true);}
   });
   $("#wipeSeason").addEventListener("click",async()=>{
     if(!confirm(`「${DB.current}」の試合を全部消す？`))return;
     DB.seasons[DB.current].games=[];await saveDB();render();toast("消したで");
   });
+  $("#deleteSeason").addEventListener("click",async()=>{
+    if(Object.keys(DB.seasons).length<=1){toast("最後のシーズンは消されへん",true);return;}
+    if(!confirm(`⚠️ シーズン「${DB.current}」を試合データごと完全に削除するで。ええか？`))return;
+    delete DB.seasons[DB.current];
+    DB.current=Object.keys(DB.seasons)[0];
+    editId=null;
+    await saveDB();fillSeasons();resetForm();render();toast("シーズンを削除したで");
+  });
 
   window.addEventListener("popstate",e=>{
+    if(e.state&&e.state.game){ openGameById(e.state.game,"silent"); return; }
+    const gm=/^#games\/(.+)$/.exec(location.hash||"");
+    if(gm){ openGameById(decodeURIComponent(gm[1]),"silent"); return; }
     const name=(e.state&&e.state.tab) || (location.hash? location.hash.slice(1):"summary");
     switchTab(name,"silent");
   });
-  // マウスのサイド戻る/進むボタン（button 3/4）をページ内履歴の戻る/進むに割り当て直す試み
-  window.addEventListener("mouseup",e=>{
-    if(e.button===3){ e.preventDefault(); history.back(); }
-    else if(e.button===4){ e.preventDefault(); history.forward(); }
-  });
-  const initialTab=(location.hash && TAB_NAMES.includes(location.hash.slice(1)))? location.hash.slice(1) : "summary";
-  switchTab(initialTab,"silent");
-  history.replaceState({tab:initialTab},"","#"+initialTab);
+  const gm=/^#games\/(.+)$/.exec(location.hash||"");
+  if(gm){ openGameById(decodeURIComponent(gm[1]),"replace"); }
+  else{
+    const initialTab=(location.hash && TAB_NAMES.includes(location.hash.slice(1)))? location.hash.slice(1) : "summary";
+    switchTab(initialTab,"silent");
+    history.replaceState({tab:initialTab},"","#"+initialTab);
+  }
 }
-init();
+init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 if("serviceWorker" in navigator && location.protocol!=="file:"){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
 </script>
+
 </body>
 </html>
