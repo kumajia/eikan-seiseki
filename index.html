@@ -1555,6 +1555,33 @@ function playerLogTableHtml(rows,enrollYear){
   }
   return h+`</tbody>`;
 }
+function battingOrderBreakdown(key,games){
+  const counts=new Map(); let subCount=0;
+  for(const g of games){
+    const b=(g.batters||[]).find(x=>nameKey(x.name)===key);
+    if(!b || b.order==null || b.order==="") continue;
+    if(b.sub) subCount++;
+    else counts.set(b.order,(counts.get(b.order)||0)+1);
+  }
+  const rows=[...counts.entries()].map(([order,cnt])=>({label:`${order}番`,count:cnt})).sort((a,b)=>b.count-a.count);
+  if(subCount) rows.push({label:"途中出場",count:subCount,sub:true});
+  return rows;
+}
+function battingOrderBarsHtml(rows){
+  if(!rows.length) return "";
+  const max=Math.max(...rows.map(r=>r.count));
+  const bars=rows.map(r=>{
+    const pct=max? Math.round(r.count/max*100) : 0;
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="width:56px;font-size:12px;${r.sub?'color:var(--muted)':''}">${esc(r.label)}</span>
+      <div style="flex:1;background:var(--bg);border-radius:6px;height:14px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${r.sub?'var(--muted)':'var(--amber)'}"></div>
+      </div>
+      <span style="width:28px;font-size:12px;color:var(--muted);text-align:right">${r.count}</span>
+    </div>`;
+  }).join("");
+  return `<section class="card"><h2 style="font-size:15px">打順別の出場試合数</h2>${bars}</section>`;
+}
 function renderPlayerContent(){
   const el=$("#playerContent"); if(!el) return;
   const key=currentPlayerKey();
@@ -1608,6 +1635,7 @@ function renderPlayerContent(){
   if(careerBat) html+= kpi("試合",careerBat.G)+kpi("打率",avg3(careerBat.AVG),"a")+kpi("OPS",avg3(careerBat.OPS))+kpi("本塁打",careerBat.HR,"g")+kpi("打点",careerBat.RBI)+kpi("盗塁",careerBat.SB);
   if(careerPit) html+= kpi("登板",careerPit.G)+kpi("防御率",careerPit.ipNum?careerPit.ERA.toFixed(2):"-","a")+kpi("勝利",careerPit.W)+kpi("奪三振",careerPit.K)+kpi("投球回",careerPit.IPstr);
   html+=`</div></section>`;
+  html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
 
   if(seasonBatRows.length) html+=`<section class="card"><h2 style="font-size:15px"><span class="tag">打</span> シーズン別打撃成績</h2>
     <div class="scroll" data-kind="playerSeasonBat"><table>${playerSeasonBatTableHtml(seasonBatRows)}</table></div></section>`;
