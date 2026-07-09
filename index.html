@@ -2772,16 +2772,20 @@ async function init(){
   const gm=/^#games\/(.+)$/.exec(location.hash||"");
   if(gm){ openGameById(decodeURIComponent(gm[1]),"replace"); }
   else{
-    const initialTab=(location.hash && TAB_NAMES.includes(location.hash.slice(1)))? location.hash.slice(1) : "summary";
+    const rawHash=location.hash.slice(1);
+    const initialTab=TAB_NAMES.includes(rawHash)? rawHash : "summary";
     switchTab(initialTab,"silent");
-    history.replaceState({tab:initialTab},"","#"+initialTab);
+    if(rawHash!=="test") history.replaceState({tab:initialTab},"","#"+initialTab); // #testはtests.jsが使うので消さない
   }
 }
+// テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
+window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 if("serviceWorker" in navigator && location.protocol!=="file:"){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
 </script>
+<script src="tests.js" defer></script>
 
 </body>
 </html>
