@@ -152,7 +152,26 @@ function gemCfg(){
 async function loadCases(){
   const cfgEl=panel.querySelector("#tOcrCfg");
   const {key,model}=gemCfg();
-  cfgEl.textContent = key? `モデル: ${model} / APIキー: 設定済み` : "⚠ APIキー未設定。先に「試合を追加」タブで設定してな。";
+  if(!key){
+    cfgEl.textContent="⚠ APIキー未設定。先に「試合を追加」タブで設定してな。";
+  }else{
+    cfgEl.innerHTML=`モデル: <select id="tModelSel" style="max-width:260px"></select> <button id="tModelReload">一覧取得</button>`;
+    const appSel=document.getElementById("gemModel");
+    const fill=()=>{
+      const t=panel.querySelector("#tModelSel");
+      t.innerHTML=(appSel&&appSel.innerHTML)||`<option>${escT(model)}</option>`;
+      if(appSel&&appSel.value) t.value=appSel.value;
+    };
+    fill();
+    panel.querySelector("#tModelSel").addEventListener("change",e=>{
+      if(appSel){ appSel.value=e.target.value; }
+      try{ saveGemCfg(); }catch(_){}
+    });
+    panel.querySelector("#tModelReload").addEventListener("click",async()=>{
+      try{ await loadModels(true); }catch(_){}
+      fill();
+    });
+  }
   let listHtml="";
   try{
     OCR_CASES=await (await fetch("tests/cases.json")).json();
@@ -175,8 +194,13 @@ async function loadCases(){
 function cmpGame(exp,got,log){
   let bad=0;
   const chk=(cond,msg)=>{ if(!cond){bad++;log("✗ "+msg);} };
-  for(const k of ["date","runsFor","runsAgainst","cold"])
+  for(const k of ["date","runsFor","runsAgainst"])
     chk(JSON.stringify(exp[k])===JSON.stringify(got[k]),`${k}: 期待${JSON.stringify(exp[k])} 実際${JSON.stringify(got[k])}`);
+  let gotCold=!!got.cold;
+  const inn=got.innings;
+  if(inn && Array.isArray(inn.top) && (inn.top.length || (Array.isArray(inn.bottom)&&inn.bottom.length)))
+    gotCold = inn.top.length < 9; // アプリ本体と同じinnings機械判定を適用して比較
+  chk(!!exp.cold===gotCold,`cold: 期待${!!exp.cold} 実際${gotCold}（innings判定適用後）`);
   for(const k of Object.keys(exp.batTotals||{}))
     chk((+(exp.batTotals[k]||0))===(+((got.batTotals||{})[k]||0)),`合計${k}: 期待${exp.batTotals[k]||0} 実際${(got.batTotals||{})[k]||0}`);
   const bkeys=["AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"];
@@ -213,8 +237,11 @@ async function ocrRun(imageBlobs,expected,box){
   for(const b of imageBlobs) parts.push({inline_data:{mime_type:b.type||"image/png",data:await blobToB64(b)}});
   box.innerHTML='<span class="tspin"></span>Geminiで解析中…';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-  const resp=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})});
+  const opts={method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})};
+  const resp = (typeof gemFetch==="function")
+    ? await gemFetch(url,opts,(n,w)=>{box.innerHTML=`<span class="tspin"></span>混雑中(503/429)… ${w/1000}秒待ってリトライ ${n}/2`;})
+    : await fetch(url,opts);
   if(!resp.ok) throw new Error("API "+resp.status+": "+(await resp.text()).slice(0,150));
   const data=await resp.json();
   let txt=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
