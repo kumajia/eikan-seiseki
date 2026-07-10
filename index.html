@@ -2222,17 +2222,24 @@ async function runOcr(){
     st.innerHTML='<span class="chip r">失敗</span> '+esc(e.message)+'<br>キー・モデル名を確認。モデルは '+DEF_MODEL+' 以外に gemini-2.5-flash 等も試せる。';
   }
 }
+function rowHasData(tr){
+  if($$("input[data-k]",tr).some(i=> i.type==="checkbox"? i.checked : i.value.trim()!=="")) return true;
+  const ord=$(".ord",tr); if(ord && ord.value.trim()!=="") return true;
+  const sub=$(".sub",tr); if(sub && sub.checked) return true;
+  return false;
+}
 function fillFormFromOcr(g){
   // editIdはリセットしない：編集中に再OCRしても新規追加にならず、上書き保存の対象を維持する
-  $("#gDate").value=g.date||"";
-  $("#gRs").value=(g.runsFor??"")===""?"":g.runsFor;
-  $("#gRa").value=(g.runsAgainst??"")===""?"":g.runsAgainst;
+  // 方針: 手入力済みの値は絶対に潰さない。OCRは空欄のセルだけを埋める
+  if(!$("#gDate").value && g.date) $("#gDate").value=g.date;
+  if($("#gRs").value.trim()==="" && (g.runsFor??"")!=="") $("#gRs").value=g.runsFor;
+  if($("#gRa").value.trim()==="" && (g.runsAgainst??"")!=="") $("#gRa").value=g.runsAgainst;
   let coldVal=!!g.cold;
   const inn=g.innings;
   if(inn && Array.isArray(inn.top) && (inn.top.length || (Array.isArray(inn.bottom)&&inn.bottom.length))){
     coldVal = inn.top.length < 9; // 先攻の攻撃回数が9未満＝九回前に終了。cold自己申告より確実
   }
-  $("#gColdGame").checked=coldVal;
+  $("#gColdGame").checked = $("#gColdGame").checked || coldVal; // 手動チェック済みなら維持
   updateGOppFromParts(); // 相手名(ラウンド/名前)は今の入力を維持しつつ、コールド判定だけ反映
   // 「打席結果」画面から読めた打順/途中出場を、名前でマッチさせて野手記録に反映
   const orderMap=new Map();
@@ -2252,10 +2259,47 @@ function fillFormFromOcr(g){
     if(arr && arr.length){ const o=arr.shift(); b={...b,order:o.pos,sub:!!o.sub}; }
     return b;
   });
-  const brows=batters.map(batRow).join("")||batRow();
-  $("#batEntry").innerHTML=batEntryHead()+`<tbody>${brows}</tbody>`;
-  const prows=(g.pitchers||[]).map(pitRow).join("")||pitRow();
-  $("#pitEntry").innerHTML=pitEntryHead()+`<tbody>${prows}</tbody>`;
+  // 打者: 名前で既存行と照合し、空欄セルだけOCR値を入れる。無い選手は行追加。
+  // OCRに出てこなかった完全空行（プリフィル名のみ）は片付ける
+  const btbody=$("#batEntry tbody");
+  {
+    const existing=new Map();
+    $$("tr",btbody).forEach(tr=>{ const nm=$(".nm",tr); if(nm&&nm.value.trim()) existing.set(nameKey(nm.value),tr); });
+    for(const b of batters){
+      const tr=existing.get(nameKey(b.name));
+      if(tr){
+        $$("input[data-k]",tr).forEach(i=>{ if(i.value.trim()==="") i.value = b[i.dataset.k] ?? ""; });
+        const ord=$(".ord",tr); if(ord && ord.value.trim()==="" && b.order!=null) ord.value=b.order;
+        const sub=$(".sub",tr); if(sub && !sub.checked && b.sub) sub.checked=true;
+        existing.delete(nameKey(b.name));
+      }else{
+        btbody.insertAdjacentHTML("beforeend",batRow(b));
+      }
+    }
+    existing.forEach(tr=>{ if(!rowHasData(tr)) tr.remove(); });
+    if(!$$("tr",btbody).length) btbody.insertAdjacentHTML("beforeend",batRow());
+  }
+  // 投手: 同様にマージ
+  const ptbody=$("#pitEntry tbody");
+  {
+    const existing=new Map();
+    $$("tr",ptbody).forEach(tr=>{ const nm=$(".nm",tr); if(nm&&nm.value.trim()) existing.set(nameKey(nm.value),tr); });
+    for(const p of (g.pitchers||[])){
+      if(!p.name) continue;
+      const tr=existing.get(nameKey(p.name));
+      if(tr){
+        $$("input[data-k]",tr).forEach(i=>{
+          if(i.type==="checkbox"){ if(!i.checked && p.W) i.checked=true; }
+          else if(i.value.trim()==="") i.value = p[i.dataset.k] ?? "";
+        });
+        existing.delete(nameKey(p.name));
+      }else{
+        ptbody.insertAdjacentHTML("beforeend",pitRow(p));
+      }
+    }
+    existing.forEach(tr=>{ if(!rowHasData(tr)) tr.remove(); });
+    if(!$$("tr",ptbody).length) ptbody.insertAdjacentHTML("beforeend",pitRow());
+  }
   $("#saveGame").textContent = editId!=null? "編集を保存" : "この試合を保存";
   validateEntry();
   checkAllNameDups();
