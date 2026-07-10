@@ -26,6 +26,7 @@ function runLogicTests(){
   t("n: 数値文字列",()=>{ eq(T.n("5"),5); eq(T.n(""),0); eq(T.n("abc"),0); eq(T.n(null),0); });
   t("ip2outs: 整数回",()=>{ eq(ip2outs("9"),27); eq(ip2outs("0"),0); eq(ip2outs(""),0); });
   t("ip2outs: 端数回",()=>{ eq(ip2outs("6.1"),19); eq(ip2outs("0.2"),2); eq(ip2outs("8⅓"),25); eq(ip2outs("2⅔"),8); });
+  t("ip2outs: 分数書き",()=>{ eq(ip2outs("8 1/3"),25); eq(ip2outs("8 2/3"),26); eq(ip2outs("1/3"),1); eq(ip2outs("8と2/3"),26); });
   t("outs2ip: 逆変換",()=>{ eq(outs2ip(27),"9"); eq(outs2ip(19),"6.1"); eq(outs2ip(0),"0"); });
   t("avg3: 表記",()=>{ eq(avg3(0.3333),".333"); eq(avg3(1),"1.000"); eq(avg3(0),".000"); eq(avg3(0/0),"-"); });
   t("nameKey: 正規化",()=>{ eq(nameKey(" 中 村 "),"中村"); eq(nameKey("ﾅｶﾑﾗ"),"ナカムラ"); eq(nameKey("中村②"),"中村2"); });
@@ -143,11 +144,15 @@ function runLogicTests(){
 /* ---------- OCR回帰テスト ---------- */
 let OCR_CASES=[];
 function gemCfg(){
+  const prov=(localStorage.getItem("eikan-provider")==="openrouter")? "openrouter" : "gemini";
+  const kName=prov==="openrouter"? "eikan-orkey" : "eikan-gemkey";
+  const mName=prov==="openrouter"? "eikan-ormodel" : "eikan-gemmodel";
+  const defModel=prov==="openrouter"? window.__test.DEF_OR_MODEL : window.__test.DEF_MODEL;
   const keyInput=document.getElementById("gemKey");
-  const key=(keyInput&&keyInput.value.trim()) || localStorage.getItem("eikan-gemkey") || "";
+  const key=(keyInput&&keyInput.value.trim()) || localStorage.getItem(kName) || "";
   const modelInput=document.getElementById("gemModel");
-  const model=(modelInput&&modelInput.value.trim()) || localStorage.getItem("eikan-gemmodel") || window.__test.DEF_MODEL;
-  return {key,model};
+  const model=(modelInput&&modelInput.value.trim()) || localStorage.getItem(mName) || defModel;
+  return {key,model,prov};
 }
 async function loadCases(){
   const cfgEl=panel.querySelector("#tOcrCfg");
@@ -231,20 +236,11 @@ function blobToB64(blob){
   return new Promise((ok,ng)=>{const r=new FileReader();r.onload=()=>ok(r.result.split(",")[1]);r.onerror=ng;r.readAsDataURL(blob);});
 }
 async function ocrRun(imageBlobs,expected,box){
-  const {key,model}=gemCfg();
+  const {key}=gemCfg();
   if(!key){ box.innerHTML='<span class="tfail">APIキー未設定</span>'; return; }
-  const parts=[{text:window.__test.OCR_PROMPT}];
-  for(const b of imageBlobs) parts.push({inline_data:{mime_type:b.type||"image/png",data:await blobToB64(b)}});
-  box.innerHTML='<span class="tspin"></span>Geminiで解析中…';
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-  const opts={method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})};
-  const resp = (typeof gemFetch==="function")
-    ? await gemFetch(url,opts,(n,w)=>{box.innerHTML=`<span class="tspin"></span>混雑中(503/429)… ${w/1000}秒待ってリトライ ${n}/2`;})
-    : await fetch(url,opts);
-  if(!resp.ok) throw new Error("API "+resp.status+": "+(await resp.text()).slice(0,150));
-  const data=await resp.json();
-  let txt=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+  box.innerHTML='<span class="tspin"></span>解析中…';
+  // アプリ本体のaiGenerate(プロバイダ両対応・自動リトライ付き)をそのまま使う
+  let txt=await aiGenerate(window.__test.OCR_PROMPT, imageBlobs, box);
   const fences=[...txt.matchAll(/```(?:json)?([\s\S]*?)```/g)];
   if(fences.length) txt=fences[fences.length-1][1];
   else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0&&e>s) txt=txt.slice(s,e+1); }

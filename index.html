@@ -338,7 +338,7 @@
       </div>
     </section>
     <section class="card">
-      <h2>📷 新入生スクショから登録 <span class="tag p">Gemini</span></h2>
+      <h2>📷 新入生スクショから登録 <span class="tag p">AI</span></h2>
       <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録するで。登録した選手は入学年タブと選手一覧に載る（試合に出るまで通算成績には出えへん）。APIキーは「試合を追加」タブで設定したのを使う。</div>
       <div class="row" style="align-items:center">
         <div id="freshDropZone" class="dropzone">
@@ -383,11 +383,16 @@
   <!-- ADD -->
   <div id="tab-add" style="display:none">
     <section class="card" style="border-color:var(--amber)">
-      <h2>📷 スクショから自動入力 <span class="tag p">Gemini</span></h2>
+      <h2>📷 スクショから自動入力 <span class="tag p">AI</span></h2>
       <div class="note">野手記録・投手記録・スコアボードのスクショを選んで「解析」。AIが読み取って下のフォームに自動入力＋合計照合するで。確認して問題なければ「この試合を保存」。</div>
       <div class="row" style="margin-bottom:10px">
-        <div class="field" style="flex:1;min-width:200px"><label>Gemini APIキー（端末にのみ保存。解析時にGoogleのAPIへ直接送信されるで）</label>
-          <input type="password" id="gemKey" placeholder="AIza..." autocomplete="off"></div>
+        <div class="field"><label>プロバイダ</label>
+          <select id="gemProvider" style="width:140px">
+            <option value="gemini">Gemini直</option>
+            <option value="openrouter">OpenRouter</option>
+          </select></div>
+        <div class="field" style="flex:1;min-width:200px"><label>APIキー（端末にのみ保存。解析時に選んだプロバイダへ直接送信されるで）</label>
+          <input type="password" id="gemKey" placeholder="AIza... / sk-or-..." autocomplete="off"></div>
         <div class="field"><label>モデル <button class="mini ghost" id="loadModels" style="padding:1px 7px;font-size:10px;margin-left:4px">一覧取得</button></label>
           <select id="gemModel" style="width:220px"></select></div>
       </div>
@@ -897,9 +902,11 @@ function seed(){
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const n=v=>{const x=parseInt(v,10);return isNaN(x)?0:x;};
-function ip2outs(ip){ // "6.1" -> 19 outs
+function ip2outs(ip){ // "6.1" / "6⅓" / "6 1/3" -> 19 outs
   if(ip==null||ip==="")return 0;
   const s=String(ip).trim().replace(/⅓/g,".1").replace(/⅔/g,".2");
+  const m=s.match(/^(\d+)?\s*(?:と)?\s*([12])\s*\/\s*3$/); // "8 1/3"「8と2/3」単独の"1/3"にも対応
+  if(m) return n(m[1]||0)*3+n(m[2]);
   if(s.includes(".")){const[a,b]=s.split(".");return n(a)*3+Math.min(2,n(b));}
   return n(s)*3;
 }
@@ -2025,27 +2032,39 @@ async function applyMerge(text){
 
 /* ---------- OCR (Gemini) ---------- */
 const GEMKEY="eikan-gemkey", GEMMODEL="eikan-gemmodel", DEF_MODEL="gemini-3.5-flash"; // liteは表の列ズレ誤読が多かったため既定を格上げ（回帰テストで確認済み）
+const PROVKEY="eikan-provider", ORKEY="eikan-orkey", ORMODEL="eikan-ormodel", DEF_OR_MODEL="google/gemini-3.5-flash";
+let aiProvider="gemini";
 let ocrBatTotals=null;
 
+function provKeys(){
+  return aiProvider==="openrouter"
+    ? {k:ORKEY, m:ORMODEL, defModel:DEF_OR_MODEL}
+    : {k:GEMKEY, m:GEMMODEL, defModel:DEF_MODEL};
+}
+async function storGet(name){
+  try{ if(window.storage&&window.storage.get){ const r=await window.storage.get(name); if(r&&r.value!=null) return r.value; } }catch(e){}
+  try{ const v=localStorage.getItem(name); if(v!=null) return v; }catch(e){}
+  return null;
+}
+async function storSet(name,val){
+  try{ if(window.storage&&window.storage.set) await window.storage.set(name,val); }catch(e){}
+  try{ localStorage.setItem(name,val); }catch(e){}
+}
 async function loadGemCfg(){
-  let key="", model=DEF_MODEL;
-  try{ if(window.storage&&window.storage.get){
-    const k=await window.storage.get(GEMKEY); if(k&&k.value)key=k.value;
-    const m=await window.storage.get(GEMMODEL); if(m&&m.value)model=m.value;
-  }}catch(e){}
-  if(!key){ try{ const k=localStorage.getItem(GEMKEY); if(k)key=k; }catch(e){} }
-  if(model===DEF_MODEL){ try{ const m=localStorage.getItem(GEMMODEL); if(m)model=m; }catch(e){} }
+  aiProvider=(await storGet(PROVKEY))==="openrouter"? "openrouter" : "gemini";
+  const sel=$("#gemProvider"); if(sel) sel.value=aiProvider;
+  const {k,m,defModel}=provKeys();
+  const key=(await storGet(k))||"";
+  const model=(await storGet(m))||defModel;
   $("#gemKey").value=key;
   setModelOptions([model], model); // 保存済みモデルを暫定表示
   if(key) loadModels(true); // キーがあれば最新一覧を取りにいく
 }
 async function saveGemCfg(){
-  const key=$("#gemKey").value.trim(), model=$("#gemModel").value.trim()||DEF_MODEL;
-  try{ if(window.storage&&window.storage.set){
-    await window.storage.set(GEMKEY,key);
-    await window.storage.set(GEMMODEL,model);
-  }}catch(e){}
-  try{ localStorage.setItem(GEMKEY,key); localStorage.setItem(GEMMODEL,model); }catch(e){}
+  const {k,m,defModel}=provKeys();
+  await storSet(PROVKEY,aiProvider);
+  await storSet(k,$("#gemKey").value.trim());
+  await storSet(m,$("#gemModel").value.trim()||defModel);
 }
 function setModelOptions(models, selected){
   const sel=$("#gemModel");
@@ -2059,19 +2078,32 @@ async function loadModels(silent){
   if(!key){ if(!silent)st.innerHTML='<span class="chip r">先にAPIキーを入れてな</span>'; return; }
   if(!silent)st.innerHTML='<span class="spin"></span>モデル一覧を取得中…';
   try{
-    const url=`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`;
-    const r=await fetch(url); if(!r.ok)throw new Error("API "+r.status);
-    const d=await r.json();
-    let names=(d.models||[])
-      .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
-      .map(m=>(m.name||"").replace(/^models\//,""))
-      .filter(m=>/gemini/i.test(m) && !/embedding|aqa|imagen|tts|image-generation/i.test(m));
-    // flash → flash-lite → その他 の順、同種は新しい番号が上っぽく（liteは列ズレ誤読が多いため優先度を下げた）
-    const rank=m=>(/flash-lite/.test(m)?1:/flash/.test(m)?0:/pro/.test(m)?2:3);
-    names.sort((a,b)=>rank(a)-rank(b)||b.localeCompare(a));
+    let names=[];
+    if(aiProvider==="openrouter"){
+      const r=await fetch("https://openrouter.ai/api/v1/models",{headers:{Authorization:"Bearer "+key}});
+      if(!r.ok)throw new Error("API "+r.status);
+      const d=await r.json();
+      names=(d.data||[])
+        .filter(mo=>((mo.architecture||{}).input_modalities||[]).includes("image"))
+        .map(mo=>mo.id);
+      const rank=m=>(/gemini/.test(m)&&/flash/.test(m)&&!/lite/.test(m)?0:/gemini/.test(m)?1:/gpt|openai/.test(m)?2:/claude/.test(m)?3:4);
+      names.sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
+    }else{
+      const url=`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`;
+      const r=await fetch(url); if(!r.ok)throw new Error("API "+r.status);
+      const d=await r.json();
+      names=(d.models||[])
+        .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+        .map(m=>(m.name||"").replace(/^models\//,""))
+        .filter(m=>/gemini/i.test(m) && !/embedding|aqa|imagen|tts|image-generation/i.test(m));
+      // flash → flash-lite → その他 の順、同種は新しい番号が上っぽく（liteは列ズレ誤読が多いため優先度を下げた）
+      const rank=m=>(/flash-lite/.test(m)?1:/flash/.test(m)?0:/pro/.test(m)?2:3);
+      names.sort((a,b)=>rank(a)-rank(b)||b.localeCompare(a));
+    }
     if(!names.length)throw new Error("使えるモデルが見つからん");
     const cur=$("#gemModel").value;
-    setModelOptions(names, names.includes(cur)?cur:(names.find(m=>/flash/.test(m)&&!/lite/.test(m))||names[0]));
+    const {defModel}=provKeys();
+    setModelOptions(names, names.includes(cur)?cur:(names.includes(defModel)?defModel:(names.find(m=>/flash/.test(m)&&!/lite/.test(m))||names[0])));
     await saveGemCfg();
     if(!silent)st.innerHTML='<span class="chip g">'+names.length+'個のモデルを取得</span> 使いたいの選んでな。';
   }catch(e){
@@ -2080,13 +2112,49 @@ async function loadModels(silent){
 }
 function fileToB64(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(f);});}
 async function gemFetch(url,options,onRetry){
-  // 503(過負荷)/429(レート制限)はGoogle側の一時的な問題なので、待って最大3回まで自動リトライする
+  // 503(過負荷)/429(瞬間的なレート制限)は待って最大3回まで自動リトライする。
+  // ただし429でも「quota」(無料枠の使い切り)は待っても復活しないので即返す
   for(let i=0;i<3;i++){
     const resp=await fetch(url,options);
     if(resp.ok || (resp.status!==503 && resp.status!==429) || i===2) return resp;
+    if(resp.status===429){
+      try{
+        const body=await resp.clone().text();
+        if(/quota|billing/i.test(body)) return resp; // 枠切れ: リトライ無意味
+      }catch(e){}
+    }
     const wait=(i+1)*4000;
     if(onRetry) onRetry(i+1,wait);
     await new Promise(r=>setTimeout(r,wait));
+  }
+}
+async function aiGenerate(promptText, files, statusEl){
+  // プロバイダ共通の画像→テキスト生成。Gemini直 / OpenRouter(OpenAI互換) の両対応
+  const key=$("#gemKey").value.trim();
+  const model=$("#gemModel").value.trim()||provKeys().defModel;
+  const onRetry=(n,w)=>{ if(statusEl) statusEl.innerHTML=`<span class="spin"></span>混雑中(503/429)… ${w/1000}秒待ってリトライ ${n}/2`; };
+  if(aiProvider==="openrouter"){
+    const content=[{type:"text",text:promptText}];
+    for(const f of files) content.push({type:"image_url",image_url:{url:`data:${f.type||"image/jpeg"};base64,${await fileToB64(f)}`}});
+    const resp=await gemFetch("https://openrouter.ai/api/v1/chat/completions",{
+      method:"POST",
+      headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"EikanNote"},
+      body:JSON.stringify({model,temperature:0,messages:[{role:"user",content}]})
+    },onRetry);
+    if(!resp.ok){const t=await resp.text();throw new Error("API "+resp.status+": "+t.slice(0,180));}
+    const d=await resp.json();
+    if(d&&d.error)throw new Error(d.error.message||"エラー応答");
+    const msg=d?.choices?.[0]?.message;
+    return typeof msg?.content==="string"? msg.content : (Array.isArray(msg?.content)? msg.content.map(c=>c.text||"").join("") : "");
+  }else{
+    const parts=[{text:promptText}];
+    for(const f of files){parts.push({inline_data:{mime_type:f.type||"image/jpeg",data:await fileToB64(f)}});}
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    const resp=await gemFetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})},onRetry);
+    if(!resp.ok){const t=await resp.text();throw new Error("API "+resp.status+": "+t.slice(0,180));}
+    const data=await resp.json();
+    return data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
   }
 }
 function updateFileHint(){
@@ -2200,15 +2268,7 @@ async function runOcr(){
       }
       if(pairs.length) promptText+=`\n特に${pairs.join("、")}は別人として両方在籍している。1文字だけ違うので、その1文字を注意深く見て絶対に取り違えないこと。`;
     }
-    const parts=[{text:promptText}];
-    for(const f of files){parts.push({inline_data:{mime_type:f.type||"image/jpeg",data:await fileToB64(f)}});}
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-    const resp=await gemFetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})},
-      (n,w)=>{st.innerHTML=`<span class="spin"></span>混雑中(503/429)… ${w/1000}秒待ってリトライ ${n}/2`;});
-    if(!resp.ok){const t=await resp.text();throw new Error("API "+resp.status+": "+t.slice(0,180));}
-    const data=await resp.json();
-    let txt=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+    let txt=await aiGenerate(promptText, files, st);
     // 下書き(手順1・2の書き出し)の後にJSONが来る想定。下書き自体もフェンスで囲われることがあるので、最後のフェンスを採用
     const fences=[...txt.matchAll(/```(?:json)?([\s\S]*?)```/g)];
     if(fences.length) txt=fences[fences.length-1][1];
@@ -2219,7 +2279,7 @@ async function runOcr(){
     fillFormFromOcr(g);
     st.innerHTML='<span class="chip g">読み取り完了</span> 下のフォームに入力したで。合計照合を確認してな。';
   }catch(e){
-    st.innerHTML='<span class="chip r">失敗</span> '+esc(e.message)+'<br>キー・モデル名を確認。モデルは '+DEF_MODEL+' 以外に gemini-2.5-flash 等も試せる。';
+    st.innerHTML='<span class="chip r">失敗</span> '+esc(e.message)+'<br>キー・モデル名を確認。ダメなら別のモデルやプロバイダに切り替えて試してな。';
   }
 }
 function rowHasData(tr){
@@ -2387,15 +2447,7 @@ async function runFreshOcr(){
   if(!files.length){st.innerHTML='<span class="chip r">画像を選んでな</span>';return;}
   st.innerHTML='<span class="spin"></span>解析中… 画像'+files.length+'枚をGeminiに送信';
   try{
-    const parts=[{text:FRESH_PROMPT}];
-    for(const f of files){parts.push({inline_data:{mime_type:f.type||"image/jpeg",data:await fileToB64(f)}});}
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-    const resp=await gemFetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0}})},
-      (n,w)=>{st.innerHTML=`<span class="spin"></span>混雑中(503/429)… ${w/1000}秒待ってリトライ ${n}/2`;});
-    if(!resp.ok){const t=await resp.text();throw new Error("API "+resp.status+": "+t.slice(0,180));}
-    const data=await resp.json();
-    let txt=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+    let txt=await aiGenerate(FRESH_PROMPT, files, st);
     const fences=[...txt.matchAll(/```(?:json)?([\s\S]*?)```/g)];
     if(fences.length) txt=fences[fences.length-1][1];
     else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0 && e>s) txt=txt.slice(s,e+1); }
@@ -2729,6 +2781,16 @@ async function init(){
   $("#loadModels").addEventListener("click",()=>loadModels(false));
   $("#gemKey").addEventListener("change",()=>{saveGemCfg();loadModels(false);});
   $("#gemModel").addEventListener("change",saveGemCfg);
+  $("#gemProvider").addEventListener("change",async e=>{
+    aiProvider = e.target.value==="openrouter"? "openrouter" : "gemini";
+    await storSet(PROVKEY,aiProvider);
+    const {k,m,defModel}=provKeys();
+    const key=(await storGet(k))||"";
+    const model=(await storGet(m))||defModel;
+    $("#gemKey").value=key;
+    setModelOptions([model],model);
+    if(key) loadModels(false);
+  });
   $("#batEntry").addEventListener("input",e=>{ if(ocrBatTotals)validateEntry(); if(e.target.classList.contains("nm"))checkNameDup(e.target); });
   $("#pitEntry").addEventListener("input",e=>{ if(e.target.classList.contains("nm"))checkNameDup(e.target); });
   $("#gDate").addEventListener("input",checkAllNameDups);
@@ -2878,7 +2940,7 @@ async function init(){
   }
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
-window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL };
+window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 if("serviceWorker" in navigator && location.protocol!=="file:"){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
