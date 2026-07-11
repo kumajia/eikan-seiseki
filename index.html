@@ -255,6 +255,7 @@
     <button data-tab="player">選手</button>
     <button data-tab="enrollYear">入学年</button>
     <button data-tab="seasonCompare">シーズン比較</button>
+    <button data-tab="vs">対戦成績</button>
     <button data-tab="games">試合ログ</button>
     <button data-tab="add">試合を追加</button>
     <button data-tab="guide">攻略メモ</button>
@@ -371,6 +372,15 @@
     </section>
   </div>
 
+  <!-- VS -->
+  <div id="tab-vs" style="display:none">
+    <section class="card">
+      <h2>対戦成績（学校別）</h2>
+      <div class="note">対戦相手の学校ごとの通算成績。練習試合シーズンは除外。タップで試合一覧、日付タップでその試合へ。</div>
+      <div id="vsContent"></div>
+    </section>
+  </div>
+
   <!-- GAMES -->
   <div id="tab-games" style="display:none">
     <section class="card">
@@ -415,7 +425,8 @@
         <div class="field" style="min-width:130px"><label>大会ラウンド</label>
           <select id="gRoundSel"></select></div>
         <div class="field" style="flex:1;min-width:160px"><label>対戦相手</label>
-          <input type="text" id="gOppName" placeholder="例: 田沢">
+          <input type="text" id="gOppName" placeholder="例: 田沢" list="oppListDL" autocomplete="off">
+          <datalist id="oppListDL"></datalist>
           <input type="hidden" id="gOpp"></div>
         <div class="field"><label>味方得点</label><input type="number" id="gRs" min="0" style="width:80px"></div>
         <div class="field"><label>相手得点</label><input type="number" id="gRa" min="0" style="width:80px"></div>
@@ -1137,6 +1148,8 @@ function render(){
   renderPlayerContent();
   renderEnrollYearTab();
   renderSeasonCompare();
+  renderVs();
+  fillOppDL();
 }
 
 /* ---------- 期間（年ごと）集計 ---------- */
@@ -1752,6 +1765,57 @@ function renderSeasonCompare(){
   }
   el.innerHTML=h+`</tbody>`;
 }
+/* ---------- 対戦成績（学校別） ---------- */
+function opponentSchoolOf(sname,g){
+  // opponent文字列（例: "県予選決勝 vs 田沢"）から学校名部分を取り出す
+  const {clean}=stripColdTag(g.opponent||"");
+  const p=parseOpponentForSeason(sname,clean);
+  return (p.name||"").trim();
+}
+function vsRecords(){
+  const map=new Map();
+  for(const [sname,s] of seasonEntries()){
+    for(const g of (s.games||[])){
+      const school=opponentSchoolOf(sname,g);
+      if(!school) continue;
+      if(!map.has(school)) map.set(school,{school,games:[],W:0,L:0,D:0,RF:0,RA:0});
+      const r=map.get(school);
+      r.games.push({g,season:sname});
+      const rf=n(g.runsFor), ra=n(g.runsAgainst);
+      r.RF+=rf; r.RA+=ra;
+      if(rf>ra)r.W++; else if(rf<ra)r.L++; else r.D++;
+    }
+  }
+  return [...map.values()].sort((a,b)=>b.games.length-a.games.length||a.school.localeCompare(b.school,"ja"));
+}
+function renderVs(){
+  const el=$("#vsContent"); if(!el) return;
+  const rows=vsRecords();
+  if(!rows.length){ el.innerHTML=`<div class="empty">相手名の入った試合がまだないで（「対戦相手」欄に学校名を入れると集計されるで）。</div>`; return; }
+  el.innerHTML=rows.map(r=>{
+    const gamesHtml=r.games.map(({g,season})=>{
+      const win=g.runsFor>g.runsAgainst, lose=g.runsFor<g.runsAgainst;
+      return `<div style="display:flex;gap:10px;align-items:center;font-size:13px;border-bottom:1px solid var(--line);padding:6px 2px">
+        <span class="glink num" data-gid="${esc(String(g.id))}" style="font-size:12px">${esc(g.date||'日付なし')}</span>
+        <span class="dim" style="font-size:12px">${esc(season)}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.opponent||'')}</span>
+        <span class="num ${win?'hi2':''}" style="${lose?'color:var(--danger)':''}">${g.runsFor}-${g.runsAgainst}${win?' ○':lose?' ●':' △'}</span>
+      </div>`;
+    }).join("");
+    return `<div class="game">
+      <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+        <span class="chev">▸</span>
+        <span class="opp">対 ${esc(r.school)}</span>
+        <span class="dim" style="font-size:12px;margin-left:auto">${r.games.length}戦 ${r.W}勝${r.L}敗${r.D?r.D+'分':''}　得失 ${r.RF}-${r.RA}</span>
+      </div>
+      <div class="gbody">${gamesHtml}</div>
+    </div>`;
+  }).join("");
+}
+function fillOppDL(){
+  const dl=$("#oppListDL"); if(!dl) return;
+  dl.innerHTML=vsRecords().map(r=>`<option value="${esc(r.school)}"></option>`).join("");
+}
 function kpi(l,v,cls="",foot=""){return `<div class="kpi"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div>${foot?`<div class="foot">${foot}</div>`:''}</div>`;}
 function emptyTbl(cols){return `<tbody><tr><td colspan="${cols}" class="empty">まだ記録がないで。「試合を追加」から入れてな。</td></tr></tbody>`;}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -1887,17 +1951,25 @@ function delEntryRow(btn){
   if(ocrBatTotals)validateEntry(); // 行を消したら合計照合バナーも更新
 }
 function formIsEmpty(){
-  if($("#gDate").value||$("#gRs").value||$("#gRa").value)return false;
+  if($("#gDate").value && $("#gDate").dataset.auto!=="1")return false; // 自動プリセットの日付は「入力」とみなさない
+  if($("#gRs").value||$("#gRa").value)return false;
   if($("#gOppName").value.trim()||$("#gRoundSel").value||$("#gColdGame").checked)return false;
   if(ocrBatTotals)return false;
   if(!$$("#batEntry tbody input[data-k]").every(i=>i.value.trim()===""))return false;
   return $$("#pitEntry tbody input[data-k]").every(i=>i.type==="checkbox"? !i.checked : i.value.trim()==="");
 }
+function defaultEntryDate(){
+  // 日付ピッカーが現実の今日起点やと、ゲーム内年(2032年など)まで延々スクロールする羽目になる。
+  // 記録済みの最新試合日をプリセットしておけば、ピッカーがその近辺から開く
+  const latest=latestGameGlobally();
+  return latest? latest.date : "";
+}
 function resetForm(prefillNames=true){
   editId=null; ocrBatTotals=null;
   clearShotFiles(); $("#ocrStatus").innerHTML="";
   const vb=$("#valBanner"); if(vb)vb.innerHTML="";
-  $("#gDate").value=""; $("#gOpp").value=""; $("#gRs").value=""; $("#gRa").value="";
+  $("#gDate").value=defaultEntryDate(); $("#gDate").dataset.auto="1";
+  $("#gOpp").value=""; $("#gRs").value=""; $("#gRa").value="";
   fillRoundSelForSeason(); $("#gRoundSel").value=""; $("#gRoundCustom").value=""; $("#gRoundCustom").style.display="none"; $("#gOppName").value=""; $("#gColdGame").checked=false; $("#gOppPreview").textContent="";
   const rosterMap=new Map(); curGames().flatMap(g=>(g.batters||[])).forEach(b=>{if(b.name)rosterMap.set(nameKey(b.name),String(b.name).trim());});
   const roster=[...rosterMap.values()];
@@ -1940,7 +2012,7 @@ window.editGame=function(seasonName,id){
   if(!g){toast("編集対象の試合が見つからへん",true);return;}
   editId=g.id;
   switchTab("add");
-  $("#gDate").value=g.date||""; $("#gOpp").value=g.opponent||"";
+  $("#gDate").value=g.date||""; delete $("#gDate").dataset.auto; $("#gOpp").value=g.opponent||"";
   fillRoundSelForSeason();
   const {clean:oppClean, isCold}=stripColdTag(g.opponent||"");
   const parsed=parseOpponentForSeason(DB.current, oppClean);
@@ -2301,7 +2373,7 @@ function rowHasData(tr){
 function fillFormFromOcr(g){
   // editIdはリセットしない：編集中に再OCRしても新規追加にならず、上書き保存の対象を維持する
   // 方針: 手入力済みの値は絶対に潰さない。OCRは空欄のセルだけを埋める
-  if(!$("#gDate").value && g.date) $("#gDate").value=g.date;
+  if((!$("#gDate").value || $("#gDate").dataset.auto==="1") && g.date){ $("#gDate").value=g.date; delete $("#gDate").dataset.auto; }
   if($("#gRs").value.trim()==="" && (g.runsFor??"")!=="") $("#gRs").value=g.runsFor;
   if($("#gRa").value.trim()==="" && (g.runsAgainst??"")!=="") $("#gRa").value=g.runsAgainst;
   let coldVal=!!g.cold;
@@ -2479,7 +2551,7 @@ async function runFreshOcr(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","player","enrollYear","seasonCompare","games","add","guide","data"];
+const TAB_NAMES=["summary","period","player","enrollYear","seasonCompare","vs","games","add","guide","data"];
 function switchTab(name,mode){
   if(!TAB_NAMES.includes(name)) name="summary";
   $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
@@ -2802,7 +2874,7 @@ async function init(){
   });
   $("#batEntry").addEventListener("input",e=>{ if(ocrBatTotals)validateEntry(); if(e.target.classList.contains("nm"))checkNameDup(e.target); });
   $("#pitEntry").addEventListener("input",e=>{ if(e.target.classList.contains("nm"))checkNameDup(e.target); });
-  $("#gDate").addEventListener("input",checkAllNameDups);
+  $("#gDate").addEventListener("input",()=>{ delete $("#gDate").dataset.auto; checkAllNameDups(); }); // 手で触ったら自動プリセット扱いを解除
   $("#shotFiles").addEventListener("change",updateFileHint);
   $("#shotFileHint").addEventListener("click",e=>{ if(e.target.closest("#clearShotFiles")) clearShotFiles(); });
   pickupSharedImages(); // 共有ターゲット経由の画像があれば受け取る
