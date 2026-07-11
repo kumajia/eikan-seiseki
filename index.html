@@ -377,6 +377,10 @@
     <section class="card">
       <h2>対戦成績（学校別）</h2>
       <div class="note">対戦相手の学校ごとの通算成績。練習試合シーズンは除外。タップで試合一覧、日付タップでその試合へ。</div>
+      <div class="toolbar" style="margin-bottom:8px;align-items:center">
+        <button class="mini ghost" id="vsYomiBtn">読みがなをAIで補完（ひらがな検索用）</button>
+        <span id="vsYomiStatus" class="hint"></span>
+      </div>
       <div id="vsContent"></div>
     </section>
   </div>
@@ -1814,7 +1818,32 @@ function renderVs(){
 }
 function fillOppDL(){
   const dl=$("#oppListDL"); if(!dl) return;
-  dl.innerHTML=vsRecords().map(r=>`<option value="${esc(r.school)}"></option>`).join("");
+  // 読みがなをoptionのラベルに入れると、datalistがひらがな入力にもマッチする（「たざ」→田沢）
+  const yomi=DB.schoolYomi||{};
+  dl.innerHTML=vsRecords().map(r=>`<option value="${esc(r.school)}">${esc(yomi[r.school]||"")}</option>`).join("");
+}
+let yomiTriedThisSession=false;
+async function fillSchoolYomi(manual){
+  DB.schoolYomi=DB.schoolYomi||{};
+  const missing=vsRecords().map(r=>r.school).filter(s=>!DB.schoolYomi[s]);
+  const st=$("#vsYomiStatus");
+  if(!missing.length){ if(manual&&st) st.textContent="全校に読みがな付いてるで"; return; }
+  const key=$("#gemKey").value.trim();
+  if(!key){ if(manual&&st) st.textContent="APIキー未設定（「試合を追加」タブで設定してな）"; return; }
+  if(!manual){ if(yomiTriedThisSession) return; yomiTriedThisSession=true; } // 自動実行はセッション1回まで
+  if(manual&&st) st.innerHTML='<span class="spin"></span>読みがなを取得中…';
+  try{
+    const prompt=`次の日本の高校名（ゲーム内の架空校を含む）のひらがな読みを推定してください。出力はJSONだけ（説明文なし）。形式: {"学校名":"よみがな", ...}\n${missing.join("\n")}`;
+    let txt=await aiGenerate(prompt,[],null);
+    const fences=[...txt.matchAll(/```(?:json)?([\s\S]*?)```/g)];
+    if(fences.length) txt=fences[fences.length-1][1];
+    else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0 && e>s) txt=txt.slice(s,e+1); }
+    const map=JSON.parse(txt.trim());
+    let cnt=0;
+    for(const s of missing){ const y=map[s]; if(y&&typeof y==="string"){ DB.schoolYomi[s]=y.trim(); cnt++; } }
+    if(cnt){ await saveDB(); fillOppDL(); }
+    if(manual&&st) st.textContent=cnt? `${cnt}校に読みがなを付けたで` : "読みがなを取得できへんかった";
+  }catch(e){ if(manual&&st) st.textContent="失敗: "+e.message; }
 }
 function kpi(l,v,cls="",foot=""){return `<div class="kpi"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div>${foot?`<div class="foot">${foot}</div>`:''}</div>`;}
 function emptyTbl(cols){return `<tbody><tr><td colspan="${cols}" class="empty">まだ記録がないで。「試合を追加」から入れてな。</td></tr></tbody>`;}
@@ -2088,6 +2117,10 @@ function mergeDB(d){
     }
   }
   if(metaFilled) lines.push(`選手メタ: ${metaFilled}人分を補完`);
+  if(d.schoolYomi){ // 学校の読みがなも未設定分だけ合流
+    DB.schoolYomi=DB.schoolYomi||{};
+    for(const [s,y] of Object.entries(d.schoolYomi)) if(!DB.schoolYomi[s]&&y) DB.schoolYomi[s]=y;
+  }
   return {lines,totalAdded};
 }
 async function applyMerge(text){
@@ -2878,6 +2911,8 @@ async function init(){
   $("#shotFiles").addEventListener("change",updateFileHint);
   $("#shotFileHint").addEventListener("click",e=>{ if(e.target.closest("#clearShotFiles")) clearShotFiles(); });
   pickupSharedImages(); // 共有ターゲット経由の画像があれば受け取る
+  $("#vsYomiBtn").addEventListener("click",()=>fillSchoolYomi(true));
+  setTimeout(()=>fillSchoolYomi(false),3000); // 読みがな未設定の学校があれば裏で自動補完（セッション1回・キーがある時だけ）
 
   // 新入生OCR登録
   $("#runFreshOcr").addEventListener("click",runFreshOcr);
