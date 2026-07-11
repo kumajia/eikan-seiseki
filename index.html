@@ -1810,12 +1810,22 @@ function renderVs(){
       <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
         <span class="chev">▸</span>
         <span class="opp">対 ${esc(r.school)}</span>
+        <span class="dim" style="font-size:11px">${esc((DB.schoolYomi||{})[r.school]||"")}</span>
+        <button type="button" class="mini ghost" data-yomi="${esc(r.school)}" style="padding:1px 7px;font-size:10px">読み✎</button>
         <span class="dim" style="font-size:12px;margin-left:auto">${r.games.length}戦 ${r.W}勝${r.L}敗${r.D?r.D+'分':''}　得失 ${r.RF}-${r.RA}</span>
       </div>
       <div class="gbody">${gamesHtml}</div>
     </div>`;
   }).join("");
+  $$("#vsContent [data-yomi]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();editYomi(b.dataset.yomi);}));
 }
+window.editYomi=async function(school){
+  DB.schoolYomi=DB.schoolYomi||{};
+  const y=prompt(`「${school}」の読みがな（ひらがな）`,DB.schoolYomi[school]||"");
+  if(y==null)return;
+  if(y.trim())DB.schoolYomi[school]=y.trim(); else delete DB.schoolYomi[school];
+  await saveDB(); renderVs(); fillOppDL(); toast("読みがなを更新したで");
+};
 function fillOppDL(){
   const dl=$("#oppListDL"); if(!dl) return;
   // 読みがなをoptionのラベルに入れると、datalistがひらがな入力にもマッチする（「たざ」→田沢）
