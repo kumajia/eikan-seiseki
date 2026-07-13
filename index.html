@@ -3591,24 +3591,32 @@ async function runInnOcr(fileList){
       lines.push(`✗ ${fname}: 同スコアの候補が${cands.length}件あり特定できず（編集で個別に読み込んでな）`);
     }
   }
+  let html=lines.map(esc).join("<br>");
   if(writes.length){
-    const okGo=confirm(`${writes.length}試合に回別得点を書き込むで:\n`+writes.map(w=>`・${w.gg.date||"日付なし"} ${w.gg.opponent||"(相手未設定)"}`).join("\n")+`\nええか？`);
-    if(okGo){
-      for(const w of writes){
-        w.gg.innings={ top:(w.inn.top||[]).map(v=>n(String(v).replace("X",""))), bottom:(w.inn.bottom||[]).map(v=>n(String(v).replace("X",""))) };
-        w.gg.side=w.side;
-        w.gg.badges=detectGameBadges(w.gg); // イニングが付いたのでサヨナラ/コールド等を再判定
-        if((w.gg.badges||[]).includes("サヨナラ勝ち") && w.gg.innings.bottom.length){
-          const L=w.gg.innings.bottom.length-1;
-          w.gg.innings.bottom[L]=w.gg.innings.bottom[L]+"X";
-        }
-      }
-      await saveDB(); render();
-    }else{
-      lines.push("（書き込みはキャンセルした）");
+    // confirm()はブラウザのダイアログ抑止で表示されず即キャンセル扱いになることがあるため、画面内ボタンで確認する
+    window.__innWrites=writes;
+    html+=`<br><span class="chip g">${writes.length}試合に書き込む準備OK</span> `+
+      `<button type="button" class="mini primary" id="innWriteGo">この内容で書き込む</button> `+
+      `<button type="button" class="mini ghost" id="innWriteNo">やめる</button>`;
+  }
+  st.innerHTML=html;
+}
+async function applyInnWrites(){
+  const writes=window.__innWrites;
+  if(!writes||!writes.length) return;
+  for(const w of writes){
+    w.gg.innings={ top:(w.inn.top||[]).map(v=>n(String(v).replace("X",""))), bottom:(w.inn.bottom||[]).map(v=>n(String(v).replace("X",""))) };
+    w.gg.side=w.side;
+    w.gg.badges=detectGameBadges(w.gg); // イニングが付いたのでサヨナラ/コールド等を再判定
+    if((w.gg.badges||[]).includes("サヨナラ勝ち") && w.gg.innings.bottom.length){
+      const L=w.gg.innings.bottom.length-1;
+      w.gg.innings.bottom[L]=w.gg.innings.bottom[L]+"X";
     }
   }
-  st.innerHTML=lines.map(esc).join("<br>");
+  window.__innWrites=null;
+  await saveDB(); render();
+  $("#innOcrStatus").innerHTML=`<span class="chip g">${writes.length}試合にスコアボードを書き込んだで</span>`;
+  toast(`${writes.length}試合にスコアボードを追加したで`);
 }
 
 async function runOcr(){
@@ -4056,6 +4064,10 @@ async function init(){
   $("#innOcrFile").addEventListener("change",e=>{
     if(!e.target.files.length) return;
     runInnOcr(e.target.files); e.target.value="";
+  });
+  $("#innOcrStatus").addEventListener("click",e=>{
+    if(e.target.closest("#innWriteGo")){ applyInnWrites(); return; }
+    if(e.target.closest("#innWriteNo")){ window.__innWrites=null; $("#innOcrStatus").innerHTML="やめたで（何も書き込んでへん）"; }
   });
   $("#gRs").addEventListener("input",validateEntry);
   $("#gRa").addEventListener("input",validateEntry);
