@@ -1,4 +1,4 @@
-const CACHE = "eikan-stats-v6";
+const CACHE = "eikan-stats-v17";
 const SHARE_CACHE = "eikan-share-tmp";
 const CORE_FILES = ["./", "./index.html", "./manifest.json"];
 
