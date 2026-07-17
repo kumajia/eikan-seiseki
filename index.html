@@ -1724,6 +1724,8 @@ function selectBestNine(posMap){
   
   // 外野手3人を選出
   bestNine["外"] = selectOutfieldersBestNine(posMap, selectedKeys);
+  // 選出した外野手のキーも除外集合に加える（これが漏れていてDHに外野手が重複していた）
+  bestNine["外"].forEach(o => { if(!o.isEmpty && o.key) selectedKeys.add(o.key); });
   
   // DHを選出
   bestNine["DH"] = selectDHBestNine(posMap, selectedKeys);
@@ -5705,7 +5707,7 @@ async function init(){
   }
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
-window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads };
+window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 if("serviceWorker" in navigator && location.protocol!=="file:"){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
