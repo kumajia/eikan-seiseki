@@ -478,7 +478,7 @@
     </section>
     <div id="dupHints"></div>
     <section class="card">
-      <h2>📷 新入生スクショから登録 <span class="tag p">AI</span></h2>
+      <h2>新入生スクショから登録 <span class="tag p">AI</span></h2>
       <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録するで。登録した選手は入学年タブと選手一覧に載る（試合に出るまで通算成績には出えへん）。APIキーは「試合を追加」タブで設定したのを使う。</div>
       <div class="row" style="align-items:center">
         <div id="freshDropZone" class="dropzone">
@@ -547,7 +547,7 @@
   <!-- ADD -->
   <div id="tab-add" style="display:none">
     <section class="card" style="border-color:var(--amber)">
-      <h2>📷 スクショから自動入力 <span class="tag p">AI</span></h2>
+      <h2>スクショから自動入力 <span class="tag p">AI</span></h2>
       <div class="note">野手記録・投手記録・スコアボードのスクショを選んで「解析」。AIが読み取って下のフォームに自動入力＋合計照合するで。確認して問題なければ「この試合を保存」。</div>
       <div class="row" style="margin-bottom:10px">
         <div class="field" style="flex:1;min-width:200px"><label>APIキー（端末にのみ保存。解析時にURLの一部としてGoogleへ直接送信されるで＝ブラウザの履歴や通信ログにも残るので注意）</label>
@@ -2303,12 +2303,6 @@ function openGameById(id,mode){
     if(el){ el.classList.add("open"); el.scrollIntoView({behavior:"smooth",block:"center"}); }
   });
 }
-function copyGameLink(id){
-  const url=location.href.replace(/#.*$/,"")+"#games/"+encodeURIComponent(String(id));
-  const fallback=()=>prompt("このURLをコピーしてな",url);
-  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(()=>toast("試合へのリンクをコピーしたで"),fallback);
-  else fallback();
-}
 function fillPlayerSel(){
   const dl=$("#playerListDL"), inp=$("#playerSel"); if(!dl||!inp) return;
   const roster=playerRoster();
@@ -3084,7 +3078,7 @@ function renderArchive(){
       <p>${esc(record)}。${champText} ${leaderText}</p>
     </div>
     <div style="margin-top:18px">
-      <h2 style="font-size:15px">🔥 歴代・名勝負</h2>
+      <h2 style="font-size:15px">歴代・名勝負</h2>
       <div class="note">点差、サヨナラ、延長、大会終盤などから熱量を自動で計算。</div>
       ${ranked.map((r,i)=>{const g=r.g;const mark=r.won?"○":n(g.runsFor)<n(g.runsAgainst)?"●":"△";return `<div class="match-rank">
         <div class="mr-no">${i+1}</div><div><div class="mr-title"><span class="glink" role="link" tabindex="0" data-gid="${esc(String(g.id))}">${esc(g.opponent||r.season)}</span>　${g.runsFor}-${g.runsAgainst} ${mark}</div><div class="mr-meta">${esc(g.date||"日付なし")}　${esc(r.reasons.join("・")||"激戦")}</div></div><div class="mr-score">熱量 ${r.score}</div>
@@ -3323,18 +3317,22 @@ async function fillSchoolYomi(manual){
   if(!key){ if(manual&&st) st.textContent="APIキー未設定（「試合を追加」タブで設定してな）"; return; }
   if(!manual){ if(yomiTriedThisSession) return; yomiTriedThisSession=true; } // 自動実行はセッション1回まで
   if(manual&&st) st.innerHTML='<span class="spin"></span>読みがなを取得中…';
-  try{
-    const prompt=`次の日本の高校名（ゲーム内の架空校を含む）のひらがな読みを推定してください。出力はJSONだけ（説明文なし）。形式: {"学校名":"よみがな", ...}\n${missing.join("\n")}`;
-    let txt=await aiGenerate(prompt,[],null);
-    const fences=[...txt.matchAll(/```(?:json)?([\s\S]*?)```/g)];
-    if(fences.length) txt=fences[fences.length-1][1];
-    else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0 && e>s) txt=txt.slice(s,e+1); }
-    const map=JSON.parse(txt.trim());
-    let cnt=0;
-    for(const s of missing){ const y=map[s]; if(y&&typeof y==="string"){ DB.schoolYomi[s]=y.trim(); cnt++; } }
-    if(cnt){ await saveDB(); fillOppDL(); }
-    if(manual&&st) st.textContent=cnt? `${cnt}校に読みがなを付けたで` : "読みがなを取得できへんかった";
-  }catch(e){ if(manual&&st) st.textContent="失敗: "+e.message; }
+  // 一度に全校投げると1リクエストが重くタイムアウトしやすいので、12校ずつに小分けする。
+  // 失敗した塊は飛ばして続行（取れたぶんは残る）。再度押すと未設定の学校だけを続きから処理する。
+  const CH=12; let cnt=0, failed=0;
+  for(let i=0;i<missing.length;i+=CH){
+    const chunk=missing.slice(i,i+CH);
+    if(manual&&st) st.innerHTML=`<span class="spin"></span>読みがな取得中… ${Math.min(i+CH,missing.length)}/${missing.length}校`;
+    try{
+      const prompt=`次の日本の高校名（ゲーム内の架空校を含む）のひらがな読みを推定してください。出力はJSONだけ（説明文なし）。形式: {"学校名":"よみがな", ...}\n${chunk.join("\n")}`;
+      const map=parseOcrJson(await aiGenerate(prompt,[],null));
+      for(const s of chunk){ const y=map[s]; if(y&&typeof y==="string"){ DB.schoolYomi[s]=y.trim(); cnt++; } }
+    }catch(e){ failed+=chunk.length; }
+  }
+  if(cnt){ await saveDB(); fillOppDL(); }
+  if(manual&&st) st.textContent = cnt
+    ? `${cnt}校に読みがなを付けたで`+(failed?`（${failed}校は混雑/タイムアウトで失敗。もう一回押すと続きから）`:"")
+    : "読みがなを取得できへんかった（混雑かタイムアウト。少し待ってもう一回試してな）";
 }
 function kpi(l,v,cls="",foot=""){return `<div class="kpi"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div>${foot?`<div class="foot">${foot}</div>`:''}</div>`;}
 function emptyTbl(cols){return `<tbody><tr><td colspan="${cols}" class="empty">まだ記録がないで。「試合を追加」から入れてな。</td></tr></tbody>`;}
@@ -3371,7 +3369,6 @@ function renderGames(){
           <div class="scroll"><table>${gameBatMini(g)}</table></div>
           <div class="gactions">
             <button class="mini ghost" data-act="edit" data-season="${esc(sname)}" data-id="${esc(String(g.id))}">編集</button>
-            <button class="mini ghost" data-act="link" data-id="${esc(String(g.id))}">🔗リンク</button>
             <button class="mini danger" data-act="del" data-season="${esc(sname)}" data-id="${esc(String(g.id))}">削除</button>
           </div>
         </div></div>`;
@@ -3979,7 +3976,7 @@ function showDraftBannerIfExist(){
     const opp = (draft.opponent || "").trim();
     const battersCount = draft.battersCount || 0;
     
-    banner.innerHTML = `📝 入力途中の下書きがあるで（${timeStr} 保存・${opp ? `対 ${esc(opp)}` : '対戦相手未設定'}・打者${battersCount}人入力済み）
+    banner.innerHTML = `入力途中の下書きがあるで（${timeStr} 保存・${opp ? `対 ${esc(opp)}` : '対戦相手未設定'}・打者${battersCount}人入力済み）
     <div style="margin-top:6px; display:flex; gap:8px;">
       <button type="button" class="mini primary" id="btnRestoreDraft" style="padding: 2px 8px; font-size: 11px;">復元する</button>
       <button type="button" class="mini danger" id="btnDiscardDraft" style="padding: 2px 8px; font-size: 11px;">破棄</button>
@@ -4160,7 +4157,7 @@ async function applyMerge(text){
     const d=JSON.parse(text);
     const r=mergeDB(d);
     await saveDB(); fillSeasons(); render();
-    el.innerHTML = r.lines.length? "✅ マージ完了<br>"+r.lines.map(esc).join("<br>") : "追加できる試合は無かったで（全部取り込み済みかも）";
+    el.innerHTML = r.lines.length? "マージ完了<br>"+r.lines.map(esc).join("<br>") : "追加できる試合は無かったで（全部取り込み済みかも）";
     $("#mergeBulk").value="";
     toast(r.totalAdded? `${r.totalAdded}試合をマージしたで` : "追加なし");
   }catch(e){ el.textContent=""; toast("マージ失敗: "+e.message,true); }
@@ -4773,7 +4770,7 @@ async function runOcr(){
       if(cands.length===1){
         const c=cands[0];
         window.__ocrMatch={season:c.season, id:c.game.id, g};
-        matchNote=`<br>💡 この結果は保存済みの試合「${esc(c.game.date||"日付なし")} ${esc(c.game.opponent||"(相手未設定)")}」と一致するみたいやで `+
+        matchNote=`<br>この結果は保存済みの試合「${esc(c.game.date||"日付なし")} ${esc(c.game.opponent||"(相手未設定)")}」と一致するみたいやで `+
           `<button type="button" class="mini ghost" id="ocrMatchEdit">その試合の編集として開く</button>（新規で登録するならこのまま保存してな）`;
       }
     }
@@ -4929,7 +4926,7 @@ function validateEntry(){
     const ra = n($("#gRa").value);
     
     if(mySum !== rs || oppSum !== ra){
-      innErr = `⚠️ イニング合計と得点欄が一致せえへんで（回別: 味方${mySum}/相手${oppSum} vs 得点欄: 味方${rs}/相手${ra}）`;
+      innErr = `イニング合計と得点欄が一致せえへんで（回別: 味方${mySum}/相手${oppSum} vs 得点欄: 味方${rs}/相手${ra}）`;
     }
   }
 
@@ -4956,7 +4953,7 @@ function validateEntry(){
   el.className="valban "+((allok && !innErr)?"ok":"ng");
   let html = "";
   if(innErr) html += innErr + "<br>";
-  html += (allok?"✅ 合計照合OK（全列一致）":"⚠️ 合計と不一致の列があるで（個人=/合計）")+"<br>"+chips.join("")+
+  html += (allok?"合計照合OK（全列一致）":"合計と不一致の列があるで（個人=/合計）")+"<br>"+chips.join("")+
     (allok?"":`<br><button type="button" class="mini ghost" id="acceptEntryTotals" style="margin-top:6px">個人成績を正として合計を更新</button>`);
   el.innerHTML = html;
 }
@@ -5468,7 +5465,6 @@ async function init(){
     const sname=btn.dataset.season, id=btn.dataset.id;
     if(btn.dataset.act==="edit") editGame(sname,id);
     else if(btn.dataset.act==="del") delGame(sname,id);
-    else if(btn.dataset.act==="link") copyGameLink(id);
   });
   $("#addBatRow").addEventListener("click",()=>$("#batEntry tbody").insertAdjacentHTML("beforeend",batRow()));
   $("#addPitRow").addEventListener("click",()=>$("#pitEntry tbody").insertAdjacentHTML("beforeend",pitRow()));
@@ -5593,7 +5589,7 @@ async function init(){
       if(gi<0){toast("編集対象の試合が見つからへん（削除された？）",true);editId=null;resetForm();return;}
       games[gi]=ng;toast("編集を保存したで");
     }
-    else{curGames().push(ng);toast("保存したで💾");}
+    else{curGames().push(ng);toast("保存したで");}
     
     const afterGames = seasonEntries().flatMap(([_, s]) => s.games);
     const newMs = checkMilestonesDiff(beforeGames, afterGames, savedGameId, g.date);
