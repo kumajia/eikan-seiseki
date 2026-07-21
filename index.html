@@ -5292,9 +5292,29 @@ function switchTab(name,mode){
 }
 
 /* ---------- seasons ---------- */
+let seasonSelExpanded=false; // 「過去のシーズンを表示…」を選ぶとtrue（セッション中のみ保持）
 function fillSeasons(){
   const sel=$("#seasonSel");
-  sel.innerHTML=Object.keys(DB.seasons).map(s=>`<option ${s===DB.current?'selected':''}>${esc(s)}</option>`).join("");
+  // 名前の先頭4桁の年でグループ化（表示名と一致させるためnendoOfではなくラベルの年を使う）
+  const groups=new Map();
+  for(const s of Object.keys(DB.seasons)){
+    const y=(String(s).match(/^(\d{4})/)||[])[1]||"その他";
+    if(!groups.has(y)) groups.set(y,[]);
+    groups.get(y).push(s);
+  }
+  const years=[...groups.keys()].sort((a,b)=>{
+    if(a==="その他") return 1; if(b==="その他") return -1;
+    return Number(b)-Number(a); // 新しい年が上
+  });
+  const curYear=(String(DB.current).match(/^(\d{4})/)||[])[1]||"その他";
+  let visible=seasonSelExpanded? years : years.slice(0,3); // 直近3年＝現役世代ぶん
+  if(!visible.includes(curYear)) visible=visible.concat(curYear); // 選択中シーズンの年は必ず出す（selectedが消えると誤選択になる）
+  const hidden=years.filter(y=>!visible.includes(y)).reduce((a,y)=>a+groups.get(y).length,0);
+  sel.innerHTML=years.filter(y=>visible.includes(y)).map(y=>
+    `<optgroup label="${esc(y==="その他"?"その他":y+"年")}">`+
+    groups.get(y).map(s=>`<option value="${esc(s)}" ${s===DB.current?'selected':''}>${esc(s)}</option>`).join("")+
+    `</optgroup>`
+  ).join("")+(hidden?`<option value="__moreSeasons__">過去のシーズンを表示（${hidden}件）…</option>`:"");
 }
 
 /* ---------- シーズン作成モーダル ---------- */
@@ -5360,6 +5380,9 @@ async function init(){
     $$(".tl-year-content").forEach(c=>c.classList.add("closed"));
   });
   $("#seasonSel").addEventListener("change",e=>{
+    if(e.target.value==="__moreSeasons__"){ // シーズン切替ではなく「全部見せて」の合図
+      seasonSelExpanded=true; fillSeasons(); toast("全シーズンを表示したで（もう一回開いてな）"); return;
+    }
     DB.current=e.target.value;
     if(editId!=null){resetForm();} // 編集中にシーズン変えたら編集モード解除（別試合の上書き防止）
     else { fillRoundSelForSeason(); $("#gRoundSel").value=""; }
