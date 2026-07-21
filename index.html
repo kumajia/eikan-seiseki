@@ -397,6 +397,7 @@
   <div id="tab-summary">
     <div style="margin-bottom:10px"><label class="inline" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
       <input type="checkbox" id="detailToggle"> 全項目表示（OFFやと主要な数字だけ）</label></div>
+    <div id="backupHint"></div>
     <section class="card">
       <div class="kpis" id="teamKpis"></div>
     </section>
@@ -489,6 +490,18 @@
       </div>
       <div id="freshStatus" class="hint" style="margin-top:10px"></div>
       <div id="freshResult" style="margin-top:10px"></div>
+    </section>
+    <section class="card">
+      <h2>選手比較</h2>
+      <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付くで。</div>
+      <div class="row" style="align-items:end">
+        <div class="field" style="flex:1;min-width:150px"><label>選手A</label>
+          <input type="text" id="cmpA" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
+        <div class="field" style="flex:1;min-width:150px"><label>選手B</label>
+          <input type="text" id="cmpB" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
+        <div class="field"><label>&nbsp;</label><button class="primary" id="cmpBtn">比較する</button></div>
+      </div>
+      <div id="cmpResult" style="margin-top:10px"></div>
     </section>
     <div id="playerContent"></div>
   </div>
@@ -952,6 +965,16 @@
       <div style="margin-top:8px"><button id="doImportBulk">全データを置き換え</button></div>
     </section>
     <section class="card">
+      <h2>自動スナップショット</h2>
+      <div class="note">1日1回、保存のついでにIndexedDBへ丸ごと控えを取ってるで（直近3日ぶん）。誤削除・誤マージからの復元用。localStorageとは別の場所に保存されるから、片方が飛んでも生き残る。</div>
+      <div class="row" style="align-items:center">
+        <select id="snapSel" style="min-width:160px"></select>
+        <button class="ghost" id="snapRefresh">一覧を更新</button>
+        <button class="danger" id="snapRestore">この日の状態に復元</button>
+      </div>
+      <div id="snapStatus" class="hint" style="margin-top:6px"></div>
+    </section>
+    <section class="card">
       <h2 style="color:var(--danger)">危険ゾーン</h2>
       <div style="margin-top:6px"><button class="danger" id="wipeSeason">このシーズンの試合を全削除</button></div>
       <div style="margin-top:6px"><button class="danger" id="deleteSeason">このシーズン自体を削除</button></div>
@@ -1149,7 +1172,64 @@ async function saveDB(){
     // (toastは直後に上書きされて見えなくなることがあるため使わない)
     if(!ok) alert("⚠️ 保存に失敗したで。端末の空き容量を確認してな。\n(エラー: "+(e&&e.message||e)+")");
   }
+  try{ idbSnapshotSave(); }catch(e){} // 日次の自動スナップショット（失敗してもsaveDBには影響させない）
   return ok;
+}
+function countAllGames(){ let c=0; for(const s of Object.values(DB&&DB.seasons||{})) c+=(s.games||[]).length; return c; }
+/* ---------- 自動スナップショット（IndexedDB・1日1回・直近3日ぶん） ---------- */
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open("eikan-backup",1);
+    r.onupgradeneeded=()=>{ r.result.createObjectStore("snapshots",{keyPath:"date"}); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function idbSnapshotList(db){
+  return new Promise((res)=>{
+    try{
+      const out=[];
+      const tx=db.transaction("snapshots","readonly");
+      const cur=tx.objectStore("snapshots").openCursor();
+      cur.onsuccess=()=>{ const c=cur.result; if(c){ out.push({date:c.value.date}); c.continue(); } else res(out); };
+      cur.onerror=()=>res(out);
+    }catch(e){ res([]); }
+  });
+}
+async function idbSnapshotSave(){
+  try{
+    if(typeof indexedDB==="undefined" || !DB) return;
+    const today=new Date().toISOString().slice(0,10);
+    if(window.__snapDone===today) return;
+    const db=await idbOpen();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction("snapshots","readwrite");
+      tx.objectStore("snapshots").put({date:today, json:JSON.stringify(DB)});
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+    const extra=(await idbSnapshotList(db)).map(s=>s.date).sort().slice(0,-3); // 直近3件だけ残す
+    if(extra.length) await new Promise((res)=>{
+      const tx=db.transaction("snapshots","readwrite");
+      extra.forEach(d=>tx.objectStore("snapshots").delete(d));
+      tx.oncomplete=res; tx.onerror=res;
+    });
+    window.__snapDone=today;
+    db.close();
+  }catch(e){}
+}
+function renderBackupHint(){
+  const el=document.getElementById("backupHint"); if(!el) return;
+  if(window.__backupHintDismissed){ el.innerHTML=""; return; }
+  const total=countAllGames();
+  const le=DB&&DB.lastExport;
+  const diff= le? total-(le.games||0) : total;
+  const need= le? diff>=10 : total>=5;
+  if(!need || total===0){ el.innerHTML=""; return; }
+  el.innerHTML=`<div class="valban ng" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <span>${le?`前回のバックアップから${diff}試合ぶん未保存`:`まだ一度もバックアップを書き出してへん（${total}試合）`}やで。データタブから書き出しとくのがおすすめ。</span>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button type="button" class="mini primary" id="backupNow">今すぐ書き出す</button>
+      <button type="button" class="mini ghost" id="backupLater">今回はええわ</button>
+    </span></div>`;
 }
 
 /* ---------- seed ---------- */
@@ -2038,6 +2118,7 @@ function render(){
   renderSeasonCompare();
   renderVs();
   fillOppDL();
+  renderBackupHint();
   renderManager();
   renderTags();
   renderArchive();
@@ -2315,6 +2396,105 @@ function fillPlayerSel(){
   }).join("");
   if(!inp.value.trim()) inp.value=roster[0][1]; // 空（初回）だけ先頭選手を既定に。入力済みなら更新時に選択を奪わない（第42弾）
 }
+/* ---------- 成績カードPNG ---------- */
+async function drawPlayerCard(key){
+  try{
+    const games=careerGamesForKey(key);
+    const b=aggBatting(games).find(r=>nameKey(r.name)===key)||null;
+    const p=aggPitching(games).find(r=>nameKey(r.name)===key)||null;
+    const hit=playerRoster().find(([k])=>k===key);
+    const nm=hit?hit[1]:""; const full=fullNameOf(key,nm);
+    const meta=(DB.playerMeta||{})[key]||{};
+    const ms=(DB.milestones||[]).filter(m=>nameKey(m.player)===key);
+    const c=document.createElement("canvas"); c.width=840; c.height=480;
+    const x=c.getContext("2d");
+    x.fillStyle="#0b1a2b"; x.fillRect(0,0,840,480);
+    x.strokeStyle="#f5b301"; x.lineWidth=3; x.strokeRect(8,8,824,464);
+    x.fillStyle="#f5b301"; x.font="700 34px sans-serif";
+    x.fillText(full||nm||"選手", 40, 70);
+    x.fillStyle="#7ea6c9"; x.font="16px sans-serif";
+    const sub=[meta.enrollYear?`${meta.enrollYear}年入学`:"", meta.position||"", meta.subPosition?`(サブ:${meta.subPosition})`:""].filter(Boolean).join("・");
+    if(sub) x.fillText(sub, 40, 100);
+    x.strokeStyle="#22425f"; x.lineWidth=1; x.beginPath(); x.moveTo(40,115); x.lineTo(800,115); x.stroke();
+    let y=155;
+    x.font="700 20px monospace";
+    const line=t=>{ x.fillStyle="#eef5fb"; x.fillText(t,40,y); y+=36; };
+    if(b&&b.G) line(`打撃  ${b.G}試合  打率${avg3(b.AVG)}  ${b.HR}本塁打  ${b.RBI}打点  ${b.SB}盗塁  OPS${avg3(b.OPS)}`);
+    if(p&&p.G) line(`投球  ${p.G}登板  ${p.W}勝  防御率${p.ipNum?p.ERA.toFixed(2):"-"}  ${p.K}奪三振  ${outs2ip(p.outs)}回`);
+    if(ms.length){
+      y+=6; x.fillStyle="#f5b301"; x.font="700 16px sans-serif"; x.fillText("達成記録", 40, y); y+=30;
+      x.fillStyle="#eef5fb"; x.font="15px sans-serif";
+      ms.slice(0,6).forEach(m=>{ x.fillText(`・${m.label}（${m.date||"-"}）`, 52, y); y+=26; });
+      if(ms.length>6){ x.fillStyle="#7ea6c9"; x.fillText(`ほか${ms.length-6}件`, 52, y); y+=26; }
+    }
+    x.fillStyle="#7ea6c9"; x.font="13px monospace"; x.fillText("栄冠ノート", 710, 455);
+    const blob=await new Promise(res=>c.toBlob(res,"image/png"));
+    if(!blob) throw new Error("画像化に失敗した");
+    const fname=`${String(full||nm||"player").replace(/\s+/g,"")}-card.png`;
+    const file=new File([blob],fname,{type:"image/png"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:full||nm}); toast("共有したで"); return; }
+      catch(e){ if(e.name==="AbortError") return; }
+    }
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    toast("成績カードを保存したで");
+  }catch(e){ toast("カード生成失敗: "+e.message,true); }
+}
+/* ---------- 選手比較 ---------- */
+function comparePlayersHtml(keyA,keyB){
+  const roster=playerRoster();
+  const nmOf=k=>{ const h=roster.find(([kk])=>kk===k); return h? h[1] : ""; };
+  const data=[keyA,keyB].map(k=>{
+    const games=careerGamesForKey(k);
+    return {
+      k, nm:nmOf(k), full:fullNameOf(k,nmOf(k)),
+      b:aggBatting(games).find(r=>nameKey(r.name)===k)||null,
+      p:aggPitching(games).find(r=>nameKey(r.name)===k)||null
+    };
+  });
+  const [A,B]=data;
+  // [ラベル, 値取得, 表示整形, 大きい方が良いか（nullなら色付けなし）]
+  const batRows=[
+    ["試合", d=>d.b?d.b.G:null, v=>v, true],
+    ["打率", d=>d.b&&d.b.AB?d.b.AVG:null, v=>avg3(v), true],
+    ["OPS", d=>d.b&&d.b.AB?d.b.OPS:null, v=>avg3(v), true],
+    ["安打", d=>d.b?d.b.H:null, v=>v, true],
+    ["本塁打", d=>d.b?d.b.HR:null, v=>v, true],
+    ["打点", d=>d.b?d.b.RBI:null, v=>v, true],
+    ["盗塁", d=>d.b?d.b.SB:null, v=>v, true]
+  ];
+  const pitRows=[
+    ["登板", d=>d.p?d.p.G:null, v=>v, true],
+    ["勝利", d=>d.p?d.p.W:null, v=>v, true],
+    ["防御率", d=>d.p&&d.p.ipNum?d.p.ERA:null, v=>v.toFixed(2), false],
+    ["奪三振", d=>d.p?d.p.K:null, v=>v, true],
+    ["投球回", d=>d.p?d.p.outs:null, v=>outs2ip(v), true],
+    ["WHIP", d=>d.p&&d.p.ipNum?d.p.WHIP:null, v=>v.toFixed(2), false]
+  ];
+  const section=(title,rows,show)=>{
+    if(!show) return "";
+    const tr=rows.map(([lbl,get,fmt,higherBetter])=>{
+      const va=get(A), vb=get(B);
+      let ca="",cb="";
+      if(va!=null&&vb!=null&&va!==vb&&higherBetter!=null){
+        const aWins= higherBetter? va>vb : va<vb;
+        ca=aWins?" hi2":""; cb=aWins?"":" hi2";
+      }
+      return `<tr><td class="name">${esc(lbl)}</td>`+
+        `<td class="num${ca}">${va!=null?fmt(va):"-"}</td>`+
+        `<td class="num${cb}">${vb!=null?fmt(vb):"-"}</td></tr>`;
+    }).join("");
+    return `<tr><td colspan="3" class="dim" style="text-align:left;font-size:12px;padding-top:10px">${esc(title)}</td></tr>${tr}`;
+  };
+  const showBat=!!(A.b||B.b), showPit=!!(A.p||B.p);
+  return `<div class="scroll"><table style="min-width:0">
+    <thead><tr><th class="name"></th>
+      <th><span class="plink" data-key="${esc(A.k)}">${esc(A.full)}</span></th>
+      <th><span class="plink" data-key="${esc(B.k)}">${esc(B.full)}</span></th></tr></thead>
+    <tbody>${section("打撃（通算）",batRows,showBat)}${section("投球（通算）",pitRows,showPit)}</tbody>
+  </table></div>`;
+}
 function careerGamesForKey(key){
   const out=[];
   for(const [,s] of seasonEntries()){
@@ -2376,9 +2556,31 @@ function renderEnrollYearTab(){
         <span class="opp">${esc(label)}</span>
         <span class="dim" style="font-size:12px;margin-left:auto">${members.length}人${gradeLabel?`・現在${esc(gradeLabel)}`:''}</span>
       </div>
-      <div class="gbody">${bodyHtml}</div>
+      <div class="gbody">${gkey!=="none"? generationSummaryHtml(Number(gkey)) : ""}${bodyHtml}</div>
     </div>`;
   }).join("");
+}
+function generationSummaryHtml(ey){
+  // 「この代の3年間」サマリ: 在籍年度(入学年〜+2)のチーム戦績・甲子園・全国制覇
+  if(typeof ey!=="number"||isNaN(ey)) return "";
+  let W=0,L=0,D=0,G=0,kosien=0,titles=0;
+  for(const [sname,s] of seasonEntries()){
+    const nendo=nendoOf(sname,null);
+    if(nendo==null||nendo<ey||nendo>ey+2) continue;
+    const games=s.games||[]; if(!games.length) continue;
+    const isK=sname.includes("甲子園");
+    if(isK) kosien++;
+    for(const g of games){
+      G++;
+      const rf=n(g.runsFor), ra=n(g.runsAgainst);
+      if(rf>ra)W++; else if(rf<ra)L++; else D++;
+      const opp=g.opponent||"";
+      const isFinal=opp.includes("決勝")&&!opp.includes("準決勝")&&!opp.includes("準々決勝");
+      if(isK&&isFinal&&rf>ra) titles++;
+    }
+  }
+  if(!G) return "";
+  return `<div class="dim" style="font-size:12px;padding:6px 2px;border-bottom:1px solid var(--line);margin-bottom:6px">この代の3年間（${ey}〜${ey+2}年度）: ${G}試合 ${W}勝${L}敗${D?D+"分":""}　甲子園${kosien}回${titles?`・全国制覇${titles}回`:""}</div>`;
 }
 function seasonYearOf(sname,games){
   const my=(String(sname).match(/^(\d{4})/)||[])[1];
@@ -2730,6 +2932,7 @@ function renderPlayerContent(){
   if(careerBat) html+= kpi("試合",careerBat.G)+kpi("打率",avg3(careerBat.AVG),"a")+kpi("OPS",avg3(careerBat.OPS))+kpi("本塁打",careerBat.HR,"g")+kpi("打点",careerBat.RBI)+kpi("盗塁",careerBat.SB);
   if(careerPit) html+= kpi("登板",careerPit.G)+kpi("防御率",careerPit.ipNum?careerPit.ERA.toFixed(2):"-","a")+kpi("勝利",careerPit.W)+kpi("奪三振",careerPit.K)+kpi("投球回",careerPit.IPstr);
   html+=`</div>`;
+  if(careerBat || careerPit) html+=`<div style="margin-top:8px"><button type="button" class="mini ghost" id="playerCardBtn" data-key="${esc(key)}">成績カードを画像で保存</button></div>`;
   if(!careerBat && !careerPit) html+=`<div class="empty" style="padding:10px">まだ出場記録がないで（名簿登録のみ）。<div style="margin-top:8px"><button class="mini danger" id="removeRosterOnly" data-key="${esc(key)}">名簿から削除</button></div></div>`;
   html+=`</section>`;
   html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
@@ -5383,6 +5586,8 @@ async function init(){
       exportPlayerCard(exp.dataset.key);
       return;
     }
+    const pc=e.target.closest("#playerCardBtn");
+    if(pc){ drawPlayerCard(pc.dataset.key); return; }
     const rm=e.target.closest("#removeRosterOnly");
     if(rm){ // 出場記録なしの名簿登録のみ選手を削除
       if(!confirm("この選手を名簿から削除する？（試合記録は無いから成績への影響は無いで）"))return;
@@ -5640,13 +5845,18 @@ async function init(){
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);
     a.download=`eikan-stats-${new Date().toISOString().slice(0,10)}.json`;a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000); // 即revokeやとダウンロード開始前に無効化される環境がある
+    DB.lastExport={at:Date.now(), games:countAllGames()}; saveDB(); renderBackupHint(); // バックアップ催促の基準を更新
     toast("書き出したで");
   });
   $("#shareAll").addEventListener("click",async()=>{
     // Web Share APIは.jsonを共有できない（Chromeの形式ホワイトリスト外）ため、.txtとして共有する。中身はJSONのまま
     const file=new File([JSON.stringify(DB,null,2)],`eikan-stats-${new Date().toISOString().slice(0,10)}.txt`,{type:"text/plain"});
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file],title:"栄冠ノート データ"}); toast("共有したで"); }
+      try{
+        await navigator.share({files:[file],title:"栄冠ノート データ"});
+        DB.lastExport={at:Date.now(), games:countAllGames()}; saveDB(); renderBackupHint();
+        toast("共有したで");
+      }
       catch(e){
         if(e.name==="AbortError") return; // ユーザーがキャンセルしただけ
         toast("共有できへんかったからダウンロードするで",true);
@@ -5663,6 +5873,48 @@ async function init(){
     r.onload=()=>{ applyMerge(r.result); };
     r.readAsText(f); e.target.value="";
   });
+  // 選手比較
+  $("#cmpBtn").addEventListener("click",()=>{
+    const findKey=v=>{ const k=nameKey(v); return playerRoster().some(([kk])=>kk===k)? k : null; };
+    const ka=findKey($("#cmpA").value), kb=findKey($("#cmpB").value);
+    const el=$("#cmpResult");
+    if(!ka||!kb){ el.innerHTML=`<div class="hint">両方の選手名を候補から選んでな${!ka&&$("#cmpA").value?`（「${esc($("#cmpA").value)}」が見つからへん）`:""}${!kb&&$("#cmpB").value?`（「${esc($("#cmpB").value)}」が見つからへん）`:""}</div>`; return; }
+    if(ka===kb){ el.innerHTML=`<div class="hint">同じ選手やで</div>`; return; }
+    el.innerHTML=comparePlayersHtml(ka,kb);
+  });
+  // バックアップ催促バナー
+  $("#backupHint").addEventListener("click",e=>{
+    if(e.target.closest("#backupNow")){ $("#exportAll").click(); }
+    else if(e.target.closest("#backupLater")){ window.__backupHintDismissed=true; renderBackupHint(); }
+  });
+  // 自動スナップショットの一覧・復元
+  async function fillSnapList(){
+    const sel=$("#snapSel"); if(!sel) return;
+    try{
+      const db=await idbOpen();
+      const all=(await idbSnapshotList(db)).map(s=>s.date).sort().reverse();
+      db.close();
+      sel.innerHTML= all.length? all.map(d=>`<option>${esc(d)}</option>`).join("") : `<option value="">（まだ控えが無い）</option>`;
+    }catch(e){ sel.innerHTML=`<option value="">（この環境では使えへん）</option>`; }
+  }
+  $("#snapRefresh").addEventListener("click",fillSnapList);
+  $("#snapRestore").addEventListener("click",async()=>{
+    const d=$("#snapSel").value;
+    if(!d){ toast("控えが無いで",true); return; }
+    if(!confirm(`⚠️ 全データを ${d} 時点の控えに置き換えるで。今のデータは消える。ええか？（心配なら先に書き出しを）`)) return;
+    try{
+      const db=await idbOpen();
+      const rec=await new Promise((res,rej)=>{ const tx=db.transaction("snapshots","readonly"); const r2=tx.objectStore("snapshots").get(d); r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error); });
+      db.close();
+      if(!rec) throw new Error("控えが見つからへん");
+      DB=JSON.parse(rec.json);
+      migrate(DB);
+      await saveDB(); fillSeasons(); render(); switchTab("summary","replace");
+      $("#snapStatus").textContent=`${d} 時点に復元したで`;
+      toast(`${d} 時点に復元したで`);
+    }catch(e){ toast("復元失敗: "+e.message,true); }
+  });
+  fillSnapList();
   $("#doMergeBulk").addEventListener("click",()=>{
     const t=$("#mergeBulk").value.trim();
     if(!t){toast("JSONを貼り付けてな",true);return;}
@@ -5709,8 +5961,28 @@ async function init(){
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
 window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
+function showUpdateBar(){
+  // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
+  if(document.getElementById("updateBar")) return;
+  const d=document.createElement("div");
+  d.id="updateBar";
+  d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:64px;background:var(--panel2);border:1px solid var(--amber);color:var(--ink);padding:10px 16px;border-radius:10px;font-size:13px;z-index:99;display:flex;gap:10px;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,.4)";
+  d.innerHTML=`新しいバージョンがあるで <button type="button" class="mini primary" id="updateReload">リロードして更新</button> <button type="button" class="mini ghost" id="updateLater">あとで</button>`;
+  document.body.appendChild(d);
+  d.addEventListener("click",e=>{
+    if(e.target.closest("#updateReload")) location.reload();
+    else if(e.target.closest("#updateLater")) d.remove();
+  });
+}
 if("serviceWorker" in navigator && location.protocol!=="file:"){
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+  navigator.serviceWorker.register("sw.js").then(reg=>{
+    reg.addEventListener("updatefound",()=>{
+      const nw=reg.installing; if(!nw) return;
+      nw.addEventListener("statechange",()=>{
+        if(nw.state==="activated" && navigator.serviceWorker.controller) showUpdateBar();
+      });
+    });
+  }).catch(()=>{});
 }
 </script>
 <script src="tests.js" defer></script>
