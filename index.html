@@ -3521,7 +3521,7 @@ async function fillSchoolYomi(manual){
   DB.schoolYomi=DB.schoolYomi||{};
   const missing=vsRecords().map(r=>r.school).filter(s=>!DB.schoolYomi[s]);
   const st=$("#vsYomiStatus");
-  if(!missing.length){ if(manual&&st) st.textContent="全校に読みがな付いてるで"; return; }
+  if(!missing.length){ if(manual&&st){ st.textContent="全校に読みがな付いてるで"; renderVs(); } return; } // renderVs: 裏の自動補完後に画面が古いままのケースを拾う
   const key=$("#gemKey").value.trim();
   if(!key){ if(manual&&st) st.textContent="APIキー未設定（「試合を追加」タブで設定してな）"; return; }
   if(!manual){ if(yomiTriedThisSession) return; yomiTriedThisSession=true; } // 自動実行はセッション1回まで
@@ -3538,7 +3538,7 @@ async function fillSchoolYomi(manual){
       for(const s of chunk){ const y=map[s]; if(y&&typeof y==="string"){ DB.schoolYomi[s]=y.trim(); cnt++; } }
     }catch(e){ failed+=chunk.length; }
   }
-  if(cnt){ await saveDB(); fillOppDL(); }
+  if(cnt){ await saveDB(); fillOppDL(); renderVs(); } // renderVs追加: 取得後に対戦成績タブへ読みがなを即反映（従来は再描画漏れで「付いてるのに見えない」状態になっていた）
   if(manual&&st) st.textContent = cnt
     ? `${cnt}校に読みがなを付けたで`+(failed?`（${failed}校は混雑/タイムアウトで失敗。もう一回押すと続きから）`:"")
     : "読みがなを取得できへんかった（混雑かタイムアウト。少し待ってもう一回試してな）";
