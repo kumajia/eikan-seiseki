@@ -424,7 +424,7 @@
   <div id="tab-period" style="display:none">
     <section class="card">
       <h2>期間集計</h2>
-      <div class="note">練習試合シーズンは自動で除外されるで。</div>
+      <div class="note">練習試合も含めて集計するで。</div>
       <div class="row" style="margin-bottom:6px">
         <div class="field"><label>集計単位</label>
           <select id="periodBlockSel">
@@ -445,7 +445,7 @@
   <div id="tab-player" style="display:none">
     <section class="card">
       <h2>選手個別</h2>
-      <div class="note">練習試合シーズンは除外して集計するで。</div>
+      <div class="note">通算は練習試合も含む（マイルストーンは公式戦のみ）。</div>
       <div class="row" style="margin-bottom:6px">
         <div class="field" style="flex:1;min-width:200px"><label>選手（入力すると絞り込めるで）</label>
           <input type="text" id="playerSel" list="playerListDL" placeholder="選手名を入力/選択" autocomplete="off">
@@ -529,7 +529,7 @@
   <div id="tab-seasonCompare" style="display:none">
     <section class="card">
       <h2>シーズン間比較</h2>
-      <div class="note">練習試合シーズンは除外。列ヘッダをクリックで並び替え。</div>
+      <div class="note">練習試合シーズンも含む。列ヘッダをクリックで並び替え。</div>
       <div class="scroll"><table id="seasonCompareTbl"></table></div>
     </section>
   </div>
@@ -538,7 +538,7 @@
   <div id="tab-vs" style="display:none">
     <section class="card">
       <h2>対戦成績（学校別）</h2>
-      <div class="note">対戦相手の学校ごとの通算成績。練習試合シーズンは除外。タップで試合一覧、日付タップでその試合へ。</div>
+      <div class="note">対戦相手の学校ごとの通算成績（練習試合も含む）。タップで試合一覧、日付タップでその試合へ。</div>
       <div id="vsHighlights" class="archive-kpis" style="margin:12px 0"></div>
       <div class="toolbar" style="margin-bottom:8px;align-items:center">
         <button class="mini ghost" id="vsYomiBtn">読みがなをAIで補完（ひらがな検索用）</button>
@@ -2232,7 +2232,7 @@ let periodAnchor=null; // 初期値はHTMLの#periodAnchorInputから拾う。nu
 function allGamesFlat(){
   const out=[];
   for(const [name,s] of Object.entries(DB.seasons)){
-    if(name.includes("練習")) continue; // 練習試合シーズンは期間集計から除外
+    // 期間集計も練習試合を含める（通算は練習込み・マイルストーンのみ公式戦の方針）
     for(const g of s.games) out.push(g);
   }
   return out;
@@ -2253,7 +2253,7 @@ function periodYearOf(g){
 function renderPeriod(){
   const el=$("#periodContent"); if(!el) return;
   const all=allGamesFlat();
-  if(!all.length){ el.innerHTML=`<div class="empty">集計できる試合データがまだないで（練習試合シーズンは除外されるで）。</div>`; return; }
+  if(!all.length){ el.innerHTML=`<div class="empty">集計できる試合データがまだないで。</div>`; return; }
   const years=all.map(periodYearOf).filter(y=>y!=null);
   const minY = years.length? Math.min(...years) : null;
   const anchor = (periodAnchor!=null && !isNaN(periodAnchor)) ? periodAnchor : minY;
@@ -2303,6 +2303,10 @@ function renderPeriod(){
 
 /* ---------- 選手個別ページ ---------- */
 function seasonEntries(){
+  // 通算系の集計対象。方針: 通算記録は練習試合も含める（マイルストーン判定だけofficialSeasonEntriesで公式戦固定）
+  return Object.entries(DB.seasons);
+}
+function officialSeasonEntries(){
   return Object.entries(DB.seasons).filter(([name])=>!name.includes("練習"));
 }
 function latestGameGlobally(){
@@ -3547,7 +3551,10 @@ function renderGames(){
   const el=$("#gameList");
   const entries=Object.entries(DB.seasons);
   if(!entries.some(([,s])=>s.games.length)){el.innerHTML=`<div class="empty">試合ログはまだ空っぽや。</div>`;return;}
-  el.innerHTML=entries.map(([sname,s])=>{
+  // 公式戦と練習試合を分けて表示（公式戦→区切り見出し→練習試合）
+  const official=entries.filter(([name])=>!name.includes("練習"));
+  const practice=entries.filter(([name])=>name.includes("練習"));
+  const renderGroups=(list)=>list.map(([sname,s])=>{
     if(!s.games.length) return "";
     const T=teamTotals(s.games);
     const gamesHtml=s.games.map(g=>{
@@ -3587,6 +3594,9 @@ function renderGames(){
       <div class="gbody">${gamesHtml}</div>
     </div>`;
   }).join("");
+  const practiceHasGames=practice.some(([,s])=>s.games.length);
+  el.innerHTML = renderGroups(official)
+    + (practiceHasGames? `<div class="dim" style="font-size:12px;font-weight:600;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)">練習試合</div>`+renderGroups(practice) : "");
 }
 function gameBatMini(g){
   const cols=[["AB","打"],["H","安"],["HR","本"],["RBI","点"],["SO","三"],["BB","四"]];
@@ -5785,7 +5795,7 @@ async function init(){
       }
     }
     
-    const beforeGames = seasonEntries().flatMap(([_, s]) => s.games).map(x => ({...x}));
+    const beforeGames = officialSeasonEntries().flatMap(([_, s]) => s.games).map(x => ({...x})); // マイルストーン判定は表示スコープに関わらず公式戦のみ
     const savedGameId = editId || newId();
     g.id = savedGameId;
     const ng = normGame(g);
@@ -5798,7 +5808,7 @@ async function init(){
     }
     else{curGames().push(ng);toast("保存したで");}
     
-    const afterGames = seasonEntries().flatMap(([_, s]) => s.games);
+    const afterGames = officialSeasonEntries().flatMap(([_, s]) => s.games);
     const newMs = checkMilestonesDiff(beforeGames, afterGames, savedGameId, g.date);
     if(newMs.length > 0){
       DB.milestones = DB.milestones || [];
