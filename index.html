@@ -6221,12 +6221,19 @@ async function runOcr(){
     const imgFiles=files.filter(f=>f.type.startsWith("image/"));
     if(voteOn && imgFiles.length>=2){
       // 各コマを個別に読んで選手×セルごとに多数決（列ズレは毎コマ同じには出にくいので正解に寄る）
-      const reads=[];
+      const reads=[]; const errs=[];
       for(let i=0;i<imgFiles.length;i++){
-        st.innerHTML=`<span class="spin"></span>多数決：コマを個別解析中… ${i+1}/${imgFiles.length}`;
-        try{ reads.push(parseOcrJson(await aiGenerate(promptText,[imgFiles[i]],st))); }catch(e){}
+        st.innerHTML=`<span class="spin"></span>多数決：コマを個別解析中… ${i+1}/${imgFiles.length}${errs.length?`（失敗${errs.length}）`:""}`;
+        try{ reads.push(parseOcrJson(await aiGenerate(promptText,[imgFiles[i]],st))); }
+        catch(e){
+          const msg=String((e&&e.message)||e);
+          errs.push(msg);
+          // キー不正・クオータ・レート制限は何コマ投げても同じ結果なので即中断（12枚ぶん無駄に叩かない）
+          if(/401|403|429|quota|rate limit|APIキー|クオータ|上限/i.test(msg)) break;
+        }
       }
-      if(!reads.length) throw new Error("どのコマも読み取れへんかった");
+      if(!reads.length) throw new Error(`どのコマも読み取れへんかった${errs.length?`（理由: ${errs[errs.length-1]}）`:""}`);
+      if(errs.length) toast(`${errs.length}コマ失敗。読めた${reads.length}コマで多数決したで`);
       g=voteOcrReads(reads);
     } else {
       g=parseOcrJson(await aiGenerate(promptText, files, st));
