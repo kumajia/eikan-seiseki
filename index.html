@@ -407,7 +407,7 @@
     <button data-tab="player">選手</button>
     <button data-tab="tags">タグ管理</button>
     <button data-tab="timeline">栄冠アーカイブ</button>
-    <button data-tab="enrollYear">入学年</button>
+    <button data-tab="enrollYear">選手名簿</button>
     <button data-tab="seasonCompare">シーズン比較</button>
     <button data-tab="vs">対戦成績</button>
     <button data-tab="games">試合ログ</button>
@@ -472,71 +472,78 @@
   <div id="tab-player" style="display:none">
     <section class="card">
       <h2>選手個別</h2>
-      <div class="note">通算は練習試合も含む（マイルストーンは公式戦のみ）。</div>
-      <div class="row" style="margin-bottom:6px">
+      <div class="note">通算は練習試合も含む（マイルストーンは公式戦のみ）。選手の追加・一括設定は「選手名簿」タブにあります。</div>
+      <div class="row" style="margin-bottom:6px;align-items:flex-end">
+        <div class="field" style="max-width:52px"><label>&nbsp;</label>
+          <button type="button" class="mini ghost" id="playerPrevBtn" title="前の選手へ">◀</button>
+        </div>
         <div class="field" style="flex:1;min-width:200px"><label>選手（入力すると絞り込めます）</label>
           <input type="text" id="playerSel" list="playerListDL" placeholder="選手名を入力/選択" autocomplete="off">
           <datalist id="playerListDL"></datalist>
         </div>
-        <div class="field" style="max-width:130px"><label>入学年</label>
-          <input type="number" id="playerEnrollYear" placeholder="例: 2030">
-        </div>
-        <div class="field" style="max-width:160px"><label>フルネーム（名鑑表示）</label>
-          <input type="text" id="playerFullName" placeholder="例: 石井 七海" autocomplete="off">
-        </div>
-        <div class="field" style="max-width:120px"><label>ポジション</label>
-          <select id="playerPosition"></select>
-        </div>
-        <div class="field" style="max-width:120px"><label>サブポジション</label>
-          <select id="playerSubPosition"></select>
-        </div>
-        <div class="field" style="max-width:90px"><label>背番号</label>
-          <input type="text" id="playerNumber" placeholder="例: 10" autocomplete="off" inputmode="numeric">
-        </div>
-        <div class="field" style="max-width:80px"><label>主将</label>
-          <label class="inline" style="display:inline-flex;align-items:center;gap:5px;height:36px;cursor:pointer"><input type="checkbox" id="playerCaptain"> 主将</label>
-        </div>
-        <div class="field" style="justify-content:flex-end">
-          <label>&nbsp;</label>
-          <button class="mini ghost" id="bulkEnrollBtn">まとめて入学年設定</button>
-        </div>
-        <div class="field" style="justify-content:flex-end">
-          <label>&nbsp;</label>
-          <button class="mini ghost" id="bulkPositionBtn">まとめてポジション設定</button>
-        </div>
-        <div class="field" style="justify-content:flex-end">
-          <label>&nbsp;</label>
-          <button class="mini ghost" id="bulkSubPositionBtn">まとめてサブポジ設定</button>
+        <div class="field" style="max-width:52px"><label>&nbsp;</label>
+          <button type="button" class="mini ghost" id="playerNextBtn" title="次の選手へ">▶</button>
         </div>
       </div>
-    </section>
-    <div id="dupHints"></div>
-    <section class="card">
-      <h2>新入生スクショから登録 <span class="tag p">AI</span></h2>
-      <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録します。登録した選手は入学年タブと選手一覧に表示されます（試合に出るまで通算成績には表示されません）。APIキーは「試合を追加」タブで設定したものを使います。</div>
-      <div class="row" style="align-items:center">
-        <div id="freshDropZone" class="dropzone">
-          <input type="file" id="freshFiles" accept="image/*" multiple>
-          <div class="dz-txt">新入生画面の画像を選択またはドラッグ＆ドロップ（複数OK）</div>
+      <div class="game" id="playerPickerBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">名簿から選ぶ</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">学年ごとに一覧</span>
         </div>
-        <button class="primary" id="runFreshOcr">解析する</button>
+        <div class="gbody"><div id="playerPickerList"></div></div>
       </div>
-      <div id="freshStatus" class="hint" style="margin-top:10px"></div>
-      <div id="freshResult" style="margin-top:10px"></div>
-    </section>
-    <section class="card">
-      <h2>選手比較</h2>
-      <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付きます。</div>
-      <div class="row" style="align-items:end">
-        <div class="field" style="flex:1;min-width:150px"><label>選手A</label>
-          <input type="text" id="cmpA" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
-        <div class="field" style="flex:1;min-width:150px"><label>選手B</label>
-          <input type="text" id="cmpB" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
-        <div class="field"><label>&nbsp;</label><button class="primary" id="cmpBtn">比較する</button></div>
+      <div class="game" id="playerMetaBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">この選手の情報を編集</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">入学年・ポジション・背番号など</span>
+        </div>
+        <div class="gbody">
+          <div class="row" style="align-items:flex-end">
+            <div class="field" style="max-width:130px"><label>入学年</label>
+              <input type="number" id="playerEnrollYear" placeholder="例: 2030">
+            </div>
+            <div class="field" style="max-width:160px"><label>フルネーム（名鑑表示）</label>
+              <input type="text" id="playerFullName" placeholder="例: 石井 七海" autocomplete="off">
+            </div>
+            <div class="field" style="max-width:120px"><label>ポジション</label>
+              <select id="playerPosition"></select>
+            </div>
+            <div class="field" style="max-width:120px"><label>サブポジション</label>
+              <select id="playerSubPosition"></select>
+            </div>
+            <div class="field" style="max-width:90px"><label>背番号</label>
+              <input type="text" id="playerNumber" placeholder="例: 10" autocomplete="off" inputmode="numeric">
+            </div>
+            <div class="field" style="max-width:80px"><label>主将</label>
+              <label class="inline" style="display:inline-flex;align-items:center;gap:5px;height:36px;cursor:pointer"><input type="checkbox" id="playerCaptain"> 主将</label>
+            </div>
+          </div>
+        </div>
       </div>
-      <div id="cmpResult" style="margin-top:10px"></div>
     </section>
     <div id="playerContent"></div>
+    <section class="card">
+      <div class="game" id="playerCompareBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">選手比較</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">歴代の2人を通算成績で比較</span>
+        </div>
+        <div class="gbody">
+          <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付きます。</div>
+          <div class="row" style="align-items:end">
+            <div class="field" style="flex:1;min-width:150px"><label>選手A</label>
+              <input type="text" id="cmpA" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
+            <div class="field" style="flex:1;min-width:150px"><label>選手B</label>
+              <input type="text" id="cmpB" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
+            <div class="field"><label>&nbsp;</label><button class="primary" id="cmpBtn">比較する</button></div>
+          </div>
+          <div id="cmpResult" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- BEST NINE -->
@@ -577,12 +584,62 @@
     </section>
   </div>
 
-  <!-- ENROLL YEAR -->
+  <!-- 選手名簿（tab idは互換のため enrollYear のまま） -->
   <div id="tab-enrollYear" style="display:none">
     <section class="card">
-      <h2>入学年</h2>
-      <div class="note">タップで展開。入学年ごとに選手をまとめて表示します。選手名タップで個別ページへ。</div>
+      <h2>選手名簿</h2>
+      <div class="note">入学年ごとの一覧。見出しタップで展開、選手名タップで個別ページへ。「編集」でその場で情報を変更できます。</div>
+      <div class="row" style="align-items:flex-end;margin-bottom:8px">
+        <div class="field" style="max-width:280px"><label>表示</label>
+          <div id="rosterFilterBtns" style="display:flex;gap:6px;height:36px;align-items:center">
+            <button type="button" class="mini" data-rfilter="all">全員</button>
+            <button type="button" class="mini ghost" data-rfilter="active">現役のみ</button>
+            <button type="button" class="mini ghost" data-rfilter="retired">卒業生</button>
+          </div>
+        </div>
+        <div class="field" style="flex:1;min-width:170px"><label>名前で絞り込み</label>
+          <input type="text" id="rosterSearch" placeholder="名前の一部（フルネームも対象）" autocomplete="off">
+        </div>
+      </div>
+      <div id="rosterCount" class="dim" style="font-size:12px;margin-bottom:6px"></div>
       <div id="enrollYearList"></div>
+    </section>
+    <div id="dupHints"></div>
+    <section class="card">
+      <div class="game" id="freshOcrBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">新入生スクショから登録</span>
+          <span class="tag p">AI</span>
+        </div>
+        <div class="gbody">
+          <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録します。登録した選手はこの名簿と選手一覧に表示されます（試合に出るまで通算成績には表示されません）。APIキーは「試合を追加」タブで設定したものを使います。</div>
+          <div class="row" style="align-items:center">
+            <div id="freshDropZone" class="dropzone">
+              <input type="file" id="freshFiles" accept="image/*" multiple>
+              <div class="dz-txt">新入生画面の画像を選択またはドラッグ＆ドロップ（複数OK）</div>
+            </div>
+            <button class="primary" id="runFreshOcr">解析する</button>
+          </div>
+          <div id="freshStatus" class="hint" style="margin-top:10px"></div>
+          <div id="freshResult" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="game" id="bulkMetaBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">まとめて設定</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">入学年・ポジション・サブポジ</span>
+        </div>
+        <div class="gbody">
+          <div class="note">複数の選手をまとめて選んで、同じ値を一度に設定します。</div>
+          <div class="row">
+            <button class="mini ghost" id="bulkEnrollBtn">まとめて入学年設定</button>
+            <button class="mini ghost" id="bulkPositionBtn">まとめてポジション設定</button>
+            <button class="mini ghost" id="bulkSubPositionBtn">まとめてサブポジ設定</button>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -3370,61 +3427,156 @@ function careerGamesForKey(key){
   }
   return out;
 }
-function renderEnrollYearTab(){
-  const el=$("#enrollYearList"); if(!el) return;
+/* ---------- 選手名簿（tab idは互換のため enrollYear のまま） ---------- */
+// 名簿の並び順（入学年の新しい順→未設定は末尾、年内は playerRoster() のかな順）はここに一元化する。
+// 「選手名簿」タブ・選手タブの「名簿から選ぶ」・前後の選手ボタンは全部これを使うので並びがズレない。
+function rosterGroups(){
   DB.playerMeta = DB.playerMeta || {};
-  const roster=playerRoster();
-  if(!roster.length){ el.innerHTML=`<div class="empty">選手データがまだありません。</div>`; return; }
-  const latestOverall=latestGameGlobally();
   const groups=new Map();
-  for(const [key,nm] of roster){
+  for(const [key,nm] of playerRoster()){
     const ey=DB.playerMeta[key]?.enrollYear ?? null;
     const gkey = ey==null? "none" : ey;
     if(!groups.has(gkey)) groups.set(gkey, []);
     groups.get(gkey).push([key,nm]);
   }
   const years=[...groups.keys()].filter(k=>k!=="none").sort((a,b)=>b-a);
-  const orderedKeys = groups.has("none")? [...years,"none"] : years;
-  el.innerHTML = orderedKeys.map(gkey=>{
-    const members=groups.get(gkey);
-    const label = gkey==="none"? "入学年未設定" : `${gkey}年入学`;
-    const gradeLabel = (gkey!=="none" && latestOverall)
-      ? gradeInfo(gkey, latestOverall.season, gameYear({date:latestOverall.date})).label : "";
-    const batters=[], pitchers=[];
+  const ordered = groups.has("none")? [...years,"none"] : years;
+  const latestOverall=latestGameGlobally();
+  return ordered.map(gkey=>({
+    gkey,
+    label: gkey==="none"? "入学年未設定" : `${gkey}年入学`,
+    gradeLabel: (gkey!=="none" && latestOverall)
+      ? gradeInfo(gkey, latestOverall.season, gameYear({date:latestOverall.date})).label : "",
+    members: groups.get(gkey)
+  }));
+}
+function rosterOrderedKeys(){
+  return rosterGroups().reduce((acc,g)=>{ for(const m of g.members) acc.push(m[0]); return acc; },[]);
+}
+let rosterFilter="all";        // all / active / retired
+let rosterSearchText="";
+const openEnrollGroups=new Set(); // 展開中の入学年グループ（セッション中のみ保持）
+function rosterMatches(key,nm){
+  if(rosterFilter!=="all"){
+    const retired=isPlayerRetired(key); // 入学年未設定は現役扱い（isPlayerRetiredの仕様）
+    if(rosterFilter==="active" && retired) return false;
+    if(rosterFilter==="retired" && !retired) return false;
+  }
+  const q=rosterSearchText.trim().toLowerCase();
+  if(q){
+    const meta=(DB.playerMeta||{})[key]||{};
+    if(!`${nm} ${meta.fullName||""}`.toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+// 名簿行のインライン編集フォーム。DOM idの重複を避けるため id は一切使わずクラス＋data属性で組む
+function rosterEditFormHtml(key){
+  const m=(DB.playerMeta||{})[key]||{};
+  const posOpts=cur=>`<option value="">－</option>`+POSITIONS.map(p=>`<option value="${esc(p)}"${p===cur?' selected':''}>${esc(p)}</option>`).join("");
+  return `<div class="rosteredit" style="border-top:1px dashed var(--line2);margin-top:6px;padding-top:6px">
+    <div class="row" style="align-items:flex-end">
+      <div class="field" style="max-width:120px"><label>入学年</label>
+        <input type="number" class="re-enroll" value="${esc(m.enrollYear ?? "")}" placeholder="例: 2030"></div>
+      <div class="field" style="max-width:170px"><label>フルネーム</label>
+        <input type="text" class="re-full" value="${esc(m.fullName ?? "")}" placeholder="例: 石井 七海" autocomplete="off"></div>
+      <div class="field" style="max-width:120px"><label>ポジション</label>
+        <select class="re-pos">${posOpts(m.position||"")}</select></div>
+      <div class="field" style="max-width:120px"><label>サブポジション</label>
+        <select class="re-sub">${posOpts(m.subPosition||"")}</select></div>
+      <div class="field" style="max-width:90px"><label>背番号</label>
+        <input type="text" class="re-num" value="${esc(m.number ?? "")}" inputmode="numeric" autocomplete="off"></div>
+      <div class="field" style="max-width:80px"><label>主将</label>
+        <label class="inline" style="display:inline-flex;align-items:center;gap:5px;height:36px;cursor:pointer"><input type="checkbox" class="re-cap"${m.captain?" checked":""}> 主将</label></div>
+      <div class="field" style="max-width:80px"><label>&nbsp;</label>
+        <button type="button" class="mini" data-rosave="${esc(key)}">保存</button></div>
+      <div class="field" style="max-width:80px"><label>&nbsp;</label>
+        <button type="button" class="mini ghost" data-rocancel="1">閉じる</button></div>
+    </div>
+  </div>`;
+}
+function renderEnrollYearTab(){
+  const el=$("#enrollYearList"); if(!el) return;
+  const cntEl=$("#rosterCount");
+  document.querySelectorAll("#rosterFilterBtns [data-rfilter]").forEach(b=>{
+    b.classList.toggle("ghost", b.dataset.rfilter!==rosterFilter);
+  });
+  const groups=rosterGroups();
+  const total=groups.reduce((a,g)=>a+g.members.length,0);
+  if(!total){ el.innerHTML=`<div class="empty">選手データがまだありません。</div>`; if(cntEl) cntEl.textContent=""; return; }
+  const searching = rosterSearchText.trim()!=="";
+  let shown=0;
+  const html=groups.map(g=>{
+    const members=g.members.filter(([key,nm])=>rosterMatches(key,nm));
+    if(!members.length) return "";
+    shown+=members.length;
+    const pitchers=[], fielders=[];
     for(const [key,nm] of members){
       const meta=DB.playerMeta[key]||{};
       const posStr=[meta.position, meta.subPosition].filter(Boolean).join("/"); // フルネームを守備位置に混ぜない（「森下 翔太/外野」が守備位置に見える問題）
       const cGames=careerGamesForKey(key);
       const cb=aggBatting(cGames).find(r=>nameKey(r.name)===key);
       const cp=aggPitching(cGames).find(r=>nameKey(r.name)===key);
-      if(cb && cb.G) batters.push({key,nm,posStr,stat:`打率${avg3(cb.AVG)} / ${cb.G}試合`});
-      if(cp && cp.G) pitchers.push({key,nm,posStr,stat:`防御率${cp.ipNum?cp.ERA.toFixed(2):'-'} / ${cp.G}登板`});
-      if(!(cb&&cb.G) && !(cp&&cp.G)){ // 名簿登録のみ（新入生など）も入学年タブには出す
-        (meta.position==="投手"? pitchers : batters).push({key,nm,posStr,stat:"出場なし"});
-      }
+      const parts=[];
+      if(cb && cb.G) parts.push(`打率${avg3(cb.AVG)} / ${cb.G}試合`);
+      if(cp && cp.G) parts.push(`防御率${cp.ipNum?cp.ERA.toFixed(2):'-'} / ${cp.G}登板`);
+      const stat = parts.length? parts.join("　") : "出場なし"; // 名簿登録のみ（新入生など）も出す
+      const isPitcher = (cp && cp.G)? true : (!(cb&&cb.G) && meta.position==="投手");
+      (isPitcher? pitchers : fielders).push({key,nm,posStr,stat});
     }
-    const rowHtml=(p)=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;border-bottom:1px solid var(--line);padding:6px 2px">
-        <span><span class="plink" role="link" tabindex="0" data-key="${esc(p.key)}">${esc(fullNameOf(p.key,p.nm))}</span>${metaMarks(p.key)}${p.posStr?`<span class="dim" style="font-size:12px">　${esc(p.posStr)}</span>`:''}</span>
-        <span class="dim" style="font-size:12px">${esc(p.stat)}</span>
+    const rowHtml=p=>`<div class="rosterrow" data-key="${esc(p.key)}" style="border-bottom:1px solid var(--line);padding:6px 2px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px">
+          <span style="min-width:0"><span class="plink" role="link" tabindex="0" data-key="${esc(p.key)}">${esc(fullNameOf(p.key,p.nm))}</span>${metaMarks(p.key)}${p.posStr?`<span class="dim" style="font-size:12px">　${esc(p.posStr)}</span>`:''}</span>
+          <span style="display:flex;align-items:center;gap:8px;flex:none">
+            <span class="dim" style="font-size:12px">${esc(p.stat)}</span>
+            <button type="button" class="mini ghost" data-roedit="${esc(p.key)}">編集</button>
+          </span>
+        </div>
       </div>`;
-    const colHtml=(title,list)=> list.length? `<div>
-        <div class="dim" style="font-size:12px;font-weight:600;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--line)">${title}</div>
+    const secHtml=(title,list)=> list.length? `<div style="margin-top:4px">
+        <div class="dim" style="font-size:12px;font-weight:600;margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--line)">${title}</div>
         ${list.map(rowHtml).join("")}
       </div>` : "";
-    const battersCol=colHtml("打者",batters);
-    const pitchersCol=colHtml("投手",pitchers);
-    const bodyHtml = (batters.length && pitchers.length)
-      ? `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">${battersCol}${pitchersCol}</div>`
-      : (battersCol + pitchersCol);
-    return `<div class="game">
-      <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+    const bodyHtml = secHtml("投手",pitchers)+secHtml("野手",fielders);
+    const open = searching || openEnrollGroups.has(String(g.gkey)); // 絞り込み中は全部開けて探しやすくする
+    return `<div class="game${open?" open":""}" data-egroup="${esc(String(g.gkey))}">
+      <div class="ghead" tabindex="0" role="button">
         <span class="chev">▸</span>
-        <span class="opp">${esc(label)}</span>
-        <span class="dim" style="font-size:12px;margin-left:auto">${members.length}人${gradeLabel?`・現在${esc(gradeLabel)}`:''}</span>
+        <span class="opp">${esc(g.label)}</span>
+        <span class="dim" style="font-size:12px;margin-left:auto">${members.length}人${g.gradeLabel?`・現在${esc(g.gradeLabel)}`:''}</span>
       </div>
-      <div class="gbody">${gkey!=="none"? generationSummaryHtml(Number(gkey)) : ""}${gkey!=="none"?`<div style="text-align:right;margin-bottom:8px"><button type="button" class="mini ghost" data-gencard="${esc(String(gkey))}">この代を名鑑カードで保存</button></div>`:""}${bodyHtml}</div>
+      <div class="gbody">${g.gkey!=="none"? generationSummaryHtml(Number(g.gkey)) : ""}${g.gkey!=="none"?`<div style="text-align:right;margin-bottom:8px"><button type="button" class="mini ghost" data-gencard="${esc(String(g.gkey))}">この代を名鑑カードで保存</button></div>`:""}${bodyHtml}</div>
     </div>`;
   }).join("");
+  el.innerHTML = shown? html : `<div class="empty">条件に合う選手がいません。</div>`;
+  if(cntEl) cntEl.textContent = shown===total? `${total}人` : `${shown}人 / 全${total}人`;
+}
+// 選手タブの「名簿から選ぶ」。並びは名簿タブと共通（rosterGroups）
+function renderPlayerPicker(){
+  const el=$("#playerPickerList"); if(!el) return;
+  const groups=rosterGroups();
+  if(!groups.length){ el.innerHTML=`<div class="dim" style="font-size:13px">選手がまだ登録されていません。</div>`; return; }
+  const cur=currentPlayerKey();
+  el.innerHTML=groups.map(g=>{
+    const title = g.gkey==="none"? "入学年未設定" : `${g.label}${g.gradeLabel?`（現在${g.gradeLabel}）`:""}`;
+    const chips=g.members.map(([key,nm])=>
+      `<button type="button" class="chip${key===cur?' selected':''}" data-pickplayer="${esc(key)}">${esc(fullNameOf(key,nm))}${metaMarks(key)}</button>`).join(" ");
+    return `<div style="margin-bottom:8px">
+      <div class="dim" style="font-size:12px;font-weight:600;margin-bottom:4px">${esc(title)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
+    </div>`;
+  }).join("");
+}
+// ◀ ▶ で名簿順の前後の選手へ。端まで行ったら反対側へ回り込む
+function stepPlayer(delta){
+  const keys=rosterOrderedKeys();
+  if(!keys.length){ toast("選手が登録されていません",true); return; }
+  const cur=currentPlayerKey();
+  let idx=keys.indexOf(cur);
+  if(idx<0) idx = delta>0? -1 : 0;
+  let next=idx+delta;
+  if(next<0) next=keys.length-1;
+  if(next>=keys.length) next=0;
+  goToPlayer(keys[next]);
 }
 function generationSummaryStats(ey){
   // 「この代の3年間」の戦績を集計して返す（html/カードPNGで使い回す）
@@ -3828,8 +3980,19 @@ function playerGrowthHtml(key){
   if(!inner) return "";
   return `<section class="card"><h2 style="font-size:15px">成長曲線</h2><div class="note">年度ごとの打率／防御率の推移（2年以上データがある指標だけ表示。練習試合も含む）。</div>${inner}</section>`;
 }
+// playerMetaの1項目を更新する共通処理（空文字/未指定/falseなら項目ごと削除）。
+// 選手タブのメタ編集フォームと選手名簿タブのインライン編集の両方がこれを使う（同じ処理を二重に書かない）
+function updatePlayerMeta(key,patch){
+  DB.playerMeta = DB.playerMeta || {};
+  const cur={...(DB.playerMeta[key]||{})};
+  for(const [k,v] of Object.entries(patch)){
+    if(v===""||v==null||v===false) delete cur[k]; else cur[k]=v;
+  }
+  if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
+}
 function renderPlayerContent(){
   const el=$("#playerContent"); if(!el) return;
+  renderPlayerPicker();
   const key=currentPlayerKey();
   if(!key){ el.innerHTML=`<div class="empty">選手データがまだありません（入力欄で選手名を選んでください）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; $("#playerSubPosition").value=""; $("#playerFullName").value=""; if($("#playerNumber"))$("#playerNumber").value=""; if($("#playerCaptain"))$("#playerCaptain").checked=false; return; }
   DB.playerMeta = DB.playerMeta || {};
@@ -6641,7 +6804,7 @@ async function registerFresh(){
   await saveDB();
   freshPlayers=null; freshSelected=new Set(); freshYearGuess=null;
   renderFreshResult();
-  $("#freshStatus").innerHTML='<span class="chip g">'+cnt+'人を名簿に登録</span> 入学年タブで確認できます。';
+  $("#freshStatus").innerHTML='<span class="chip g">'+cnt+'人を名簿に登録</span> 上の一覧で確認できます。';
   $("#freshFiles").value="";
   render();
   toast(`${cnt}人を名簿に登録しました`);
@@ -6980,10 +7143,56 @@ async function init(){
     const el=e.target.closest(".plink"); if(!el)return;
     goToPlayer(el.dataset.key);
   });
-  // #21 世代（入学年）名鑑カードPNGの書き出し
-  $("#enrollYearList").addEventListener("click",e=>{
+  // 選手名簿タブ: 開閉・#21世代名鑑カードPNG・行のインライン編集
+  $("#enrollYearList").addEventListener("click",async e=>{
     const gc=e.target.closest("[data-gencard]");
-    if(gc){ e.stopPropagation(); drawGenerationCard(gc.dataset.gencard); }
+    if(gc){ e.stopPropagation(); drawGenerationCard(gc.dataset.gencard); return; }
+    const ed=e.target.closest("[data-roedit]");
+    if(ed){
+      e.stopPropagation();
+      const row=ed.closest(".rosterrow"); if(!row) return;
+      const open=row.querySelector(".rosteredit");
+      if(open){ open.remove(); return; }
+      row.insertAdjacentHTML("beforeend", rosterEditFormHtml(ed.dataset.roedit));
+      return;
+    }
+    const cancel=e.target.closest("[data-rocancel]");
+    if(cancel){ e.stopPropagation(); cancel.closest(".rosteredit")?.remove(); return; }
+    const sv=e.target.closest("[data-rosave]");
+    if(sv){
+      e.stopPropagation();
+      const box=sv.closest(".rosteredit"); if(!box) return;
+      const ey=box.querySelector(".re-enroll").value.trim();
+      updatePlayerMeta(sv.dataset.rosave,{
+        enrollYear: ey? parseInt(ey,10) : "",
+        fullName: box.querySelector(".re-full").value.trim(),
+        position: box.querySelector(".re-pos").value,
+        subPosition: box.querySelector(".re-sub").value,
+        number: box.querySelector(".re-num").value.trim(),
+        captain: box.querySelector(".re-cap").checked
+      });
+      await saveDB(); render(); toast("選手情報を保存しました"); // 名鑑・ベスト9・datalist等にも反映するので全体render
+      return;
+    }
+    const gh=e.target.closest(".ghead");
+    if(gh){ // 開閉状態を覚えて、保存や絞り込みで再描画しても開いたままにする
+      const box=gh.parentElement, gk=box.dataset.egroup;
+      box.classList.toggle("open");
+      if(box.classList.contains("open")) openEnrollGroups.add(gk); else openEnrollGroups.delete(gk);
+    }
+  });
+  $("#rosterFilterBtns").addEventListener("click",e=>{
+    const b=e.target.closest("[data-rfilter]"); if(!b) return;
+    rosterFilter=b.dataset.rfilter; renderEnrollYearTab();
+  });
+  $("#rosterSearch").addEventListener("input",()=>{
+    rosterSearchText=$("#rosterSearch").value; renderEnrollYearTab();
+  });
+  $("#playerPrevBtn").addEventListener("click",()=>stepPlayer(-1));
+  $("#playerNextBtn").addEventListener("click",()=>stepPlayer(1));
+  $("#playerPickerList").addEventListener("click",e=>{
+    const b=e.target.closest("[data-pickplayer]"); if(!b) return;
+    goToPlayer(b.dataset.pickplayer);
   });
   // Escで開いてるモーダルを閉じる / Enter・Spaceで開閉ヘッダをトグル
   document.addEventListener("keydown",e=>{
@@ -6993,7 +7202,9 @@ async function init(){
     }
     if((e.key==="Enter"||e.key===" ") && e.target.classList && e.target.classList.contains("ghead")){
       e.preventDefault();
-      e.target.parentElement.classList.toggle("open");
+      // 名簿タブのグループだけは開閉状態を記録するのでclick経路に統一する
+      if(e.target.closest("#enrollYearList")) e.target.click();
+      else e.target.parentElement.classList.toggle("open");
       return;
     }
     // キーボード操作でも選手/シーズン/試合への遷移リンク（plink/slink/glink）を開けるように
@@ -7013,60 +7224,39 @@ async function init(){
   });
   $("#playerSel").addEventListener("input",()=>{ if(currentPlayerKey()) renderPlayerContent(); });
   $("#playerSel").addEventListener("change",()=>{ if(currentPlayerKey()) renderPlayerContent(); });
+  // 選手タブのメタ編集フォーム（畳んである「この選手の情報を編集」）。
+  // 保存処理は updatePlayerMeta に集約（選手名簿タブのインライン編集と共通）
   $("#playerEnrollYear").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
-    DB.playerMeta = DB.playerMeta || {};
     const v=$("#playerEnrollYear").value.trim();
-    const cur={...(DB.playerMeta[key]||{})};
-    if(v) cur.enrollYear=parseInt(v,10); else delete cur.enrollYear;
-    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
-    await saveDB(); renderPlayerContent();
+    updatePlayerMeta(key,{enrollYear: v? parseInt(v,10) : ""});
+    await saveDB(); render(); // 名簿の学年グループが変わるので全体render
   });
   $("#playerPosition").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
-    DB.playerMeta = DB.playerMeta || {};
-    const v=$("#playerPosition").value;
-    const cur={...(DB.playerMeta[key]||{})};
-    if(v) cur.position=v; else delete cur.position;
-    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
-    await saveDB(); renderPlayerContent();
+    updatePlayerMeta(key,{position:$("#playerPosition").value});
+    await saveDB(); render();
   });
   $("#playerSubPosition").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
-    DB.playerMeta = DB.playerMeta || {};
-    const v=$("#playerSubPosition").value;
-    const cur={...(DB.playerMeta[key]||{})};
-    if(v) cur.subPosition=v; else delete cur.subPosition;
-    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
-    await saveDB(); renderPlayerContent();
+    updatePlayerMeta(key,{subPosition:$("#playerSubPosition").value});
+    await saveDB(); render();
   });
   $("#playerFullName").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
-    DB.playerMeta = DB.playerMeta || {};
-    const v=$("#playerFullName").value.trim();
-    const cur={...(DB.playerMeta[key]||{})};
-    if(v) cur.fullName=v; else delete cur.fullName;
-    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
+    updatePlayerMeta(key,{fullName:$("#playerFullName").value.trim()});
     await saveDB(); render(); // 名鑑・ベスト9・datalist等の表示に反映するため全体render
   });
   // #12 背番号
   $("#playerNumber").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
-    DB.playerMeta = DB.playerMeta || {};
-    const v=$("#playerNumber").value.trim();
-    const cur={...(DB.playerMeta[key]||{})};
-    if(v) cur.number=v; else delete cur.number;
-    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
+    updatePlayerMeta(key,{number:$("#playerNumber").value.trim()});
     await saveDB(); render(); // 名簿・成績表・ベスト9の表示に反映
   });
   // #12 主将
   $("#playerCaptain").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
-    DB.playerMeta = DB.playerMeta || {};
-    const on=$("#playerCaptain").checked;
-    const cur={...(DB.playerMeta[key]||{})};
-    if(on) cur.captain=true; else delete cur.captain;
-    if(Object.keys(cur).length) DB.playerMeta[key]=cur; else delete DB.playerMeta[key];
+    updatePlayerMeta(key,{captain:$("#playerCaptain").checked});
     await saveDB(); render();
   });
   $("#playerContent").addEventListener("click",async e=>{
