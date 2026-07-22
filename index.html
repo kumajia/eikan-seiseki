@@ -38,7 +38,10 @@
     margin:0;letter-spacing:.06em;}
   header.top h1 .ball{color:var(--amber);}
   .sub{color:var(--muted);font-size:13px;font-family:var(--mono);}
-  .season-pick{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  /* ヘッダ右側のツール群（学校/シーズン/選手検索）は1つのまとまりとして右寄せする。
+     個々にmargin-left:autoを付けると、複数あるときにauto同士が余白を取り合って中央に浮く */
+  .header-tools{margin-left:auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+  .season-pick{display:flex;gap:6px;align-items:center;}
   select,input,textarea,button{font-family:inherit;color:var(--ink);}
   option{background:var(--panel);color:var(--ink);}
   .entrygrid input.nm{color:var(--ink);}
@@ -183,7 +186,7 @@
   .entrygrid input.nm{width:96px;text-align:left;}
   .entrygrid td,.entrygrid th{padding:4px 5px;border-bottom:1px solid var(--line);}
   @media(max-width:560px){
-    header.top h1{font-size:22px}.season-pick{margin-left:0;width:100%}
+    header.top h1{font-size:22px}.header-tools{margin-left:0;width:100%}.season-pick{margin-left:0;width:100%}
     .kpi .val{font-size:22px}
   }
   /* PC幅ではナビをサイドバー化（display:noneのタブはグリッドに参加しないので、可視タブだけが右列に来る） */
@@ -371,6 +374,7 @@
   <header class="top">
     <h1><span class="ball">⚾</span> 栄冠ノート</h1>
     <div class="sub" id="rec">—</div>
+    <div class="header-tools">
     <div class="season-pick">
       <label class="inline" for="profileSel">学校</label>
       <select id="profileSel" title="保存データ（学校）の切り替え"></select>
@@ -387,6 +391,7 @@
       <label class="inline" for="playerSearch">選手検索</label>
       <input type="text" id="playerSearch" list="playerSearchDL" placeholder="名前で探す" autocomplete="off" style="min-width:130px">
       <datalist id="playerSearchDL"></datalist>
+    </div>
     </div>
   </header>
 
@@ -695,6 +700,7 @@
       <h2 style="font-size:15px"><span class="tag">打</span> 打者</h2>
       <div class="entrygrid"><table id="batEntry"></table></div>
       <button class="mini ghost" id="addBatRow" style="margin:8px 0">＋打者を追加</button>
+      <button type="button" class="mini ghost" id="sortBatRows" style="margin:8px 0 8px 6px" title="打順の数字どおりに行を並べ替える">打順で並べ替え</button>
 
       <h2 style="font-size:15px"><span class="tag p">投</span> 投手</h2>
       <div class="entrygrid"><table id="pitEntry"></table></div>
@@ -4831,6 +4837,20 @@ function batRow(b={}){
 function pitRow(p={}){
   return `<tr><td><input class="nm" value="${esc(p.name||'')}" placeholder="投手名"><span class="dupwarn"></span></td>${PIT_INPUT.map(k=>`<td><input ${k==='IP'?'type="text"':'type="number"'} data-k="${k}" value="${p[k]??''}" ${k==='IP'?'placeholder="9 / 6.1"':''}></td>`).join("")}<td><input type="checkbox" data-k="W" ${p.W?'checked':''}></td><td style="white-space:nowrap"><button type="button" class="mini ghost" title="1つ上へ（登板順の入れ替え）" onclick="moveEntryRow(this,-1)">↑</button><button class="mini danger" onclick="delEntryRow(this)">×</button></td></tr>`;
 }
+function sortBatRowsByOrder(){
+  // 打者行を打順の昇順に並べ替える。同じ打順は「最初からの選手→途中出場」の順。打順未入力は末尾。
+  const tb=$("#batEntry tbody"); if(!tb) return;
+  const rows=$$("tr",tb);
+  if(rows.length<2) return;
+  const keyOf=tr=>{
+    const o=$(".ord",tr), s=$(".sub",tr);
+    const v=o&&o.value.trim()!==""? parseInt(o.value,10) : NaN;
+    return [isNaN(v)? 999 : v, (s&&s.checked)?1:0];
+  };
+  const sorted=rows.map((tr,i)=>({tr,k:keyOf(tr),i}))
+    .sort((a,b)=> a.k[0]-b.k[0] || a.k[1]-b.k[1] || a.i-b.i); // 同条件は元の順を保つ（安定ソート）
+  sorted.forEach(x=>tb.appendChild(x.tr)); // appendChildは既存ノードを移動する
+}
 function moveEntryRow(btn,dir){
   const tr=btn.closest('tr');
   if(dir<0){ const prev=tr.previousElementSibling; if(prev) tr.parentNode.insertBefore(tr,prev); }
@@ -6303,6 +6323,7 @@ function fillFormFromOcr(g){
     }
     existing.forEach(tr=>{ if(!rowHasData(tr)) tr.remove(); });
     if(!$$("tr",btbody).length) btbody.insertAdjacentHTML("beforeend",batRow());
+    sortBatRowsByOrder(); // OCRの出力順に関係なく、打順1〜9の順に行を並べ替える
   }
   // 投手: 同様にマージ
   const ptbody=$("#pitEntry tbody");
@@ -6975,6 +6996,7 @@ async function init(){
   });
   $("#addBatRow").addEventListener("click",()=>$("#batEntry tbody").insertAdjacentHTML("beforeend",batRow()));
   $("#addPitRow").addEventListener("click",()=>$("#pitEntry tbody").insertAdjacentHTML("beforeend",pitRow()));
+  $("#sortBatRows").addEventListener("click",()=>{ sortBatRowsByOrder(); toast("打順どおりに並べ替えたで"); });
   $("#clearEntry").addEventListener("click",()=>{
     ocrBatTotals=null;
     ocrQueue=[]; // 仕分け待ちの試合も破棄
