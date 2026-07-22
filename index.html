@@ -295,6 +295,7 @@
   .mbadge.gold{border-color:var(--amber);color:var(--amber);}
   .mbadge.gold.legend{border-width:2px;background:rgba(245,179,1,.08);padding:2px 9px;}
   .mbadge.green{border-color:var(--green);color:var(--green);}
+  .mbadge.bad{border-color:var(--danger);color:var(--danger);} /* 敗戦側の記録（屈辱の記録）は赤枠で勲章と区別 */
   .graph-container{position:relative;margin-top:15px;}
   .graph-toggle-btn{padding:4px 12px;font-size:12px;border:1px solid var(--line2);background:var(--panel);color:var(--muted);cursor:pointer;border-radius:4px;}
   .graph-toggle-btn.active{background:var(--btn);color:var(--text);border-color:var(--btn-border);}
@@ -4774,13 +4775,7 @@ function renderGames(){
       const win=g.runsFor>g.runsAgainst, lose=g.runsFor<g.runsAgainst;
       const bt=aggBatting([g]);
       const bsum=`打 ${g.batters?.length||0}人 / ${bt.reduce((sum,r)=>sum+r.H,0)}安打`;
-      const badgesHtml = (g.badges || []).map(b => {
-        let cls = "mbadge";
-        if(b === "完全試合" || b === "ノーヒットノーラン") cls += " gold legend";
-        else if(b === "サヨナラ勝ち") cls += " gold";
-        else if(b === "完封" || b === "継投完封") cls += " green";
-        return `<span class="${cls}">${esc(b)}</span>`;
-      }).join("");
+      const badgesHtml = (g.badges || []).map(b => `<span class="${badgeClassOf(b)}">${esc(b)}</span>`).join("");
       return `<div class="game" data-id="${esc(String(g.id))}">
         <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
           <span class="chev">▸</span>
@@ -5218,6 +5213,15 @@ function gameScoreboardHtml(g, sname){
   </div>`;
 }
 
+const BAD_BADGES=["完全試合を許す","ノーヒットノーランを許す","完封負け","サヨナラ負け","コールド負け","2桁失点"];
+function badgeClassOf(b){
+  // 勲章と屈辱の記録で見た目を分ける（フラットなピルは維持し色だけ変える＝デザイン確定ルール準拠）
+  if(b==="完全試合" || b==="ノーヒットノーラン") return "mbadge gold legend";
+  if(b==="サヨナラ勝ち") return "mbadge gold";
+  if(b==="完封" || b==="継投完封") return "mbadge green";
+  if(BAD_BADGES.includes(b)) return "mbadge bad";
+  return "mbadge";
+}
 function detectGameBadges(g){
   const badges = [];
   const side = resolveSide(g) || "top";
@@ -5240,23 +5244,30 @@ function detectGameBadges(g){
   const hasShutout = win && pitCount === 1 && g.runsAgainst === 0 && !hasPerfect;
   const hasCombinedShutout = win && pitCount >= 2 && g.runsAgainst === 0;
   
-  let isWalkoff = false;
-  if(win && side === "bottom" && g.innings && g.innings.bottom && g.innings.bottom.length){
+  // サヨナラ判定は「最終回裏に決着」。勝ち(自チームが後攻)と負け(自チームが先攻)で同じ式を使う
+  const walkoffHappened = (()=>{
+    if(!(g.innings && g.innings.bottom && g.innings.bottom.length)) return false;
     const last = g.innings.bottom[g.innings.bottom.length - 1];
-    if(String(last).includes("X")){
-      isWalkoff = true;
-    } else {
-      const L = g.innings.bottom.length - 1;
-      const lastVal = n(last);
-      const topSum = g.innings.top.reduce((a, b) => a + n(b), 0);
-      const bottomSum = g.innings.bottom.reduce((a, b) => a + n(b), 0);
-      if(L >= 8 && bottomSum > topSum && (bottomSum - lastVal) <= topSum){
-        isWalkoff = true;
-      }
-    }
-  }
-  
+    if(String(last).includes("X")) return true;
+    const L = g.innings.bottom.length - 1;
+    const lastVal = n(last);
+    const topSum = (g.innings.top||[]).reduce((a, b) => a + n(b), 0);
+    const bottomSum = g.innings.bottom.reduce((a, b) => a + n(b), 0);
+    return L >= 8 && bottomSum > topSum && (bottomSum - lastVal) <= topSum;
+  })();
+  const isWalkoff = win && side === "bottom" && walkoffHappened;        // 自チームが後攻でサヨナラ勝ち
+  const isWalkoffLoss = !win && side === "top" && walkoffHappened;      // 自チームが先攻＝相手にサヨナラで decided
+
   const isCold = g.cold || (g.innings && g.innings.top && g.innings.top.length < 9);
+  // 屈辱の記録（敗戦側）: 相手投手の内容は記録していないので、自チームの打撃結果から判定する
+  const lose = g.runsFor < g.runsAgainst;
+  const teamAB = (g.batters||[]).reduce((a,b)=>a+n(b.AB),0);
+  const teamH  = (g.batters||[]).reduce((a,b)=>a+n(b.H),0);
+  const teamBB = (g.batters||[]).reduce((a,b)=>a+n(b.BB),0);
+  const hasBatData = teamAB > 0; // 打撃を1行も入れていない試合で誤判定しないための番人
+  const shutoutLoss = lose && hasBatData && n(g.runsFor)===0;
+  const noHitLoss   = lose && hasBatData && teamH===0;
+  const perfectLoss = noHitLoss && teamBB===0 && (g.batters||[]).every(b=>!n(b.SH)&&!n(b.E));
   
   if(hasPerfect) badges.push("完全試合");
   if(hasNoHitter) badges.push("ノーヒットノーラン");
@@ -5265,6 +5276,13 @@ function detectGameBadges(g){
   if(isWalkoff) badges.push("サヨナラ勝ち");
   if(win && isCold) badges.push("コールド勝ち");
   if(g.runsFor >= 10) badges.push("2桁得点");
+  // ここから屈辱の記録（敗戦側）。上位のものだけ付けて重複させない
+  if(perfectLoss) badges.push("完全試合を許す");
+  else if(noHitLoss) badges.push("ノーヒットノーランを許す");
+  else if(shutoutLoss) badges.push("完封負け");
+  if(isWalkoffLoss) badges.push("サヨナラ負け");
+  if(lose && isCold) badges.push("コールド負け");
+  if(n(g.runsAgainst) >= 10) badges.push("2桁失点");
   
   let hit3Plus = 0;
   if(g.batters){
@@ -5774,7 +5792,15 @@ function updateFileHint(){
   const imgs=files.filter(f=>f.type.startsWith("image/")).length;
   const vids=files.filter(f=>f.type.startsWith("video/")).length;
   const counts=[imgs?`画像${imgs}枚`:null, vids?`動画${vids}本`:null].filter(Boolean).join("＋");
-  st.innerHTML = `<span class="chip g">${counts||files.length+"ファイル"} 選択中</span> ${files.map(f=>esc(f.name)).join("、")} <button type="button" class="mini ghost" id="clearShotFiles" style="margin-left:6px">選択解除</button>`;
+  st.innerHTML = `<span class="chip g">${counts||files.length+"ファイル"} 選択中</span> ${files.map(f=>esc(f.name)).join("、")} <button type="button" class="mini ghost" id="clearShotFiles" style="margin-left:6px">選択解除</button>`
+    + (ocrQueue.length? `<div class="hint" style="margin-top:4px">仕分け済みの残り ${ocrQueue.length} 試合が待機中です（保存すると自動で次の解析が始まります） <button type="button" class="mini ghost" id="clearOcrQueueBtn">待機を取り消す</button></div>` : "");
+}
+function clearOcrQueue(notify){
+  // 手動で画像を入れ直したときなど、待機中の自動解析が勝手に走らないように破棄する
+  if(!ocrQueue.length) return;
+  ocrQueue=[];
+  if(notify) toast("待機中だった自動解析を取り消しました");
+  updateFileHint();
 }
 function clearShotFiles(){
   $("#shotFiles").value="";
@@ -6686,19 +6712,22 @@ function fillSeasons(){
     if(!groups.has(y)) groups.set(y,[]);
     groups.get(y).push(s);
   }
-  const years=[...groups.keys()].sort((a,b)=>{
-    if(a==="その他") return 1; if(b==="その他") return -1;
-    return Number(b)-Number(a); // 新しい年が上
-  });
+  // 完全に新しい順（年も年内も新しいものが上＝下へ行くほど過去。下から読むと時系列）
+  const years=[...groups.keys()].filter(y=>y!=="その他").sort((a,b)=>Number(b)-Number(a));
+  const hasOther=groups.has("その他");
   const curYear=(String(DB.current).match(/^(\d{4})/)||[])[1]||"その他";
-  let visible=seasonSelExpanded? years : years.slice(0,3); // 直近3年＝現役世代ぶん
-  if(!visible.includes(curYear)) visible=visible.concat(curYear); // 選択中シーズンの年は必ず出す（selectedが消えると誤選択になる）
+  let visible=seasonSelExpanded? years.slice() : years.slice(0,3); // 直近3年＝現役世代ぶん（先頭3件が新しい年）
+  if(curYear!=="その他" && groups.has(curYear) && !visible.includes(curYear)) visible.push(curYear); // 選択中シーズンの年は必ず出す（selectedが消えると誤選択になる）
+  visible.sort((a,b)=>Number(b)-Number(a));
   const hidden=years.filter(y=>!visible.includes(y)).reduce((a,y)=>a+groups.get(y).length,0);
-  sel.innerHTML=years.filter(y=>visible.includes(y)).map(y=>
-    `<optgroup label="${esc(y==="その他"?"その他":y+"年")}">`+
-    groups.get(y).map(s=>`<option value="${esc(s)}" ${s===DB.current?'selected':''}>${esc(s)}</option>`).join("")+
-    `</optgroup>`
-  ).join("")+(hidden?`<option value="__moreSeasons__">過去のシーズンを表示（${hidden}件）…</option>`:"");
+  const optgrp=y=>`<optgroup label="${esc(y==="その他"?"その他":y+"年")}">`+
+    // 年内も新しい順にするため、登録順（春→夏→秋）を反転させる
+    groups.get(y).slice().reverse().map(s=>`<option value="${esc(s)}" ${s===DB.current?'selected':''}>${esc(s)}</option>`).join("")+
+    `</optgroup>`;
+  sel.innerHTML=
+    visible.map(optgrp).join("")
+    + (hasOther? optgrp("その他") : "")
+    + (hidden?`<option value="__moreSeasons__">＋ 過去のシーズンを表示（${hidden}件）…</option>`:""); // 古い年は下に足されるので選択肢も末尾
 }
 
 /* ---------- シーズン作成モーダル ---------- */
@@ -7179,8 +7208,11 @@ async function init(){
   $("#batEntry").addEventListener("input",e=>{ if(ocrBatTotals)validateEntry(); if(e.target.classList.contains("nm"))checkNameDup(e.target); });
   $("#pitEntry").addEventListener("input",e=>{ if(e.target.classList.contains("nm"))checkNameDup(e.target); });
   $("#gDate").addEventListener("input",()=>{ delete $("#gDate").dataset.auto; checkAllNameDups(); }); // 手で触ったら自動プリセット扱いを解除
-  $("#shotFiles").addEventListener("change",updateFileHint);
-  $("#shotFileHint").addEventListener("click",e=>{ if(e.target.closest("#clearShotFiles")) clearShotFiles(); });
+  $("#shotFiles").addEventListener("change",()=>{ clearOcrQueue(true); updateFileHint(); }); // 自分で選び直した時も待機を解除
+  $("#shotFileHint").addEventListener("click",e=>{
+    if(e.target.closest("#clearShotFiles")) clearShotFiles();
+    else if(e.target.closest("#clearOcrQueueBtn")) clearOcrQueue(true);
+  });
   $("#ocrStatus").addEventListener("click",e=>{
     if(!e.target.closest("#ocrMatchEdit")) return;
     const m=window.__ocrMatch; if(!m) return;
@@ -7219,7 +7251,7 @@ async function init(){
   const dz=$("#dropZone");
   ["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();dz.classList.add("drag");}));
   ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();dz.classList.remove("drag");}));
-  dz.addEventListener("drop",e=>{ if(e.dataTransfer?.files?.length) setShotFiles(e.dataTransfer.files); });
+  dz.addEventListener("drop",e=>{ if(e.dataTransfer?.files?.length){ clearOcrQueue(true); setShotFiles(e.dataTransfer.files); } });
   // ページ全体でドロップ時にブラウザが画像を開いてしまわんようガード
   window.addEventListener("dragover",e=>e.preventDefault());
   window.addEventListener("drop",e=>e.preventDefault());
@@ -7228,6 +7260,7 @@ async function init(){
     const files=[...(e.clipboardData?.files||[])].filter(f=>f.type.startsWith("image/")||f.type.startsWith("video/"));
     if(!files.length) return;
     e.preventDefault();
+    clearOcrQueue(true); // 手で貼った画像が、待機中キューの自動解析に上書きされるのを防ぐ
     setShotFiles([...$("#shotFiles").files, ...files]);
     if($("#tab-add").style.display==="none") switchTab("add"); // 既にaddタブなら履歴を積まない
     toast(`画像${files.length}枚を貼り付けました`);
