@@ -6098,9 +6098,16 @@ async function fpScoreFrames(){
       const img=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=f.thumb; });
       cx.drawImage(img,0,0,W,H);
       data=cx.getImageData(0,0,W,H).data;
-    }catch(e){ f.sharp=0; f.diff=1; prev=null; continue; }
+    }catch(e){ f.sharp=0; f.diff=1; f.green=0; prev=null; continue; }
     const gray=new Float32Array(W*H);
-    for(let p=0,q=0;q<gray.length;p+=4,q++) gray[q]=(data[p]*0.299+data[p+1]*0.587+data[p+2]*0.114)/255;
+    let greenish=0;
+    for(let p=0,q=0;q<gray.length;p+=4,q++){
+      const r=data[p], g=data[p+1], b=data[p+2];
+      gray[q]=(r*0.299+g*0.587+b*0.114)/255;
+      // グラウンドの芝（緑優勢）と土（赤茶＝赤>緑>青で彩度あり）を試合画面の指標として数える
+      if((g>r*1.12 && g>b*1.12) || (r>b*1.35 && r>g*1.08 && r>70)) greenish++;
+    }
+    f.green=greenish/gray.length;
     let s=0,cnt=0;
     for(let y=0;y<H;y++) for(let x=1;x<W;x++){ s+=Math.abs(gray[y*W+x]-gray[y*W+x-1]); cnt++; }
     f.sharp=cnt? s/cnt : 0;
@@ -6108,23 +6115,36 @@ async function fpScoreFrames(){
     else f.diff=1;
     prev=gray;
   }
-  // しきい値はこの動画の分布から決める（画質や解像度に依存しないように相対で判断）
   const sharps=fpFrames.map(f=>f.sharp).slice().sort((a,b)=>a-b);
   const med=sharps.length? sharps[Math.floor(sharps.length/2)] : 0;
-  const blurCut=med*0.6, sameCut=0.012;
+  const blurCut=med*0.55, sameCut=0.012;
   fpFrames.forEach(f=>{ f.isBlur=f.sharp<blurCut; f.isSame=f.diff<sameCut; });
 }
+const FP_MAX_REC=8; // おすすめの上限（API消費を抑えるため）
 function fpPickRecommended(frames){
-  // 純粋関数（テスト用に切り出し）: 「前コマと十分違う」かつ「ボケてない」コマを優先し、
-  // 足りなければ鮮明な順に補充して最低FP_MIN_REC枚（総数がそれ未満なら全部）
+  // 純粋関数（テスト用に切り出し）。狙いは「成績画面のコマ」を拾い「試合中の映像」を捨てること。
+  // 手がかり: 成績画面は見るために手が止まる＝同じ絵が数コマ続く／試合映像は毎コマ絵が変わる。
+  // さらに芝と土（green指標）が多いコマは試合画面とみなして減点する。
   const arr=frames||[];
-  const idx=arr.map((_,i)=>i);
-  const primarySet=new Set(idx.filter(i=>!arr[i].isSame && !arr[i].isBlur));
-  const want=Math.max(FP_MIN_REC, primarySet.size);
-  const rest=idx.filter(i=>!primarySet.has(i)).sort((a,b)=>(arr[b].sharp||0)-(arr[a].sharp||0));
-  const out=[...primarySet];
-  for(const i of rest){ if(out.length>=want) break; out.push(i); }
-  return out.sort((a,b)=>a-b);
+  if(arr.length<=FP_MIN_REC) return arr.map((_,i)=>i);
+  // 連続する「似たコマ」を静止区間としてまとめる
+  const runs=[]; let cur=[0];
+  for(let i=1;i<arr.length;i++){
+    if(arr[i].isSame) cur.push(i); else { runs.push(cur); cur=[i]; }
+  }
+  runs.push(cur);
+  // 各区間の代表は一番鮮明なコマ。スコア＝静止の長さ×UIらしさ（芝・土が少ないほど高い）
+  const cands=runs.map(run=>{
+    const best=run.reduce((a,b)=> (arr[b].sharp||0)>(arr[a].sharp||0)? b : a, run[0]);
+    const green=run.reduce((s,i)=>s+(arr[i].green||0),0)/run.length;
+    const uiness=Math.max(0,1-green*1.8); // 芝・土が5割を超えるとほぼ0点＝試合画面
+    return {i:best, len:run.length, green, score:run.length*uiness};
+  });
+  cands.sort((a,b)=> b.score-a.score || (arr[b.i].sharp||0)-(arr[a.i].sharp||0));
+  // 「静止していてUIらしい」区間の数だけ推奨（可変）。最低FP_MIN_REC枚・上限FP_MAX_REC枚
+  const solid=cands.filter(c=>c.len>=2 && c.green<0.35).length;
+  const want=Math.min(FP_MAX_REC, Math.max(FP_MIN_REC, solid), arr.length);
+  return cands.slice(0,want).map(c=>c.i).sort((a,b)=>a-b);
 }
 function fpRecommended(){ return fpPickRecommended(fpFrames); }
 function renderFpGrid(){
@@ -6132,9 +6152,10 @@ function renderFpGrid(){
   const rec=new Set(fpRecommended());
   g.innerHTML=fpFrames.map((f,i)=>{
     let tag="";
-    if(rec.has(i)) tag=`<span class="fptag rec">おすすめ${f.isBlur?"":f.isSame?"":" 別画面"}</span>`;
+    if(rec.has(i)) tag=`<span class="fptag rec">おすすめ</span>`;
+    else if((f.green||0)>=0.35) tag=`<span class="fptag">試合中</span>`;
     else if(f.isBlur) tag=`<span class="fptag">ブレ</span>`;
-    else if(f.isSame) tag=`<span class="fptag">似てる</span>`;
+    else if(f.isSame) tag=`<span class="fptag">重複</span>`;
     return `<div class="fpth${fpSelected.has(i)?" sel":""}" data-i="${i}"><img src="${f.thumb}" alt="${fpFmtTime(f.t)}">${tag}<span class="fpts">${fpFmtTime(f.t)}</span><span class="fpchk"></span></div>`;
   }).join("");
   const btn=$("#fpPickRec"); if(btn) btn.textContent=`おすすめ${rec.size}枚を選択`;
