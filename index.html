@@ -168,6 +168,9 @@
   .fpts{position:absolute;bottom:3px;left:4px;font-size:10px;color:var(--ink);background:rgba(4,10,18,.65);padding:1px 5px;border-radius:4px;}
   .fpchk{position:absolute;top:4px;right:4px;width:15px;height:15px;border-radius:3px;background:var(--amber);display:none;}
   .fpth.sel .fpchk{display:block;}
+  .fptag{position:absolute;top:4px;left:4px;font-size:10px;padding:1px 6px;border-radius:4px;
+    background:rgba(4,10,18,.72);border:1px solid var(--line2);color:var(--muted);}
+  .fptag.rec{border-color:var(--amber);color:var(--amber);}
   .chipList{display:flex;flex-wrap:wrap;gap:8px;}
   .chip{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:999px;
     padding:9px 16px;font-size:14px;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:7px;}
@@ -418,7 +421,7 @@
   <!-- SUMMARY -->
   <div id="tab-summary">
     <div style="margin-bottom:10px"><label class="inline" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
-      <input type="checkbox" id="detailToggle"> 全項目表示（OFFやと主要な数字だけ）</label></div>
+      <input type="checkbox" id="detailToggle"> 全項目表示（OFFのときは主要な数字だけ）</label></div>
     <div id="backupHint"></div>
     <div id="todayInHistory"></div>
     <section class="card">
@@ -447,7 +450,7 @@
   <div id="tab-period" style="display:none">
     <section class="card">
       <h2>期間集計</h2>
-      <div class="note">練習試合も含めて集計するで。</div>
+      <div class="note">練習試合も含めて集計します。</div>
       <div class="row" style="margin-bottom:6px">
         <div class="field"><label>集計単位</label>
           <select id="periodBlockSel">
@@ -470,7 +473,7 @@
       <h2>選手個別</h2>
       <div class="note">通算は練習試合も含む（マイルストーンは公式戦のみ）。</div>
       <div class="row" style="margin-bottom:6px">
-        <div class="field" style="flex:1;min-width:200px"><label>選手（入力すると絞り込めるで）</label>
+        <div class="field" style="flex:1;min-width:200px"><label>選手（入力すると絞り込めます）</label>
           <input type="text" id="playerSel" list="playerListDL" placeholder="選手名を入力/選択" autocomplete="off">
           <datalist id="playerListDL"></datalist>
         </div>
@@ -509,7 +512,7 @@
     <div id="dupHints"></div>
     <section class="card">
       <h2>新入生スクショから登録 <span class="tag p">AI</span></h2>
-      <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録するで。登録した選手は入学年タブと選手一覧に載る（試合に出るまで通算成績には出えへん）。APIキーは「試合を追加」タブで設定したのを使う。</div>
+      <div class="note">入学式・新入生一覧のスクショから選手名とポジションを読み取って名簿に登録します。登録した選手は入学年タブと選手一覧に表示されます（試合に出るまで通算成績には表示されません）。APIキーは「試合を追加」タブで設定したものを使います。</div>
       <div class="row" style="align-items:center">
         <div id="freshDropZone" class="dropzone">
           <input type="file" id="freshFiles" accept="image/*" multiple>
@@ -522,7 +525,7 @@
     </section>
     <section class="card">
       <h2>選手比較</h2>
-      <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付くで。</div>
+      <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付きます。</div>
       <div class="row" style="align-items:end">
         <div class="field" style="flex:1;min-width:150px"><label>選手A</label>
           <input type="text" id="cmpA" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
@@ -577,7 +580,7 @@
   <div id="tab-enrollYear" style="display:none">
     <section class="card">
       <h2>入学年</h2>
-      <div class="note">タップで展開。入学年ごとに選手をまとめて表示するで。選手名タップで個別ページへ。</div>
+      <div class="note">タップで展開。入学年ごとに選手をまとめて表示します。選手名タップで個別ページへ。</div>
       <div id="enrollYearList"></div>
     </section>
   </div>
@@ -618,7 +621,7 @@
   <div id="tab-add" style="display:none">
     <section class="card" style="border-color:var(--amber)">
       <h2>スクショから自動入力 <span class="tag p">AI</span></h2>
-      <div class="note">野手記録・投手記録・スコアボードのスクショを選んで「解析」。AIが読み取って下のフォームに自動入力＋合計照合するで。確認して問題なければ「この試合を保存」。</div>
+      <div class="note">野手記録・投手記録・スコアボードのスクショを選んで「解析」。AIが読み取って下のフォームに自動入力し、合計を照合します。確認して問題なければ「この試合を保存」。</div>
       <div class="row" style="margin-bottom:10px">
         <div class="field" style="flex:1;min-width:200px"><label>APIキー（端末にのみ保存。解析時にURLの一部としてGoogleへ直接送信されるで＝ブラウザの履歴や通信ログにも残るので注意）</label>
           <input type="password" id="gemKey" placeholder="AIza... / sk-or-..." autocomplete="off"></div>
@@ -734,7 +737,7 @@
       </div>
 
       <div id="gpanel-days">
-        <div class="gnote">自分用のメモ書き。年間スケジュールは6月始まり基準で、日付は目安として使ってな。</div>
+        <div class="gnote">自分用のメモ書き。年間スケジュールは6月始まり基準で、日付は目安としてご利用ください。</div>
 
         <div class="gcard white"><div class="gc-top"><div class="gc-date">6/11<br>〜6/17</div><div class="gc-main"><span class="gc-tag">白パネル・低確率</span><span class="gc-title">試験前イベント</span></div></div>
           <div class="gc-body">選べるのは「練習こそ大事」の一択。選ぶと全員の練習効率が中くらい上がるけど、対象になった選手は信頼度が少し下がり、1〜3人は学力も少し落ちる。</div></div>
@@ -1042,7 +1045,7 @@
   <div id="tab-data" style="display:none">
     <section class="card">
       <h2>データ健康診断</h2>
-      <div class="note">OCR取り込みの取りこぼしチェック。未入力の項目を洗い出すで。試合はタップで試合ログへ、選手はタップで選手ページへ飛べる（練習試合も含む）。</div>
+      <div class="note">OCR取り込みの取りこぼしチェック。未入力の項目を洗い出します。試合はタップで試合ログへ、選手はタップで選手ページへ飛べる（練習試合も含む）。</div>
       <div id="healthContent"></div>
     </section>
     <section class="card">
@@ -1064,7 +1067,7 @@
     </section>
     <section class="card">
       <h2>マージ取り込み（足りない試合だけ追加）</h2>
-      <div class="note">別端末（スマホ等）で書き出したJSONから、この端末に無い試合だけを追加するで。既存データは消えへん。無いシーズンは新規作成、選手の入学年/ポジションは未設定の項目だけ補完する。</div>
+      <div class="note">別端末（スマホ等）で書き出したJSONから、この端末に無い試合だけを追加します。既存データは消えません。無いシーズンは新規作成し、選手の入学年/ポジションは未設定の項目だけ補完します。</div>
       <div class="toolbar">
         <label class="ghost" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--line2);border-radius:8px;cursor:pointer">
           ファイルからマージ<input type="file" id="mergeFile" accept=".json,.txt,application/json,text/plain" style="display:none"></label>
@@ -1080,7 +1083,7 @@
     </section>
     <section class="card">
       <h2>自動スナップショット</h2>
-      <div class="note">1日1回、保存のついでにIndexedDBへ丸ごと控えを取ってるで（直近3日ぶん）。誤削除・誤マージからの復元用。localStorageとは別の場所に保存されるから、片方が飛んでも生き残る。</div>
+      <div class="note">1日1回、保存のついでにIndexedDBへ丸ごと控えを取っています（直近3日ぶん）。誤削除・誤マージからの復元用です。localStorageとは別の場所に保存されるため、片方が失われても残ります。</div>
       <div class="row" style="align-items:center">
         <select id="snapSel" style="min-width:160px"></select>
         <button class="ghost" id="snapRefresh">一覧を更新</button>
@@ -1236,12 +1239,15 @@
       <h2 style="font-family:var(--mincho);font-size:17px;margin:0">動画からコマを選ぶ</h2>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="hint" id="fpCount">選択 0 枚</span>
+        <button class="mini ghost" id="fpPickRec">おすすめを選択</button>
+        <button class="mini ghost" id="fpPickAll">全選択</button>
+        <button class="mini ghost" id="fpPickNone">全解除</button>
         <button class="ghost" id="fpCancel">キャンセル</button>
         <button class="primary" id="fpGo">選んだコマで解析</button>
       </div>
     </div>
     <div class="note" id="fpMeta" style="margin:0 0 8px"></div>
-    <div class="note" style="margin:0 0 10px">成績画面（野手記録・投手記録・打席結果）が鮮明に写ってるコマをタップで選んでな。代打がいると打撃が1行ずれて読めることがあるから、野手記録は違うタイミングのコマを2〜3枚選んどくと保険になる。ブレ・スクロール中のコマは避ける。</div>
+    <div class="note" style="margin:0 0 10px">鮮明さと前のコマとの違いから「おすすめ」を自動で選んでいます（最低4枚）。選択はタップで自由に変更できます。代打や守備固めは終盤の一部のコマにしか写らないことがあるので、必要な場面はそのコマを手動で追加してください。</div>
     <div id="fpGrid" style="overflow-y:auto;flex:1 1 auto;min-height:0;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;align-items:flex-start"></div>
   </div>
 </div>
@@ -1294,7 +1300,7 @@ async function saveDB(){
   catch(e){
     // 両方の保存経路が失敗した場合のみ、確実に気づけるようブロッキングで知らせる
     // (toastは直後に上書きされて見えなくなることがあるため使わない)
-    if(!ok) alert("⚠️ 保存に失敗したで。端末の空き容量を確認してな。\n(エラー: "+(e&&e.message||e)+")");
+    if(!ok) alert("⚠️ 保存に失敗しました。端末の空き容量を確認してください。\n(エラー: "+(e&&e.message||e)+")");
   }
   try{ idbSnapshotSave(); }catch(e){} // 日次の自動スナップショット（失敗してもsaveDBには影響させない）
   return ok;
@@ -1330,7 +1336,7 @@ function fillProfiles(){
 }
 async function switchProfile(id){
   if(id===curProfileId) return;
-  if(!PROFILES.some(p=>p.id===id)){ toast("そのプロファイルは無いで",true); return; }
+  if(!PROFILES.some(p=>p.id===id)){ toast("そのプロファイルはありません",true); return; }
   await saveDB(); // 今のプロファイルのDBを確定保存してから読み替える
   const prev=curProfileId;
   curProfileId=id; // loadDBが新プロファイルのキーを参照するよう一時的に切替
@@ -1338,7 +1344,7 @@ async function switchProfile(id){
   if(loaded.corrupted){
     // 読めない場合はデータを壊さないため、切替を確定させず元のプロファイルへ戻す
     curProfileId=prev; fillProfiles();
-    toast("このプロファイルのデータが読めへんかった。元に戻すで",true);
+    toast("このプロファイルのデータを読み取れませんでした。元に戻します",true);
     return;
   }
   await saveProfiles(); // 読み込みに成功してから現在プロファイルidを永続化
@@ -1348,10 +1354,10 @@ async function switchProfile(id){
   await saveDB();
   {const v=$("#periodAnchorInput"); if(v){const t=v.value.trim(); periodAnchor=t?parseInt(t,10):null;}}
   fillSeasons(); fillProfiles(); render();
-  toast(`「${(PROFILES.find(p=>p.id===id)||{}).name||id}」に切り替えたで`);
+  toast(`「${(PROFILES.find(p=>p.id===id)||{}).name||id}」に切り替えました`);
 }
 async function createProfile(name){
-  const nm=String(name||"").trim(); if(!nm){ toast("学校名を入れてな",true); return; }
+  const nm=String(name||"").trim(); if(!nm){ toast("学校名を入力してください",true); return; }
   const id=newProfileId();
   PROFILES.push({id,name:nm});
   await saveProfiles();
@@ -1429,7 +1435,7 @@ function healthCheckData(){
 function renderHealthCheck(){
   const el=$("#healthContent"); if(!el) return;
   const h=healthCheckData();
-  if(!h.total){ el.innerHTML=`<div class="empty">試合データが入ると診断するで。</div>`; return; }
+  if(!h.total){ el.innerHTML=`<div class="empty">試合データが入ると診断します。</div>`; return; }
   const gameLink=x=>`<span class="glink" role="link" tabindex="0" data-gid="${esc(String(x.g.id))}">${esc(x.g.date||"日付なし")}${x.g.opponent?" "+esc(x.g.opponent):""}</span>`;
   const playerLink=([k,nm])=>plinkHtml(k,nm);
   const cap=(arr,rf,limit=40)=>{
@@ -1463,10 +1469,10 @@ function renderBackupHint(){
   const need= le? diff>=10 : total>=5;
   if(!need || total===0){ el.innerHTML=""; return; }
   el.innerHTML=`<div class="valban ng" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-    <span>${le?`前回のバックアップから${diff}試合ぶん未保存`:`まだ一度もバックアップを書き出してへん（${total}試合）`}やで。データタブから書き出しとくのがおすすめ。</span>
+    <span>${le?`前回のバックアップから${diff}試合ぶん未保存です`:`まだ一度もバックアップを書き出していません（${total}試合）`}。データタブから書き出しておくのがおすすめです。</span>
     <span style="margin-left:auto;display:flex;gap:8px">
       <button type="button" class="mini primary" id="backupNow">今すぐ書き出す</button>
-      <button type="button" class="mini ghost" id="backupLater">今回はええわ</button>
+      <button type="button" class="mini ghost" id="backupLater">あとで</button>
     </span></div>`;
 }
 
@@ -1849,7 +1855,7 @@ function exportCsvAll(){
   downloadCsv(`eikan-games-${d}.csv`, csv.games);
   setTimeout(()=>downloadCsv(`eikan-batting-${d}.csv`, csv.batting), 250);
   setTimeout(()=>downloadCsv(`eikan-pitching-${d}.csv`, csv.pitching), 500);
-  toast("CSV3ファイルを書き出したで");
+  toast("CSV3ファイルを書き出しました");
 }
 
 /* ---------- OCR取り込み履歴（#27・別localStorageキー・試合データは変えない） ---------- */
@@ -1870,7 +1876,7 @@ function ocrLogAdd(kind, detail){
 function renderOcrLog(){
   const el=$("#ocrLog"); if(!el) return;
   const a=ocrLogGet();
-  if(!a.length){ el.innerHTML=`<div class="dim" style="font-size:13px">まだ取り込み履歴はないで。スクショから解析すると記録されるで（最新${OCR_LOG_MAX}件）。</div>`; return; }
+  if(!a.length){ el.innerHTML=`<div class="dim" style="font-size:13px">まだ取り込み履歴はありません。スクショから解析すると記録されます（最新${OCR_LOG_MAX}件）。</div>`; return; }
   el.innerHTML=a.map(e=>{
     const t=new Date(e.at);
     const p2=x=>String(x).padStart(2,"0");
@@ -2703,7 +2709,7 @@ function renderInningsAnalysis(){
   if(!closeK || !innEl || !firstEl) return;
   const d=inningsAnalysisData();
   if(!d.total){
-    closeK.innerHTML=""; innEl.innerHTML=`<div class="empty">試合データが入ると分析するで。</div>`; firstEl.innerHTML=""; return;
+    closeK.innerHTML=""; innEl.innerHTML=`<div class="empty">試合データが入ると分析します。</div>`; firstEl.innerHTML=""; return;
   }
   // #4 接戦耐性
   closeK.innerHTML=
@@ -2711,7 +2717,7 @@ function renderInningsAnalysis(){
     kpi("2点差以内", recStr(d.close2), "", `勝率 ${recWinRate(d.close2)}`);
   // #2 イニング別得点分布
   if(!d.usedInnGames){
-    innEl.innerHTML=`<div class="dim" style="font-size:13px">イニング入力のある試合がまだ無いで。スコアボードを取り込むと出るで。</div>`;
+    innEl.innerHTML=`<div class="dim" style="font-size:13px">イニング入力のある試合がまだありません。スコアボードを取り込むと表示されます。</div>`;
   }else{
     const cells=[];
     for(let i=1;i<=9;i++) cells.push({label:`${i}回`, s:d.scored[i], a:d.allowed[i]});
@@ -2736,7 +2742,7 @@ function renderInningsAnalysis(){
   }
   // #5 先制ゲーム分析
   if(!d.firstCounted){
-    firstEl.innerHTML=`<div class="dim" style="font-size:13px">イニング入力のある試合がまだ無いで。</div>`;
+    firstEl.innerHTML=`<div class="dim" style="font-size:13px">イニング入力のある試合がまだありません。</div>`;
   }else{
     const rowHtml=(label,o)=>`<tr><td style="text-align:left">${esc(label)}</td><td class="num">${o.W}</td><td class="num">${o.L}</td><td class="num">${o.D}</td><td class="num" style="color:var(--amber)">${recWinRate(o)}</td></tr>`;
     firstEl.innerHTML=`<div class="scroll"><table style="min-width:auto">
@@ -2792,7 +2798,7 @@ function renderComeback(){
   const el=$("#managerComeback"); if(!el) return;
   const d=comebackGames();
   if(!d.wins.length && !d.losses.length && !d.walkoffs.length){
-    el.innerHTML=`<div class="dim" style="font-size:13px">イニング入力のある試合が増えると逆転劇が出るで。</div>`; return;
+    el.innerHTML=`<div class="dim" style="font-size:13px">イニング入力のある試合が増えると逆転劇が表示されます。</div>`; return;
   }
   const block=(title,arr,color)=>arr.length?
     `<div style="margin-bottom:10px"><div style="font-weight:600;font-size:14px;margin-bottom:4px;color:${color}">${esc(title)} <span class="num">${arr.length}</span></div>${arr.slice(0,10).map(gameRefRowHtml).join("")}${arr.length>10?`<div class="dim" style="font-size:12px;padding:4px 2px">他${arr.length-10}試合</div>`:""}</div>`
@@ -2840,7 +2846,7 @@ function tourneyStats(){
 function renderTourneyStats(){
   const el=$("#managerTourney"); if(!el) return;
   const rows=tourneyStats();
-  if(!rows.length){ el.innerHTML=`<div class="dim" style="font-size:13px">試合が入ると大会別に集計するで。</div>`; return; }
+  if(!rows.length){ el.innerHTML=`<div class="dim" style="font-size:13px">試合が入ると大会別に集計します。</div>`; return; }
   const head=`<thead><tr><th style="text-align:left">大会</th><th>試合</th><th>勝敗</th><th>勝率</th><th>得失点</th></tr></thead>`;
   const body=rows.map(r=>{
     const gp=r.W+r.L; const wr=gp? avg3(r.W/gp):"-";
@@ -2889,7 +2895,7 @@ function relayAnalysis(){
 function renderRelayAnalysis(){
   const el=$("#managerRelay"); if(!el) return;
   const d=relayAnalysis();
-  if(!d.pairs.length && !d.backToBack.length){ el.innerHTML=`<div class="dim" style="font-size:13px">投手が2人以上出た試合が増えると継投傾向が出るで。</div>`; return; }
+  if(!d.pairs.length && !d.backToBack.length){ el.innerHTML=`<div class="dim" style="font-size:13px">投手が2人以上出た試合が増えると継投傾向が表示されます。</div>`; return; }
   let html="";
   if(d.pairs.length){
     html+=`<div style="font-weight:600;font-size:14px;margin-bottom:4px">継投ペア頻度</div>`;
@@ -2928,7 +2934,7 @@ function managerMilestoneData(){
 function renderManagerMilestones(){
   const el=$("#managerMilestones"); if(!el) return;
   const d=managerMilestoneData();
-  if(!d.games){ el.innerHTML=`<div class="dim" style="font-size:13px">公式戦が増えると節目が出るで。</div>`; return; }
+  if(!d.games){ el.innerHTML=`<div class="dim" style="font-size:13px">公式戦が増えると節目が表示されます。</div>`; return; }
   const rows=Object.entries(MANAGER_MILESTONES).map(([k,def])=>{
     const cur=d[k];
     const next=def.arr.find(t=>t>cur);
@@ -2976,7 +2982,7 @@ function schoolHistory(){
 function renderSchoolHistory(){
   const el=$("#schoolHistory"); if(!el) return;
   const ev=schoolHistory();
-  if(!ev.length){ el.innerHTML=`<div class="dim" style="font-size:13px">校史の節目（初勝利・甲子園出場・全国制覇）が刻まれると年表になるで。</div>`; return; }
+  if(!ev.length){ el.innerHTML=`<div class="dim" style="font-size:13px">校史の節目（初勝利・甲子園出場・全国制覇）が刻まれると年表になります。</div>`; return; }
   el.innerHTML=ev.map(e=>`<div style="display:flex;align-items:center;gap:10px;font-size:13px;padding:5px 2px;border-bottom:1px solid var(--line)">
     <span class="glink num" role="link" tabindex="0" data-gid="${esc(String(e.gid))}" style="width:84px">${esc(e.date)}</span>
     <span style="flex:1;min-width:0;${e.champ?"color:var(--amber);font-weight:700":""}">${esc(e.label)}</span>
@@ -3010,7 +3016,7 @@ function periodYearOf(g){
 function renderPeriod(){
   const el=$("#periodContent"); if(!el) return;
   const all=allGamesFlat();
-  if(!all.length){ el.innerHTML=`<div class="empty">集計できる試合データがまだないで。</div>`; return; }
+  if(!all.length){ el.innerHTML=`<div class="empty">集計できる試合データがまだありません。</div>`; return; }
   const years=all.map(periodYearOf).filter(y=>y!=null);
   const minY = years.length? Math.min(...years) : null;
   const anchor = (periodAnchor!=null && !isNaN(periodAnchor)) ? periodAnchor : minY;
@@ -3139,7 +3145,7 @@ function openGameById(id,mode){
     if(mode==="replace") history.replaceState({tab:"games",game:String(id)},"",hash);
     else if(location.hash!==hash) history.pushState({tab:"games",game:String(id)},"",hash);
   }
-  if(!hit){ toast("その試合が見つからへんで",true); return; }
+  if(!hit){ toast("その試合が見つかりません",true); return; }
   requestAnimationFrame(()=>{
     const grp=$(`#gameList .seasongroup[data-season="${CSS.escape(hit.season)}"]`);
     if(grp) grp.classList.add("open");
@@ -3150,7 +3156,7 @@ function openGameById(id,mode){
 function fillPlayerSel(){
   const dl=$("#playerListDL"), inp=$("#playerSel"); if(!dl||!inp) return;
   const roster=playerRoster();
-  if(!roster.length){ dl.innerHTML=""; inp.value=""; inp.placeholder="(選手がおらん)"; return; }
+  if(!roster.length){ dl.innerHTML=""; inp.value=""; inp.placeholder="(選手がいません)"; return; }
   dl.innerHTML=roster.map(([k,nm])=>{
     const f=fullNameOf(k,nm);
     return `<option value="${esc(nm)}">${f!==nm?esc(f):""}</option>`; // ラベルにフルネーム→「翔平」でも検索ヒット
@@ -3215,12 +3221,12 @@ async function drawPlayerCard(key){
     const fname=`${String(full||nm||"player").replace(/\s+/g,"")}-card.png`;
     const file=new File([blob],fname,{type:"image/png"});
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file],title:full||nm}); toast("共有したで"); return; }
+      try{ await navigator.share({files:[file],title:full||nm}); toast("共有しました"); return; }
       catch(e){ if(e.name==="AbortError") return; }
     }
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-    toast("成績カードを保存したで");
+    toast("成績カードを保存しました");
   }catch(e){ toast("カード生成失敗: "+e.message,true); }
 }
 function ctxTextW(x,t,size){
@@ -3232,11 +3238,11 @@ async function drawGenerationCard(ey){
   // #21 チーム名鑑カードPNG: 入学年(世代)メンバーの通算をグリッドで1枚のPNGに
   try{
     ey=Number(ey);
-    if(isNaN(ey)){ toast("入学年が未設定の代はカードにできへん",true); return; }
+    if(isNaN(ey)){ toast("入学年が未設定の代はカードにできません",true); return; }
     DB.playerMeta=DB.playerMeta||{};
     const roster=playerRoster();
     const members=roster.filter(([k])=>Number(DB.playerMeta[k]?.enrollYear)===ey);
-    if(!members.length){ toast("この代の選手がおらんで",true); return; }
+    if(!members.length){ toast("この代の選手がいません",true); return; }
     const cells=members.map(([key,nm])=>{
       const g=careerGamesForKey(key);
       const b=aggBatting(g).find(r=>nameKey(r.name)===key)||null;
@@ -3292,12 +3298,12 @@ async function drawGenerationCard(ey){
     const fname=`generation-${ey}-card.png`;
     const file=new File([blob],fname,{type:"image/png"});
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file],title:`${ey}年入学の代`}); toast("共有したで"); return; }
+      try{ await navigator.share({files:[file],title:`${ey}年入学の代`}); toast("共有しました"); return; }
       catch(e){ if(e.name==="AbortError") return; }
     }
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-    toast("名鑑カードを保存したで");
+    toast("名鑑カードを保存しました");
   }catch(e){ toast("カード生成失敗: "+e.message,true); }
 }
 /* ---------- 選手比較 ---------- */
@@ -3367,7 +3373,7 @@ function renderEnrollYearTab(){
   const el=$("#enrollYearList"); if(!el) return;
   DB.playerMeta = DB.playerMeta || {};
   const roster=playerRoster();
-  if(!roster.length){ el.innerHTML=`<div class="empty">選手データがまだないで。</div>`; return; }
+  if(!roster.length){ el.innerHTML=`<div class="empty">選手データがまだありません。</div>`; return; }
   const latestOverall=latestGameGlobally();
   const groups=new Map();
   for(const [key,nm] of roster){
@@ -3591,7 +3597,7 @@ function renderBulkEnrollList(){
   DB.playerMeta = DB.playerMeta || {};
   const showAll=$("#bulkEnrollShowAll").checked;
   const roster=playerRoster().filter(([key])=> showAll || DB.playerMeta[key]?.enrollYear==null);
-  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がおらんで（全員設定済みかも）</div>`; return; }
+  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がいません（全員設定済みかもしれません）</div>`; return; }
   el.innerHTML=roster.map(([key,nm])=>{
     const cur=DB.playerMeta[key]?.enrollYear;
     const sel=bulkSelectedKeys.has(key);
@@ -3627,7 +3633,7 @@ function renderBulkPositionList(){
   DB.playerMeta = DB.playerMeta || {};
   const showAll=$("#bulkPositionShowAll").checked;
   const roster=playerRoster().filter(([key])=> showAll || !DB.playerMeta[key]?.position);
-  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がおらんで（全員設定済みかも）</div>`; return; }
+  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がいません（全員設定済みかもしれません）</div>`; return; }
   el.innerHTML=roster.map(([key,nm])=>{
     const cur=DB.playerMeta[key]?.position;
     const sel=bulkPositionSelectedKeys.has(key);
@@ -3652,7 +3658,7 @@ function renderBulkSubPositionList(){
   DB.playerMeta = DB.playerMeta || {};
   const showAll=$("#bulkSubPositionShowAll").checked;
   const roster=playerRoster().filter(([key])=> showAll || !DB.playerMeta[key]?.subPosition);
-  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がおらんで（全員設定済みかも）</div>`; return; }
+  if(!roster.length){ el.innerHTML=`<div class="dim" style="font-size:13px">対象の選手がいません（全員設定済みかもしれません）</div>`; return; }
   el.innerHTML=roster.map(([key,nm])=>{
     const cur=DB.playerMeta[key]?.subPosition;
     const sel=bulkSubPositionSelectedKeys.has(key);
@@ -3824,7 +3830,7 @@ function playerGrowthHtml(key){
 function renderPlayerContent(){
   const el=$("#playerContent"); if(!el) return;
   const key=currentPlayerKey();
-  if(!key){ el.innerHTML=`<div class="empty">選手データがまだないで（入力欄で選手名を選んでな）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; $("#playerSubPosition").value=""; $("#playerFullName").value=""; if($("#playerNumber"))$("#playerNumber").value=""; if($("#playerCaptain"))$("#playerCaptain").checked=false; return; }
+  if(!key){ el.innerHTML=`<div class="empty">選手データがまだありません（入力欄で選手名を選んでください）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; $("#playerSubPosition").value=""; $("#playerFullName").value=""; if($("#playerNumber"))$("#playerNumber").value=""; if($("#playerCaptain"))$("#playerCaptain").checked=false; return; }
   DB.playerMeta = DB.playerMeta || {};
   const enrollYear = DB.playerMeta[key]?.enrollYear ?? null;
   const position = DB.playerMeta[key]?.position ?? "";
@@ -3879,7 +3885,7 @@ function renderPlayerContent(){
   if(careerPit) html+= kpi("登板",careerPit.G)+kpi("防御率",careerPit.ipNum?careerPit.ERA.toFixed(2):"-","a")+kpi("勝利",careerPit.W)+kpi("奪三振",careerPit.K)+kpi("投球回",careerPit.IPstr);
   html+=`</div>`;
   if(careerBat || careerPit) html+=`<div style="margin-top:8px"><button type="button" class="mini ghost" id="playerCardBtn" data-key="${esc(key)}">成績カードを画像で保存</button></div>`;
-  if(!careerBat && !careerPit) html+=`<div class="empty" style="padding:10px">まだ出場記録がないで（名簿登録のみ）。<div style="margin-top:8px"><button class="mini danger" id="removeRosterOnly" data-key="${esc(key)}">名簿から削除</button></div></div>`;
+  if(!careerBat && !careerPit) html+=`<div class="empty" style="padding:10px">まだ出場記録がありません（名簿登録のみ）。<div style="margin-top:8px"><button class="mini danger" id="removeRosterOnly" data-key="${esc(key)}">名簿から削除</button></div></div>`;
   html+=`</section>`;
   html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
 
@@ -3887,7 +3893,7 @@ function renderPlayerContent(){
   const subStat=subBattingBreakdown(key,careerGames);
   if(subStat){
     html+=`<section class="card"><h2 style="font-size:15px">代打・途中出場成績</h2>
-      <div class="note">途中出場（sub）の打席だけを集計。守備交代での途中出場も含むため、厳密な「代打」とは限らへん。</div>
+      <div class="note">途中出場（sub）の打席だけを集計。守備交代での途中出場も含むため、厳密な「代打」とは限りません。</div>
       <div class="kpis">
         ${kpi("途中出場",`${subStat.G}回`)}
         ${kpi("打数",subStat.AB)}
@@ -3969,7 +3975,7 @@ function renderDuplicateHints(){
     </div>`;
   }).join("");
   el.innerHTML=`<section class="card" style="border-color:var(--amber)"><h2 style="font-size:15px">同一選手かも？</h2>
-    <div class="note" style="margin-bottom:6px">表記が似てて、片方しか試合に出てない選手のペアやで。同じ人なら統合すると成績が合流する。別人なら「別人」で消せる。</div>
+    <div class="note" style="margin-bottom:6px">表記が似ていて、片方しか試合に出ていない選手のペアです。同じ人なら統合すると成績が合流します。別人なら「別人」で消せます。</div>
     ${rows}</section>`;
 }
 
@@ -4240,7 +4246,7 @@ function archiveGameScore(row){
 function renderArchive(){
   const el=$("#archiveContent"); if(!el) return;
   const rows=archiveGames();
-  if(!rows.length){el.innerHTML=`<div class="empty">公式戦を記録すると、ここに名勝負とシーズンの記録が育っていくで。</div>`;return;}
+  if(!rows.length){el.innerHTML=`<div class="empty">公式戦を記録すると、ここに名勝負とシーズンの記録が育っていきます。</div>`;return;}
   const dated=rows.filter(r=>r.g.date).sort((a,b)=>String(a.g.date).localeCompare(String(b.g.date)));
   const latestYear=(dated.length?dated[dated.length-1].g.date.slice(0,4):null);
   const yearRows=latestYear?rows.filter(r=>String(r.g.date||"").startsWith(latestYear)):rows;
@@ -4448,7 +4454,7 @@ function renderVs(){
   const el=$("#vsContent"); if(!el) return;
   const rows=vsRecords();
   renderVsHighlights(rows);
-  if(!rows.length){ el.innerHTML=`<div class="empty">相手名の入った試合がまだないで（「対戦相手」欄に学校名を入れると集計されるで）。</div>`; return; }
+  if(!rows.length){ el.innerHTML=`<div class="empty">相手名の入った試合がまだありません（「対戦相手」欄に学校名を入れると集計されます）。</div>`; return; }
   el.innerHTML=rows.map(r=>{
     const gamesHtml=r.games.map(({g,season})=>{
       const win=g.runsFor>g.runsAgainst, lose=g.runsFor<g.runsAgainst;
@@ -4482,7 +4488,7 @@ window.editYomi=async function(school){
   const y=prompt(`「${school}」の読みがな（ひらがな）`,DB.schoolYomi[school]||"");
   if(y==null)return;
   if(y.trim())DB.schoolYomi[school]=y.trim(); else delete DB.schoolYomi[school];
-  await saveDB(); renderVs(); fillOppDL(); toast("読みがなを更新したで");
+  await saveDB(); renderVs(); fillOppDL(); toast("読みがなを更新しました");
 };
 function fillOppDL(){
   const dl=$("#oppListDL"); if(!dl) return;
@@ -4495,9 +4501,9 @@ async function fillSchoolYomi(manual){
   DB.schoolYomi=DB.schoolYomi||{};
   const missing=vsRecords().map(r=>r.school).filter(s=>!DB.schoolYomi[s]);
   const st=$("#vsYomiStatus");
-  if(!missing.length){ if(manual&&st){ st.textContent="全校に読みがな付いてるで"; renderVs(); } return; } // renderVs: 裏の自動補完後に画面が古いままのケースを拾う
+  if(!missing.length){ if(manual&&st){ st.textContent="全校に読みがなが付いています"; renderVs(); } return; } // renderVs: 裏の自動補完後に画面が古いままのケースを拾う
   const key=$("#gemKey").value.trim();
-  if(!key){ if(manual&&st) st.textContent="APIキー未設定（「試合を追加」タブで設定してな）"; return; }
+  if(!key){ if(manual&&st) st.textContent="APIキー未設定（「試合を追加」タブで設定してください）"; return; }
   if(!manual){ if(yomiTriedThisSession) return; yomiTriedThisSession=true; } // 自動実行はセッション1回まで
   if(manual&&st) st.innerHTML='<span class="spin"></span>読みがなを取得中…';
   // 一度に全校投げると1リクエストが重くタイムアウトしやすいので、12校ずつに小分けする。
@@ -4514,11 +4520,11 @@ async function fillSchoolYomi(manual){
   }
   if(cnt){ await saveDB(); fillOppDL(); renderVs(); } // renderVs追加: 取得後に対戦成績タブへ読みがなを即反映（従来は再描画漏れで「付いてるのに見えない」状態になっていた）
   if(manual&&st) st.textContent = cnt
-    ? `${cnt}校に読みがなを付けたで`+(failed?`（${failed}校は混雑/タイムアウトで失敗。もう一回押すと続きから）`:"")
-    : "読みがなを取得できへんかった（混雑かタイムアウト。少し待ってもう一回試してな）";
+    ? `${cnt}校に読みがなを付けました`+(failed?`（${failed}校は混雑/タイムアウトで失敗。もう一回押すと続きから）`:"")
+    : "読みがなを取得できませんでした（混雑かタイムアウトです。少し待ってもう一度お試しください）";
 }
 function kpi(l,v,cls="",foot=""){return `<div class="kpi"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div>${foot?`<div class="foot">${foot}</div>`:''}</div>`;}
-function emptyTbl(cols){return `<tbody><tr><td colspan="${cols}" class="empty">まだ記録がないで。「試合を追加」から入れてな。</td></tr></tbody>`;}
+function emptyTbl(cols){return `<tbody><tr><td colspan="${cols}" class="empty">まだ記録がありません。「試合を追加」から入力してください。</td></tr></tbody>`;}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 /* ---------- 表彰タブ（シーズン表彰式＋連続試合安打） ---------- */
@@ -4594,7 +4600,7 @@ function renderAwards(){
   const withGames=Object.entries(DB.seasons).filter(([,s])=>(s.games||[]).length).map(([n])=>n);
   if(!withGames.length){
     sel.innerHTML=""; $("#awardCards").innerHTML="";
-    $("#streakContent").innerHTML=`<div class="empty">試合データが入ると表彰が始まるで。</div>`;
+    $("#streakContent").innerHTML=`<div class="empty">試合データが入ると表彰が始まります。</div>`;
     return;
   }
   if(awardSeasonPick==null || !withGames.includes(awardSeasonPick))
@@ -4611,7 +4617,7 @@ function renderAwards(){
   const alltime=rows.filter(r=>r.best>=2).sort((a,b)=>b.best-a.best||String(a.name).localeCompare(String(b.name),"ja")).slice(0,5);
   const activeHtml=active.length? active.map(r=>
     `<div style="padding:4px 2px;font-size:13px">${plinkHtml(r.key,r.name)}　<span class="num" style="color:var(--amber)">${r.cur}試合</span> <span class="dim" style="font-size:12px">継続中${r.curStart?`（${esc(r.curStart)}〜）`:""}</span></div>`).join("")
-    : `<div class="dim" style="font-size:13px;padding:4px 2px">継続中の記録（2試合以上）はまだないで。</div>`;
+    : `<div class="dim" style="font-size:13px;padding:4px 2px">継続中の記録（2試合以上）はまだありません。</div>`;
   const label=(r)=>{
     const retired=isPlayerRetired(r.key);
     if(!retired && r.cur===r.best) return `<span class="dim" style="font-size:12px">継続中</span>`;
@@ -4620,7 +4626,7 @@ function renderAwards(){
   };
   const allHtml=alltime.length? alltime.map((r,i)=>
     `<div style="padding:4px 2px;font-size:13px"><span class="num dim">${i+1}.</span> ${plinkHtml(r.key,r.name)}　<span class="num">${r.best}試合</span> ${label(r)}</div>`).join("")
-    : `<div class="dim" style="font-size:13px;padding:4px 2px">記録が育つとここに歴代トップ5が並ぶで。</div>`;
+    : `<div class="dim" style="font-size:13px;padding:4px 2px">記録が育つとここに歴代トップ5が並びます。</div>`;
   $("#streakContent").innerHTML=
     `<div class="dim" style="font-size:12px;margin-bottom:4px">継続中（現役のみ）</div>${activeHtml}`+
     `<div class="dim" style="font-size:12px;margin:10px 0 4px;border-top:1px solid var(--line);padding-top:8px">歴代トップ5</div>${allHtml}`;
@@ -4663,7 +4669,7 @@ function recordRankings(){
 function renderRecordRankings(){
   const el=$("#recordRankings"); if(!el) return;
   const cats=recordRankings();
-  if(!cats.some(c=>c.rows.length)){ el.innerHTML=`<div class="empty">試合が増えると歴代記録が並ぶで。</div>`; return; }
+  if(!cats.some(c=>c.rows.length)){ el.innerHTML=`<div class="empty">試合が増えると歴代記録が並びます。</div>`; return; }
   el.innerHTML=cats.map(c=>{
     const rows=c.rows.length? c.rows.map((r,i)=>
       `<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 2px;border-bottom:1px solid var(--line)">
@@ -4738,7 +4744,7 @@ function classicGames(){
 function renderClassicHall(){
   const el=$("#classicHall"); if(!el) return;
   const list=classicGames();
-  if(!list.length){ el.innerHTML=`<div class="dim" style="font-size:13px">接戦・逆転・サヨナラ・大舞台の一戦が生まれると殿堂入りするで。</div>`; return; }
+  if(!list.length){ el.innerHTML=`<div class="dim" style="font-size:13px">接戦・逆転・サヨナラ・大舞台の一戦が生まれると殿堂入りします。</div>`; return; }
   el.innerHTML=list.map((c,i)=>{
     const r=c.ref;
     const res=r.rf>r.ra?"○":r.rf<r.ra?"●":"△";
@@ -4757,7 +4763,7 @@ function renderClassicHall(){
 function renderGames(){
   const el=$("#gameList");
   const entries=Object.entries(DB.seasons);
-  if(!entries.some(([,s])=>s.games.length)){el.innerHTML=`<div class="empty">試合ログはまだ空っぽや。</div>`;return;}
+  if(!entries.some(([,s])=>s.games.length)){el.innerHTML=`<div class="empty">試合ログはまだ空です。</div>`;return;}
   // 公式戦と練習試合を分けて表示（公式戦→区切り見出し→練習試合）
   const official=entries.filter(([name])=>!name.includes("練習"));
   const practice=entries.filter(([name])=>name.includes("練習"));
@@ -4903,7 +4909,7 @@ function checkNameDup(input){
   }
   if(lastY!=null && Math.abs(curYear-lastY)>=4){
     warn.textContent="⚠";
-    warn.title=`「${nm}」は${lastY}年にも登録あり。別人なら名前を変えて区別してな（例: ${nm}②）`;
+    warn.title=`「${nm}」は${lastY}年にも登録あり。別人なら名前を変えて区別してください（例: ${nm}②）`;
     warn.classList.add("show");
   }else if(!showSim()){
     warn.classList.remove("show"); warn.textContent="";
@@ -4993,7 +4999,7 @@ function collectForm(){
 window.editGame=function(seasonName,id){
   if(seasonName!==DB.current){ DB.current=seasonName; saveDB(); fillSeasons(); render(); } // 他タブが古い表示のまま残らんように
   const g=curGames().find(x=>String(x.id)===String(id));
-  if(!g){toast("編集対象の試合が見つからへん",true);return;}
+  if(!g){toast("編集対象の試合が見つかりません",true);return;}
   editId=g.id;
   switchTab("add");
   $("#gDate").value=g.date||""; delete $("#gDate").dataset.auto; $("#gOpp").value=g.opponent||"";
@@ -5019,7 +5025,7 @@ window.delGame=async function(seasonName,id){
   const idx=games.findIndex(g=>String(g.id)===String(id));
   if(idx<0)return;
   if(editId!=null && String(editId)===String(id)){editId=null;resetForm();} // 編集中の試合を消したらフォームも解除
-  games.splice(idx,1); await saveDB(); render(); toast("削除したで");
+  games.splice(idx,1); await saveDB(); render(); toast("削除しました");
 };
 
 function deriveSide(g){
@@ -5487,7 +5493,7 @@ function restoreDraft(draft){
   $("#saveGame").textContent = editId != null ? "編集を保存" : "この試合を保存";
   validateEntry();
   checkAllNameDups();
-  toast("下書きから復元したで");
+  toast("下書きから復元しました");
 }
 
 /* ---------- import ---------- */
@@ -5524,7 +5530,7 @@ function normDB(d){
 function mergeDB(d){
   // 別端末のエクスポートを追加取り込み。id一致の試合はスキップ、無いシーズンは作成、
   // playerMetaは未設定の項目だけ補完（この端末の設定は上書きしない）
-  if(!d || !d.seasons) throw new Error("形式ちゃう（seasonsが無い）");
+  if(!d || !d.seasons) throw new Error("形式が違います（seasonsが無い）");
   const existing=new Set();
   for(const s of Object.values(DB.seasons||{})){
     const season=asObject(s);
@@ -5601,9 +5607,9 @@ async function applyMerge(text){
     const d=JSON.parse(text);
     const r=mergeDB(d);
     await saveDB(); fillSeasons(); render();
-    el.innerHTML = r.lines.length? "マージ完了<br>"+r.lines.map(esc).join("<br>") : "追加できる試合は無かったで（全部取り込み済みかも）";
+    el.innerHTML = r.lines.length? "マージ完了<br>"+r.lines.map(esc).join("<br>") : "追加できる試合はありませんでした（すべて取り込み済みかもしれません）";
     $("#mergeBulk").value="";
-    toast(r.totalAdded? `${r.totalAdded}試合をマージしたで` : "追加なし");
+    toast(r.totalAdded? `${r.totalAdded}試合をマージしました` : "追加なし");
   }catch(e){ el.textContent=""; toast("マージ失敗: "+e.message,true); }
 }
 
@@ -5639,7 +5645,7 @@ function setModelOptions(models, selected){
 async function loadModels(silent){
   const key=$("#gemKey").value.trim();
   const st=$("#ocrStatus");
-  if(!key){ if(!silent)st.innerHTML='<span class="chip r">先にAPIキーを入れてな</span>'; return; }
+  if(!key){ if(!silent)st.innerHTML='<span class="chip r">先にAPIキーを入力してください</span>'; return; }
   if(!silent)st.innerHTML='<span class="spin"></span>モデル一覧を取得中…';
   try{
     let names=[];
@@ -5653,7 +5659,7 @@ async function loadModels(silent){
     // flash → flash-lite → その他 の順、同種は新しい番号が上っぽく（liteは列ズレ誤読が多いため優先度を下げた）
     const rank=m=>(/flash-lite/.test(m)?1:/flash/.test(m)?0:/pro/.test(m)?2:3);
     names.sort((a,b)=>rank(a)-rank(b)||b.localeCompare(a));
-    if(!names.length)throw new Error("使えるモデルが見つからん");
+    if(!names.length)throw new Error("使えるモデルが見つかりません");
     const cur=$("#gemModel").value;
     setModelOptions(names, names.includes(cur)?cur:(names.includes(DEF_MODEL)?DEF_MODEL:(names.find(m=>/flash/.test(m)&&!/lite/.test(m))||names[0])));
     await saveGemCfg();
@@ -5675,7 +5681,7 @@ async function gemFetch(url,options,onRetry){
       resp=await fetch(url,{...options,signal:ctrl.signal});
     }catch(e){
       clearTimeout(timer);
-      if(e.name==="AbortError") throw new Error("タイムアウト(150秒)。モデルの処理が遅すぎるか応答が途絶えた。速いモデル(flash系など)に切り替えるか、もう一度試してな");
+      if(e.name==="AbortError") throw new Error("タイムアウト(150秒)。モデルの処理が遅すぎるか、応答が途絶えました。速いモデル(flash系など)に切り替えるか、もう一度お試しください");
       throw e;
     }
     clearTimeout(timer);
@@ -5727,7 +5733,7 @@ async function uploadGeminiFile(file, key, statusEl){
     if(checkInfo.state === "FAILED") throw new Error("動画のサーバー処理に失敗しました");
     await new Promise(r=>setTimeout(r, 3000));
   }
-  throw new Error("動画の処理がタイムアウト（5分超）。動画が長すぎるかもしれん。短くトリミングして試してな");
+  throw new Error("動画の処理がタイムアウトしました（5分超）。動画が長すぎる可能性があります。短くトリミングしてお試しください");
 }
 
 async function aiGenerate(promptText, files, statusEl){
@@ -5802,7 +5808,7 @@ async function pickupSharedImages(){
     if(files.length){
       setShotFiles(files);
       switchTab("add","replace");
-      toast(`共有から画像${files.length}枚を受け取ったで`);
+      toast(`共有から画像${files.length}枚を受け取りました`);
     }
   }catch(e){}
 }
@@ -5907,19 +5913,19 @@ async function sbParse(file){
       if(f.length) txt=f[f.length-1][1];
       else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0&&e>s) txt=txt.slice(s,e+1); }
       const g=JSON.parse(txt.trim());
-      if(!g.innings || !Array.isArray(g.innings.top)) throw new Error("回別得点が読み取れへんかった");
+      if(!g.innings || !Array.isArray(g.innings.top)) throw new Error("回別得点を読み取れませんでした");
       fixInningsXMisread(g);
       if(sbSumsOk(g)) return g;
       if(!firstTry) firstTry=g; // 検算NGでも1回目の結果は保険で保持
     }catch(e){ lastErr=e; }
   }
   if(firstTry) return firstTry; // 2回とも検算NGなら1回目を返す（突合側の検算でどのみち弾かれる）
-  throw lastErr||new Error("回別得点が読み取れへんかった");
+  throw lastErr||new Error("回別得点を読み取れませんでした");
 }
 async function runInnOcr(fileList){
   const st=$("#innOcrStatus");
   const key=$("#gemKey").value.trim();
-  if(!key){ st.textContent="APIキー未設定（上のAPIキー欄で設定してな）"; return; }
+  if(!key){ st.textContent="APIキー未設定（上のAPIキー欄で設定してください）"; return; }
   const files=[...fileList];
   if(!files.length) return;
   // 編集中に1枚だけ → 今開いているフォームに流し込む（従来動作）
@@ -5937,7 +5943,7 @@ async function runInnOcr(fileList){
       }
       recalcInnings();
       if(typeof window.markDirty==="function") window.markDirty();
-      st.innerHTML='<span class="chip g">回別得点を入れたで</span> 合計と得点欄の一致を確認してな。打者・投手のフォームには触ってへん。';
+      st.innerHTML='<span class="chip g">回別得点を入力しました</span> 合計と得点欄の一致を確認してください。打者・投手のフォームには変更を加えていません。';
     }catch(e){ st.textContent="失敗: "+e.message; }
     return;
   }
@@ -6013,8 +6019,8 @@ async function applyInnWrites(){
   }
   window.__innWrites=null;
   await saveDB(); render();
-  $("#innOcrStatus").innerHTML=`<span class="chip g">${writes.length}試合にスコアボードを書き込んだで</span>`;
-  toast(`${writes.length}試合にスコアボードを追加したで`);
+  $("#innOcrStatus").innerHTML=`<span class="chip g">${writes.length}試合にスコアボードを書き込みました</span>`;
+  toast(`${writes.length}試合にスコアボードを追加しました`);
   ocrLogAdd("スコアボード", `${writes.length}試合に回別得点をバックフィル`);
 }
 
@@ -6036,9 +6042,9 @@ async function extractVideoFrames(file, onProgress){
   const v=document.createElement("video");
   v.muted=true; v.playsInline=true; v.preload="auto"; v.src=url;
   try{
-    await new Promise((res,rej)=>{ v.onloadeddata=()=>res(); v.onerror=()=>rej(new Error("動画を読み込めへん（形式が未対応かも）")); });
+    await new Promise((res,rej)=>{ v.onloadeddata=()=>res(); v.onerror=()=>rej(new Error("動画を読み込めません（形式が未対応の可能性があります）")); });
     const dur=v.duration||0, W=v.videoWidth, H=v.videoHeight;
-    if(!W || !H) throw new Error("動画の解像度が取れへん");
+    if(!W || !H) throw new Error("動画の解像度を取得できません");
     const full=document.createElement("canvas"); full.width=W; full.height=H;
     const fctx=full.getContext("2d");
     const tw=Math.min(320,W), th=Math.max(1,Math.round(tw*H/W));
@@ -6064,21 +6070,80 @@ async function openFramePicker(videoFile){
   modal.style.display="flex";
   try{
     const r=await extractVideoFrames(videoFile,(n,total)=>{ $("#fpMeta").textContent=`コマを抽出中… ${n}/${total}`; });
-    if(!r.frames.length) throw new Error("コマを抽出できへんかった");
+    if(!r.frames.length) throw new Error("コマを抽出できませんでした");
     fpFrames=r.frames;
+    $("#fpMeta").textContent=`コマを評価中…`;
+    await fpScoreFrames(); // 鮮明さ・前コマとの違いを算出（ローカル処理のみ）
+    fpSelected=new Set(fpRecommended()); // おすすめを初期選択（変更は自由）
     $("#fpMeta").textContent=`${esc(videoFile.name)} · ${fpFmtTime(r.dur)} · ${r.W}×${r.H} · 抽出コマ ${r.frames.length}枚`;
-    renderFpGrid();
+    renderFpGrid(); updateFpCount();
   }catch(e){
     modal.style.display="none";
-    toast("動画からコマを抽出できひんかった（"+((e&&e.message)||e)+"）。動画をそのまま解析するで",true);
+    toast("動画からコマを抽出できませんでした（"+((e&&e.message)||e)+"）。動画をそのまま解析します",true);
     fpSkipPickerOnce=true; runOcr();
   }
 }
+/* ---------- コマのおすすめ判定（ブラウザ内だけで完結。API消費ゼロ） ----------
+   鮮明さ＝隣接ピクセルの差の平均（ボケているほど小さい）
+   前コマとの違い＝縮小画像同士の平均絶対差（同じ画面が続くと小さい） */
+const FP_MIN_REC=4; // おすすめは最低4枚（可変だが下回らない）
+async function fpScoreFrames(){
+  const W=64,H=36;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const cx=cv.getContext("2d",{willReadFrequently:true});
+  let prev=null;
+  for(const f of fpFrames){
+    let data=null;
+    try{
+      const img=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=f.thumb; });
+      cx.drawImage(img,0,0,W,H);
+      data=cx.getImageData(0,0,W,H).data;
+    }catch(e){ f.sharp=0; f.diff=1; prev=null; continue; }
+    const gray=new Float32Array(W*H);
+    for(let p=0,q=0;q<gray.length;p+=4,q++) gray[q]=(data[p]*0.299+data[p+1]*0.587+data[p+2]*0.114)/255;
+    let s=0,cnt=0;
+    for(let y=0;y<H;y++) for(let x=1;x<W;x++){ s+=Math.abs(gray[y*W+x]-gray[y*W+x-1]); cnt++; }
+    f.sharp=cnt? s/cnt : 0;
+    if(prev){ let d=0; for(let q=0;q<gray.length;q++) d+=Math.abs(gray[q]-prev[q]); f.diff=d/gray.length; }
+    else f.diff=1;
+    prev=gray;
+  }
+  // しきい値はこの動画の分布から決める（画質や解像度に依存しないように相対で判断）
+  const sharps=fpFrames.map(f=>f.sharp).slice().sort((a,b)=>a-b);
+  const med=sharps.length? sharps[Math.floor(sharps.length/2)] : 0;
+  const blurCut=med*0.6, sameCut=0.012;
+  fpFrames.forEach(f=>{ f.isBlur=f.sharp<blurCut; f.isSame=f.diff<sameCut; });
+}
+function fpPickRecommended(frames){
+  // 純粋関数（テスト用に切り出し）: 「前コマと十分違う」かつ「ボケてない」コマを優先し、
+  // 足りなければ鮮明な順に補充して最低FP_MIN_REC枚（総数がそれ未満なら全部）
+  const arr=frames||[];
+  const idx=arr.map((_,i)=>i);
+  const primarySet=new Set(idx.filter(i=>!arr[i].isSame && !arr[i].isBlur));
+  const want=Math.max(FP_MIN_REC, primarySet.size);
+  const rest=idx.filter(i=>!primarySet.has(i)).sort((a,b)=>(arr[b].sharp||0)-(arr[a].sharp||0));
+  const out=[...primarySet];
+  for(const i of rest){ if(out.length>=want) break; out.push(i); }
+  return out.sort((a,b)=>a-b);
+}
+function fpRecommended(){ return fpPickRecommended(fpFrames); }
 function renderFpGrid(){
   const g=$("#fpGrid"); if(!g) return;
-  g.innerHTML=fpFrames.map((f,i)=>`<div class="fpth${fpSelected.has(i)?" sel":""}" data-i="${i}"><img src="${f.thumb}" alt="${fpFmtTime(f.t)}"><span class="fpts">${fpFmtTime(f.t)}</span><span class="fpchk"></span></div>`).join("");
+  const rec=new Set(fpRecommended());
+  g.innerHTML=fpFrames.map((f,i)=>{
+    let tag="";
+    if(rec.has(i)) tag=`<span class="fptag rec">おすすめ${f.isBlur?"":f.isSame?"":" 別画面"}</span>`;
+    else if(f.isBlur) tag=`<span class="fptag">ブレ</span>`;
+    else if(f.isSame) tag=`<span class="fptag">似てる</span>`;
+    return `<div class="fpth${fpSelected.has(i)?" sel":""}" data-i="${i}"><img src="${f.thumb}" alt="${fpFmtTime(f.t)}">${tag}<span class="fpts">${fpFmtTime(f.t)}</span><span class="fpchk"></span></div>`;
+  }).join("");
+  const btn=$("#fpPickRec"); if(btn) btn.textContent=`おすすめ${rec.size}枚を選択`;
 }
-function updateFpCount(){ const el=$("#fpCount"); if(el) el.textContent=`選択 ${fpSelected.size} 枚`; }
+function updateFpCount(){
+  const el=$("#fpCount"); if(!el) return;
+  const vote=!!($("#ocrVote")&&$("#ocrVote").checked);
+  el.textContent=`選択 ${fpSelected.size} 枚`+(vote&&fpSelected.size? `（多数決オンなので${fpSelected.size}リクエスト消費）` : "");
+}
 function closeFramePicker(){ const m=$("#framePickerModal"); if(m) m.style.display="none"; fpFrames=[]; fpSelected=new Set(); }
 async function fpConfirm(){
   if(!fpSelected.size){ toast("コマを選んでな",true); return; }
@@ -6163,7 +6228,7 @@ async function runOcr(){
   const key=$("#gemKey").value.trim();
   let files=[...$("#shotFiles").files];
   const st=$("#ocrStatus");
-  if(!key){st.innerHTML='<span class="chip r">APIキーを入れてな</span>';return;}
+  if(!key){st.innerHTML='<span class="chip r">APIキーを入力してください</span>';return;}
   if(!files.length){st.innerHTML='<span class="chip r">画像または動画を選んでな</span>';return;}
   const _vid=files.find(f=>f.type.startsWith("video/"));
   if(_vid && !fpFromPicker && !fpSkipPickerOnce){ openFramePicker(_vid); return; }
@@ -6192,7 +6257,7 @@ async function runOcr(){
         files=groupFiles.shift();
         ocrQueue=groupFiles;
         setShotFiles(files);
-        toast(`${valid.length}試合ぶんに仕分けたで。保存するたびに次を自動解析する`);
+        toast(`${valid.length}試合ぶんに仕分けました。保存するたびに次を自動解析します`);
       }
     }catch(e){ /* 仕分けに失敗したら1試合として続行 */ }
   }
@@ -6222,6 +6287,7 @@ async function runOcr(){
     if(voteOn && imgFiles.length>=2){
       // 各コマを個別に読んで選手×セルごとに多数決（列ズレは毎コマ同じには出にくいので正解に寄る）
       const reads=[]; const errs=[];
+      if(imgFiles.length>=6) toast(`多数決は1コマ1リクエスト。${imgFiles.length}枚＝${imgFiles.length}回ぶんAPIを使います`);
       for(let i=0;i<imgFiles.length;i++){
         st.innerHTML=`<span class="spin"></span>多数決：コマを個別解析中… ${i+1}/${imgFiles.length}${errs.length?`（失敗${errs.length}）`:""}`;
         try{ reads.push(parseOcrJson(await aiGenerate(promptText,[imgFiles[i]],st))); }
@@ -6232,8 +6298,8 @@ async function runOcr(){
           if(/401|403|429|quota|rate limit|APIキー|クオータ|上限/i.test(msg)) break;
         }
       }
-      if(!reads.length) throw new Error(`どのコマも読み取れへんかった${errs.length?`（理由: ${errs[errs.length-1]}）`:""}`);
-      if(errs.length) toast(`${errs.length}コマ失敗。読めた${reads.length}コマで多数決したで`);
+      if(!reads.length) throw new Error(`どのコマも読み取れませんでした${errs.length?`（理由: ${errs[errs.length-1]}）`:""}`);
+      if(errs.length) toast(`${errs.length}コマ失敗。読めた${reads.length}コマで多数決しました`);
       g=voteOcrReads(reads);
     } else {
       g=parseOcrJson(await aiGenerate(promptText, files, st));
@@ -6247,16 +6313,36 @@ async function runOcr(){
       if(cands.length===1){
         const c=cands[0];
         window.__ocrMatch={season:c.season, id:c.game.id, g};
-        matchNote=`<br>この結果は保存済みの試合「${esc(c.game.date||"日付なし")} ${esc(c.game.opponent||"(相手未設定)")}」と一致するみたいやで `+
-          `<button type="button" class="mini ghost" id="ocrMatchEdit">その試合の編集として開く</button>（新規で登録するならこのまま保存してな）`;
+        matchNote=`<br>この結果は保存済みの試合「${esc(c.game.date||"日付なし")} ${esc(c.game.opponent||"(相手未設定)")}」と一致するようです `+
+          `<button type="button" class="mini ghost" id="ocrMatchEdit">その試合の編集として開く</button>（新規で登録する場合はこのまま保存してください）`;
       }
     }
-    st.innerHTML='<span class="chip g">読み取り完了</span> 下のフォームに入力したで。合計照合を確認してな。'+matchNote+
+    st.innerHTML='<span class="chip g">読み取り完了</span> 下のフォームに入力しました。合計照合を確認してください。'+matchNote+
       (ocrQueue.length?`<br>待機中: あと${ocrQueue.length}試合（保存すると自動で次を解析する）`:"");
     ocrLogAdd("試合OCR", `${sendDesc||files.length+"ファイル"} → ${g.date||"日付未読"} 対${g.opponent||"相手未読"}`);
   }catch(e){
-    st.innerHTML='<span class="chip r">失敗</span> '+esc(e.message)+'<br>キー・モデル名を確認。ダメなら別のモデルやプロバイダに切り替えて試してな。';
+    st.innerHTML='<span class="chip r">失敗</span> '+ocrErrorHelp(e);
   }
+}
+function ocrErrorHelp(e){
+  // 生のAPIレスポンスをそのまま出すと読みにくいので、よくある失敗は原因と次の一手に翻訳する
+  const raw=String((e&&e.message)||e);
+  if(/429|quota|rate limit|上限|クオータ/i.test(raw)){
+    return 'APIの利用枠を使い切りました（429クオータ超過）。アプリ側の不具合ではありません。<br>'+
+      '・無料枠は時間/日で回復するので、しばらく待ってからもう一度お試しください<br>'+
+      '・すぐ使いたい場合は「試合を追加」タブでモデルを軽いもの（flash系）に変更してください<br>'+
+      '・多数決はコマ数ぶんリクエストを使います（例: 12枚＝12回）。枚数を3〜5枚に減らすと消費を抑えられます<br>'+
+      `<span class="dim" style="font-size:11px">元のメッセージ: ${esc(raw.slice(0,160))}</span>`;
+  }
+  if(/401|403|API key|APIキー|unauthorized|permission/i.test(raw)){
+    return 'APIキーが拒否されました（認証エラー）。キーの貼り間違い・期限切れ・そのモデルへの権限が無い可能性があります。<br>'+
+      `<span class="dim" style="font-size:11px">元のメッセージ: ${esc(raw.slice(0,160))}</span>`;
+  }
+  if(/timeout|タイムアウト|abort/i.test(raw)){
+    return '時間切れ（タイムアウト）でした。画像の枚数を減らすか、少し待ってもう一度お試しください。<br>'+
+      `<span class="dim" style="font-size:11px">元のメッセージ: ${esc(raw.slice(0,160))}</span>`;
+  }
+  return esc(raw)+'<br>キー・モデル名を確認してください。解決しない場合は別のモデルやプロバイダに切り替えてお試しください。';
 }
 function normInnStr(a){ return (a||[]).map(v=>n(String(v).replace("X",""))).join(","); }
 function findMatchingGames(g){
@@ -6323,7 +6409,7 @@ function fillFormFromOcr(g){
       DB.playerMeta[k]=DB.playerMeta[k]||{name:String(o.name).trim()};
       if(!DB.playerMeta[k].position){ DB.playerMeta[k].position=p; posFilled.push(`${o.name}=${p}`); }
     });
-    if(posFilled.length){ saveDB(); toast(`守備位置を自動登録したで: ${posFilled.slice(0,4).join("、")}${posFilled.length>4?` 他${posFilled.length-4}人`:""}`); }
+    if(posFilled.length){ saveDB(); toast(`守備位置を自動登録しました: ${posFilled.slice(0,4).join("、")}${posFilled.length>4?` 他${posFilled.length-4}人`:""}`); }
   }
   // OCRがプロンプトの除外ルールを守らんことがあるので、コード側でも弾く:
   // 全項目0 かつ 投手記録に載っている かつ 打席結果に打順が無い ＝ DH制で打席に立ってない投手
@@ -6417,7 +6503,7 @@ function validateEntry(){
     const ra = n($("#gRa").value);
     
     if(mySum !== rs || oppSum !== ra){
-      innErr = `イニング合計と得点欄が一致せえへんで（回別: 味方${mySum}/相手${oppSum} vs 得点欄: 味方${rs}/相手${ra}）`;
+      innErr = `イニング合計と得点欄が一致しません（回別: 味方${mySum}/相手${oppSum} vs 得点欄: 味方${rs}/相手${ra}）`;
     }
   }
 
@@ -6491,7 +6577,7 @@ function renderFreshResult(){
 }
 async function registerFresh(){
   const yv=$("#freshYear").value.trim();
-  if(!yv){ toast("入学年を入れてな",true); return; }
+  if(!yv){ toast("入学年を入力してください",true); return; }
   const year=parseInt(yv,10);
   if(!freshSelected.size){ toast("選手を選んでな",true); return; }
   DB.playerMeta=DB.playerMeta||{};
@@ -6508,16 +6594,16 @@ async function registerFresh(){
   await saveDB();
   freshPlayers=null; freshSelected=new Set(); freshYearGuess=null;
   renderFreshResult();
-  $("#freshStatus").innerHTML='<span class="chip g">'+cnt+'人を名簿に登録</span> 入学年タブで確認できるで。';
+  $("#freshStatus").innerHTML='<span class="chip g">'+cnt+'人を名簿に登録</span> 入学年タブで確認できます。';
   $("#freshFiles").value="";
   render();
-  toast(`${cnt}人を名簿に登録したで`);
+  toast(`${cnt}人を名簿に登録しました`);
 }
 async function runFreshOcr(){
   const key=$("#gemKey").value.trim();
   const files=[...$("#freshFiles").files];
   const st=$("#freshStatus");
-  if(!key){st.innerHTML='<span class="chip r">「試合を追加」タブでAPIキーを設定してな</span>';return;}
+  if(!key){st.innerHTML='<span class="chip r">「試合を追加」タブでAPIキーを設定してください</span>';return;}
   if(!files.length){st.innerHTML='<span class="chip r">画像を選んでな</span>';return;}
   st.innerHTML='<span class="spin"></span>解析中… 画像'+files.length+'枚を送信';
   try{
@@ -6527,7 +6613,7 @@ async function runFreshOcr(){
     else { const s=txt.indexOf("{"), e=txt.lastIndexOf("}"); if(s>=0 && e>s) txt=txt.slice(s,e+1); }
     const g=JSON.parse(txt.trim());
     const players=(g.players||[]).filter(p=>p&&p.name&&String(p.name).trim());
-    if(!players.length) throw new Error("選手名が読み取れへんかった");
+    if(!players.length) throw new Error("選手名を読み取れませんでした");
     // 試合画面は「姓のみ」で記録されるため、登録名(regName)は姓を基本とし、
     // 姓が被る場合はゲーム本体と同じ「姓＋名の頭文字」方式（例: 田中絢）で自動的に別人化する。
     // フルネームはfullNameとして別途保存（表示用）
@@ -6546,7 +6632,7 @@ async function runFreshOcr(){
     freshSelected=new Set(freshPlayers.map((_,i)=>i));
     freshYearGuess=g.enrollYear||null;
     renderFreshResult();
-    st.innerHTML='<span class="chip g">'+freshPlayers.length+'人を読み取り</span> 登録する選手と入学年を確認してな。⚠付きは同名がいるため別名で登録される。';
+    st.innerHTML='<span class="chip g">'+freshPlayers.length+'人を読み取り</span> 登録する選手と入学年を確認してください。⚠付きは同名がいるため別名で登録されます。';
     ocrLogAdd("新入生OCR", `画像${files.length}枚 → ${freshPlayers.length}人を読み取り`);
   }catch(e){
     st.innerHTML='<span class="chip r">失敗</span> '+esc(e.message);
@@ -6615,7 +6701,7 @@ function updateSeasonModalUI(){
   const year=$("#seasonYearInput").value.trim();
   $("#seasonPreview").textContent = isCustom
     ? ($("#seasonCustomInput").value.trim()? `→ 「${$("#seasonCustomInput").value.trim()}」で作成` : "")
-    : (year? `→ 「${year}${tmpl}」で作成` : "年を入力してな");
+    : (year? `→ 「${year}${tmpl}」で作成` : "年を入力してください");
 }
 
 /* ---------- init ---------- */
@@ -6634,8 +6720,8 @@ async function init(){
       document.body.appendChild(a); a.click(); a.remove();
     }catch(e){}
     let proceed=true;
-    try{ proceed=confirm("⚠️ 保存データの読み込みに失敗したで（壊れとる可能性があるで）。\n復旧用に今のデータをJSONファイルとしてダウンロードしたで。\n\nOK: サンプルデータで初期化して続ける\nキャンセル: 何もせず中断する（保存はされへん）"); }catch(e){}
-    if(!proceed) throw new Error("保存データが壊れているため初期化を中断したで（ダウンロードしたバックアップを確認してな）");
+    try{ proceed=confirm("⚠️ 保存データの読み込みに失敗しました（壊れている可能性があります）。\n復旧用に今のデータをJSONファイルとしてダウンロードしました。\n\nOK: サンプルデータで初期化して続ける\nキャンセル: 何もせず中断する（保存はされません）"); }catch(e){}
+    if(!proceed) throw new Error("保存データが壊れているため初期化を中断しました（ダウンロードしたバックアップを確認してください）");
   }
   DB=loaded.data;
   if(!DB){DB=seed();}
@@ -6651,17 +6737,17 @@ async function init(){
   // #26 プロファイル操作
   $("#profileSel").addEventListener("change",e=>{ switchProfile(e.target.value); });
   $("#newProfile").addEventListener("click",async()=>{
-    let nm=null; try{ nm=prompt("新しい学校（保存データ）の名前を入れてな。今の学校のデータはそのまま残るで。"); }catch(e){}
+    let nm=null; try{ nm=prompt("新しい学校（保存データ）の名前を入力してください。今の学校のデータはそのまま残ります。"); }catch(e){}
     if(nm==null) return;
-    if(!String(nm).trim()){ toast("名前が空やで",true); return; }
+    if(!String(nm).trim()){ toast("名前が空です",true); return; }
     await createProfile(nm);
   });
   $("#renameProfile").addEventListener("click",async()=>{
     const p=PROFILES.find(x=>x.id===curProfileId); if(!p) return;
-    let nm=null; try{ nm=prompt("この学校の表示名を変更するで。",p.name); }catch(e){}
+    let nm=null; try{ nm=prompt("この学校の表示名を変更します。",p.name); }catch(e){}
     if(nm==null||!String(nm).trim()) return;
     await renameProfile(curProfileId, nm);
-    toast("名前を変えたで");
+    toast("名前を変更しました");
   });
 
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){switchTab(b.dataset.tab);if(b.dataset.tab==="add"&&editId==null&&formIsEmpty())resetForm();}});
@@ -6675,7 +6761,7 @@ async function init(){
   });
   $("#seasonSel").addEventListener("change",e=>{
     if(e.target.value==="__moreSeasons__"){ // シーズン切替ではなく「全部見せて」の合図
-      seasonSelExpanded=true; fillSeasons(); toast("全シーズンを表示したで（もう一回開いてな）"); return;
+      seasonSelExpanded=true; fillSeasons(); toast("全シーズンを表示しました（もう一度開いてください）"); return;
     }
     DB.current=e.target.value;
     if(editId!=null){resetForm();} // 編集中にシーズン変えたら編集モード解除（別試合の上書き防止）
@@ -6708,7 +6794,7 @@ async function init(){
   });
   $("#innOcrStatus").addEventListener("click",e=>{
     if(e.target.closest("#innWriteGo")){ applyInnWrites(); return; }
-    if(e.target.closest("#innWriteNo")){ window.__innWrites=null; $("#innOcrStatus").innerHTML="やめたで（何も書き込んでへん）"; }
+    if(e.target.closest("#innWriteNo")){ window.__innWrites=null; $("#innOcrStatus").innerHTML="中止しました（何も書き込んでいません）"; }
   });
   $("#gRs").addEventListener("input",validateEntry);
   $("#gRa").addEventListener("input",validateEntry);
@@ -6724,24 +6810,24 @@ async function init(){
     let nm;
     if(tmpl==="__custom"){
       nm=$("#seasonCustomInput").value.trim();
-      if(!nm){toast("名前入れてな",true);return;}
+      if(!nm){toast("名前を入力してください",true);return;}
     }else{
       const year=$("#seasonYearInput").value.trim();
-      if(!year){toast("年を入れてな",true);return;}
+      if(!year){toast("年を入力してください",true);return;}
       nm=`${year}${tmpl}`;
     }
-    if(DB.seasons[nm]){toast("その名前あるで",true);return;}
+    if(DB.seasons[nm]){toast("その名前は既にあります",true);return;}
     DB.seasons[nm]={games:[]}; DB.current=nm; await saveDB(); fillSeasons(); render();
     if(editId==null){ fillRoundSelForSeason(); $("#gRoundSel").value=""; }
-    closeSeasonModal(); toast("作ったで");
+    closeSeasonModal(); toast("作成しました");
   });
   $("#renameSeason").addEventListener("click",async()=>{
     const old=DB.current;
     const nm=prompt("シーズン名を変更",old);
     if(!nm||nm===old)return;
-    if(DB.seasons[nm]){toast("その名前あるで",true);return;}
+    if(DB.seasons[nm]){toast("その名前は既にあります",true);return;}
     DB.seasons=Object.fromEntries(Object.entries(DB.seasons).map(([k,v])=>[k===old?nm:k,v]));
-    DB.current=nm; await saveDB(); fillSeasons(); render(); fillRoundSelForSeason(); toast("名前変えたで");
+    DB.current=nm; await saveDB(); fillSeasons(); render(); fillRoundSelForSeason(); toast("名前を変更しました");
   });
 
   $("#bulkEnrollBtn").addEventListener("click",openBulkEnrollModal);
@@ -6763,13 +6849,13 @@ async function init(){
   });
   $("#bulkEnrollApply").addEventListener("click",async()=>{
     const yv=$("#bulkEnrollYear").value.trim();
-    if(!yv){ toast("入学年を入れてな",true); return; }
+    if(!yv){ toast("入学年を入力してください",true); return; }
     const year=parseInt(yv,10);
     if(!bulkSelectedKeys.size){ toast("選手を選んでな",true); return; }
     DB.playerMeta = DB.playerMeta || {};
     bulkSelectedKeys.forEach(key=>{ DB.playerMeta[key]={...(DB.playerMeta[key]||{}), enrollYear:year}; });
     await saveDB(); closeBulkEnrollModal(); renderPlayerContent();
-    toast(`${bulkSelectedKeys.size}人に設定したで`);
+    toast(`${bulkSelectedKeys.size}人に設定しました`);
   });
   $("#bulkPositionBtn").addEventListener("click",openBulkPositionModal);
   $("#bulkPositionCancel").addEventListener("click",closeBulkPositionModal);
@@ -6795,7 +6881,7 @@ async function init(){
     DB.playerMeta = DB.playerMeta || {};
     bulkPositionSelectedKeys.forEach(key=>{ DB.playerMeta[key]={...(DB.playerMeta[key]||{}), position:pos}; });
     await saveDB(); closeBulkPositionModal(); renderPlayerContent();
-    toast(`${bulkPositionSelectedKeys.size}人に設定したで`);
+    toast(`${bulkPositionSelectedKeys.size}人に設定しました`);
   });
   $("#bulkSubPositionBtn").addEventListener("click",openBulkSubPositionModal);
   $("#bulkSubPositionCancel").addEventListener("click",closeBulkSubPositionModal);
@@ -6821,7 +6907,7 @@ async function init(){
     DB.playerMeta = DB.playerMeta || {};
     bulkSubPositionSelectedKeys.forEach(key=>{ DB.playerMeta[key]={...(DB.playerMeta[key]||{}), subPosition:pos}; });
     await saveDB(); closeBulkSubPositionModal(); renderPlayerContent();
-    toast(`${bulkSubPositionSelectedKeys.size}人に設定したで`);
+    toast(`${bulkSubPositionSelectedKeys.size}人に設定しました`);
   });
 
   // sorting
@@ -6943,10 +7029,10 @@ async function init(){
     if(pc){ drawPlayerCard(pc.dataset.key); return; }
     const rm=e.target.closest("#removeRosterOnly");
     if(rm){ // 出場記録なしの名簿登録のみ選手を削除
-      if(!confirm("この選手を名簿から削除する？（試合記録は無いから成績への影響は無いで）"))return;
+      if(!confirm("この選手を名簿から削除しますか？（試合記録が無いため成績への影響はありません）"))return;
       delete DB.playerMeta[rm.dataset.key];
       $("#playerSel").value="";
-      await saveDB(); render(); toast("名簿から削除したで");
+      await saveDB(); render(); toast("名簿から削除しました");
       return;
     }
     const mg=e.target.closest("#doMergeBtn");
@@ -6956,10 +7042,10 @@ async function init(){
       if(!to){ toast("統合先の選手を選んでな",true); return; }
       const fromNm=(playerRoster().find(([k])=>k===from)||[])[1]||from;
       const toNm=(playerRoster().find(([k])=>k===to)||[])[1]||to;
-      if(!confirm(`「${fromNm}」を「${toNm}」に統合する？ 「${fromNm}」名義の成績はすべて「${toNm}」に合流するで（あとで解除も可能）。`))return;
+      if(!confirm(`「${fromNm}」を「${toNm}」に統合する？ 「${fromNm}」名義の成績はすべて「${toNm}」に合流します（あとで解除も可能です）。`))return;
       if(mergePlayerAlias(from,to)){
         $("#playerSel").value=toNm;
-        await saveDB(); render(); toast(`「${fromNm}」を「${toNm}」に統合したで`);
+        await saveDB(); render(); toast(`「${fromNm}」を「${toNm}」に統合しました`);
       }
       return;
     }
@@ -6967,7 +7053,7 @@ async function init(){
     if(um){ // 合流済み表記の統合を解除
       const fk=um.dataset.unmerge;
       if(unmergePlayerAlias(fk)){
-        await saveDB(); render(); toast(`「${fk}」の統合を解除したで`);
+        await saveDB(); render(); toast(`「${fk}」の統合を解除しました`);
       }
       return;
     }
@@ -6987,7 +7073,7 @@ async function init(){
       const to = keep==="1"? k1 : k2;
       const from = keep==="1"? k2 : k1;
       if(mergePlayerAlias(from,to)){
-        await saveDB(); render(); toast("統合したで");
+        await saveDB(); render(); toast("統合しました");
       }
       return;
     }
@@ -6995,7 +7081,7 @@ async function init(){
     if(dm){
       DB.dismissedDuplicateHints = DB.dismissedDuplicateHints || [];
       if(!DB.dismissedDuplicateHints.includes(dm.dataset.dupdismiss)) DB.dismissedDuplicateHints.push(dm.dataset.dupdismiss);
-      await saveDB(); renderDuplicateHints(); toast("別人として今後は出さへんで");
+      await saveDB(); renderDuplicateHints(); toast("別人として今後は表示しません");
       return;
     }
   });
@@ -7028,7 +7114,7 @@ async function init(){
   });
   $("#addBatRow").addEventListener("click",()=>$("#batEntry tbody").insertAdjacentHTML("beforeend",batRow()));
   $("#addPitRow").addEventListener("click",()=>$("#pitEntry tbody").insertAdjacentHTML("beforeend",pitRow()));
-  $("#sortBatRows").addEventListener("click",()=>{ sortBatRowsByOrder(); toast("打順どおりに並べ替えたで"); });
+  $("#sortBatRows").addEventListener("click",()=>{ sortBatRowsByOrder(); toast("打順どおりに並べ替えました"); });
   $("#clearEntry").addEventListener("click",()=>{
     ocrBatTotals=null;
     ocrQueue=[]; // 仕分け待ちの試合も破棄
@@ -7052,7 +7138,7 @@ async function init(){
     const sum={}; BAT_INPUT.forEach(k=>sum[k]=0);
     $$("#batEntry tbody tr").forEach(tr=>{$$("input[data-k]",tr).forEach(i=>{sum[i.dataset.k]=(sum[i.dataset.k]||0)+n(i.value);});});
     ocrBatTotals=sum; validateEntry();
-    toast("今の入力値を合計として採用したで");
+    toast("今の入力値を合計として採用しました");
   });
   resetForm();
 
@@ -7063,6 +7149,9 @@ async function init(){
   $("#fpCancel").addEventListener("click",closeFramePicker);
   $("#framePickerModal").addEventListener("click",e=>{ if(e.target.id==="framePickerModal") closeFramePicker(); });
   $("#fpGrid").addEventListener("click",e=>{ const th=e.target.closest(".fpth"); if(!th)return; const i=+th.dataset.i; if(fpSelected.has(i)){fpSelected.delete(i);th.classList.remove("sel");}else{fpSelected.add(i);th.classList.add("sel");} updateFpCount(); });
+  $("#fpPickRec").addEventListener("click",()=>{ fpSelected=new Set(fpRecommended()); renderFpGrid(); updateFpCount(); });
+  $("#fpPickAll").addEventListener("click",()=>{ fpSelected=new Set(fpFrames.map((_,i)=>i)); renderFpGrid(); updateFpCount(); });
+  $("#fpPickNone").addEventListener("click",()=>{ fpSelected=new Set(); renderFpGrid(); updateFpCount(); });
   $("#loadModels").addEventListener("click",()=>loadModels(false));
   $("#gemKey").addEventListener("change",()=>{saveGemCfg();loadModels(false);});
   $("#gemModel").addEventListener("change",saveGemCfg);
@@ -7077,7 +7166,7 @@ async function init(){
     editGame(m.season, m.id);           // 保存済みの試合を編集モードで開き…
     fillFormFromOcr(m.g);               // OCR結果を重ねる（空欄セルだけ埋まる＝イニングや打順の後付けに最適）
     if(m.g.batTotals){ ocrBatTotals=m.g.batTotals; validateEntry(); }
-    toast("保存済みの試合を編集モードで開いたで");
+    toast("保存済みの試合を編集モードで開きました");
   });
   pickupSharedImages(); // 共有ターゲット経由の画像があれば受け取る
   $("#vsYomiBtn").addEventListener("click",()=>fillSchoolYomi(true));
@@ -7120,15 +7209,15 @@ async function init(){
     e.preventDefault();
     setShotFiles([...$("#shotFiles").files, ...files]);
     if($("#tab-add").style.display==="none") switchTab("add"); // 既にaddタブなら履歴を積まない
-    toast(`画像${files.length}枚を貼り付けたで`);
+    toast(`画像${files.length}枚を貼り付けました`);
   });
 
   async function persistGame(stay){
     const g=collectForm();
-    if(!g.batters.length && !g.pitchers.length){toast("選手が空っぽや",true);return;}
+    if(!g.batters.length && !g.pitchers.length){toast("選手が入力されていません",true);return;}
     if(editId==null){ // 二重登録ガード: 新規保存時に同一試合らしきものがあれば確認
       const dup=findMatchingGames(g);
-      if(dup.length && !confirm(`同じ試合が保存済みかもしれん（${dup[0].game.date||"日付なし"} ${dup[0].game.opponent||"(相手未設定)"}）。それでも新規で保存する？`)) return;
+      if(dup.length && !confirm(`同じ試合が保存済みの可能性があります（${dup[0].game.date||"日付なし"} ${dup[0].game.opponent||"(相手未設定)"}）。それでも新規で保存する？`)) return;
     }
     g.badges = detectGameBadges(g);
     if(g.badges.includes("サヨナラ勝ち") && g.innings && g.innings.bottom && g.innings.bottom.length){
@@ -7147,17 +7236,17 @@ async function init(){
     if(editId!=null){
       const games=curGames();
       const gi=games.findIndex(x=>String(x.id)===String(editId));
-      if(gi<0){toast("編集対象の試合が見つからへん（削除された？）",true);editId=null;resetForm();return;}
-      games[gi]=ng;toast("編集を保存したで");
+      if(gi<0){toast("編集対象の試合が見つかりません（削除された？）",true);editId=null;resetForm();return;}
+      games[gi]=ng;toast("編集を保存しました");
     }
-    else{curGames().push(ng);toast("保存したで");}
+    else{curGames().push(ng);toast("保存しました");}
     
     const afterGames = officialSeasonEntries().flatMap(([_, s]) => s.games);
     const newMs = checkMilestonesDiff(beforeGames, afterGames, savedGameId, g.date);
     if(newMs.length > 0){
       DB.milestones = DB.milestones || [];
       DB.milestones.push(...newMs);
-      toast(newMs.map(ms => `${ms.player}が通算${ms.label}を達成したで`).join("\n"));
+      toast(newMs.map(ms => `${ms.player}が通算${ms.label}を達成しました`).join("\n"));
     }
     
     await saveDB(); editId=null; resetForm(); render();
@@ -7190,8 +7279,8 @@ async function init(){
       }
       migrate(DB); // 他のインポート経路と同じくmigrate()を通してからDBを確定させる
       await saveDB(); $("#importGame").value=""; render(); switchTab("summary","replace");
-      toast(`${added}試合 取り込んだで${skipped?`（${skipped}件はid重複でスキップ）`:''}`);
-    }catch(e){toast("JSONが読めへん: "+e.message,true);}
+      toast(`${added}試合 取り込みました${skipped?`（${skipped}件はid重複でスキップ）`:''}`);
+    }catch(e){toast("JSONを読み込めません: "+e.message,true);}
   });
 
   $("#exportAll").addEventListener("click",()=>{
@@ -7200,7 +7289,7 @@ async function init(){
     a.download=`eikan-stats-${new Date().toISOString().slice(0,10)}.json`;a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000); // 即revokeやとダウンロード開始前に無効化される環境がある
     DB.lastExport={at:Date.now(), games:countAllGames()}; saveDB(); renderBackupHint(); // バックアップ催促の基準を更新
-    toast("書き出したで");
+    toast("書き出しました");
   });
   $("#exportCsv").addEventListener("click",()=>{ try{ exportCsvAll(); }catch(e){ toast("CSV書き出しに失敗: "+e.message,true); } });
   // 選手検索（ヘッダ常設・#14）
@@ -7208,7 +7297,7 @@ async function init(){
     const inp=$("#playerSearch"); if(!inp) return;
     const key=findPlayerBySearch(inp.value);
     if(key){ goToPlayer(key); inp.value=""; }
-    else if(inp.value.trim()){ toast("その名前の選手が見つからへん",true); }
+    else if(inp.value.trim()){ toast("その名前の選手が見つかりません",true); }
   };
   $("#playerSearch").addEventListener("change",doPlayerSearch); // datalist候補の確定
   $("#playerSearch").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doPlayerSearch(); } });
@@ -7219,15 +7308,15 @@ async function init(){
       try{
         await navigator.share({files:[file],title:"栄冠ノート データ"});
         DB.lastExport={at:Date.now(), games:countAllGames()}; saveDB(); renderBackupHint();
-        toast("共有したで");
+        toast("共有しました");
       }
       catch(e){
         if(e.name==="AbortError") return; // ユーザーがキャンセルしただけ
-        toast("共有できへんかったからダウンロードするで",true);
+        toast("共有できなかったためダウンロードします",true);
         $("#exportAll").click();
       }
     }else{
-      toast("この端末は共有非対応やからダウンロードで書き出すで",true);
+      toast("この端末は共有に対応していないためダウンロードで書き出します",true);
       $("#exportAll").click();
     }
   });
@@ -7242,8 +7331,8 @@ async function init(){
     const findKey=v=>{ const k=nameKey(v); return playerRoster().some(([kk])=>kk===k)? k : null; };
     const ka=findKey($("#cmpA").value), kb=findKey($("#cmpB").value);
     const el=$("#cmpResult");
-    if(!ka||!kb){ el.innerHTML=`<div class="hint">両方の選手名を候補から選んでな${!ka&&$("#cmpA").value?`（「${esc($("#cmpA").value)}」が見つからへん）`:""}${!kb&&$("#cmpB").value?`（「${esc($("#cmpB").value)}」が見つからへん）`:""}</div>`; return; }
-    if(ka===kb){ el.innerHTML=`<div class="hint">同じ選手やで</div>`; return; }
+    if(!ka||!kb){ el.innerHTML=`<div class="hint">両方の選手名を候補から選んでください${!ka&&$("#cmpA").value?`（「${esc($("#cmpA").value)}」が見つかりません）`:""}${!kb&&$("#cmpB").value?`（「${esc($("#cmpB").value)}」が見つかりません）`:""}</div>`; return; }
+    if(ka===kb){ el.innerHTML=`<div class="hint">同じ選手です</div>`; return; }
     el.innerHTML=comparePlayersHtml(ka,kb);
   });
   // バックアップ催促バナー
@@ -7260,24 +7349,24 @@ async function init(){
       const all=(await idbSnapshotList(db)).map(s=>s.date).filter(snapBelongsToCur).sort().reverse();
       db.close();
       sel.innerHTML= all.length? all.map(st=>`<option value="${esc(st)}">${esc(snapDisplayDate(st))}</option>`).join("") : `<option value="">（まだ控えが無い）</option>`;
-    }catch(e){ sel.innerHTML=`<option value="">（この環境では使えへん）</option>`; }
+    }catch(e){ sel.innerHTML=`<option value="">（この環境では使えません）</option>`; }
   }
   $("#snapRefresh").addEventListener("click",fillSnapList);
   $("#snapRestore").addEventListener("click",async()=>{
     const st=$("#snapSel").value; // stamp（プロファイル込みの実キー）
-    if(!st){ toast("控えが無いで",true); return; }
+    if(!st){ toast("控えがありません",true); return; }
     const disp=snapDisplayDate(st);
-    if(!confirm(`⚠️ 今の学校のデータを ${disp} 時点の控えに置き換えるで。今のデータは消える。ええか？（心配なら先に書き出しを）`)) return;
+    if(!confirm(`⚠️ 今の学校のデータを ${disp} 時点の控えに置き換えます。今のデータは消えます。よろしいですか？（心配な場合は先に書き出しを）`)) return;
     try{
       const db=await idbOpen();
       const rec=await new Promise((res,rej)=>{ const tx=db.transaction("snapshots","readonly"); const r2=tx.objectStore("snapshots").get(st); r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error); });
       db.close();
-      if(!rec) throw new Error("控えが見つからへん");
+      if(!rec) throw new Error("控えが見つかりません");
       DB=JSON.parse(rec.json);
       migrate(DB);
       await saveDB(); fillSeasons(); render(); switchTab("summary","replace");
-      $("#snapStatus").textContent=`${disp} 時点に復元したで`;
-      toast(`${disp} 時点に復元したで`);
+      $("#snapStatus").textContent=`${disp} 時点に復元しました`;
+      toast(`${disp} 時点に復元しました`);
     }catch(e){ toast("復元失敗: "+e.message,true); }
   });
   fillSnapList();
@@ -7288,24 +7377,24 @@ async function init(){
   });
   $("#importFile").addEventListener("change",e=>{
     const f=e.target.files[0];if(!f)return;
-    if(!confirm("⚠️ 全シーズンを、このファイルの内容に置き換えるで。今のデータは消えるけどええか？（先にエクスポート推奨）")){e.target.value="";return;}
-    const r=new FileReader();r.onload=async()=>{try{DB=JSON.parse(r.result);if(!DB.seasons)throw new Error("形式ちゃう");normDB(DB);if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("読み込んだで");}catch(err){toast("失敗: "+err.message,true);}};r.readAsText(f);
+    if(!confirm("⚠️ 全シーズンを、このファイルの内容に置き換えます。今のデータは消えますがよろしいですか？（先にエクスポート推奨）")){e.target.value="";return;}
+    const r=new FileReader();r.onload=async()=>{try{DB=JSON.parse(r.result);if(!DB.seasons)throw new Error("形式が違います");normDB(DB);if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("読み込みました");}catch(err){toast("失敗: "+err.message,true);}};r.readAsText(f);
   });
   $("#doImportBulk").addEventListener("click",async()=>{
-    if(!confirm("⚠️ 全シーズンを置き換えるで。今のデータは消えるけどええか？")){return;}
-    try{const d=JSON.parse($("#importBulk").value);if(!d.seasons)throw new Error("形式ちゃう");DB=normDB(d);if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("置き換えたで");}catch(e){toast("失敗: "+e.message,true);}
+    if(!confirm("⚠️ 全シーズンを置き換えます。今のデータは消えますがよろしいですか？")){return;}
+    try{const d=JSON.parse($("#importBulk").value);if(!d.seasons)throw new Error("形式が違います");DB=normDB(d);if(!DB.seasons[DB.current])DB.current=Object.keys(DB.seasons)[0];await saveDB();fillSeasons();render();switchTab("summary","replace");toast("置き換えました");}catch(e){toast("失敗: "+e.message,true);}
   });
   $("#wipeSeason").addEventListener("click",async()=>{
     if(!confirm(`「${DB.current}」の試合を全部消す？`))return;
-    DB.seasons[DB.current].games=[];await saveDB();render();toast("消したで");
+    DB.seasons[DB.current].games=[];await saveDB();render();toast("消しました");
   });
   $("#deleteSeason").addEventListener("click",async()=>{
-    if(Object.keys(DB.seasons).length<=1){toast("最後のシーズンは消されへん",true);return;}
-    if(!confirm(`⚠️ シーズン「${DB.current}」を試合データごと完全に削除するで。ええか？`))return;
+    if(Object.keys(DB.seasons).length<=1){toast("最後のシーズンは削除できません",true);return;}
+    if(!confirm(`⚠️ シーズン「${DB.current}」を試合データごと完全に削除します。よろしいですか？`))return;
     delete DB.seasons[DB.current];
     DB.current=Object.keys(DB.seasons)[0];
     editId=null;
-    await saveDB();fillSeasons();resetForm();render();toast("シーズンを削除したで");
+    await saveDB();fillSeasons();resetForm();render();toast("シーズンを削除しました");
   });
 
   window.addEventListener("popstate",e=>{
@@ -7325,7 +7414,7 @@ async function init(){
   }
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
-window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles };
+window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
@@ -7333,7 +7422,7 @@ function showUpdateBar(){
   const d=document.createElement("div");
   d.id="updateBar";
   d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:64px;background:var(--panel2);border:1px solid var(--amber);color:var(--ink);padding:10px 16px;border-radius:10px;font-size:13px;z-index:99;display:flex;gap:10px;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,.4)";
-  d.innerHTML=`新しいバージョンがあるで <button type="button" class="mini primary" id="updateReload">リロードして更新</button> <button type="button" class="mini ghost" id="updateLater">あとで</button>`;
+  d.innerHTML=`新しいバージョンがあります <button type="button" class="mini primary" id="updateReload">リロードして更新</button> <button type="button" class="mini ghost" id="updateLater">あとで</button>`;
   document.body.appendChild(d);
   d.addEventListener("click",e=>{
     if(e.target.closest("#updateReload")) location.reload();
