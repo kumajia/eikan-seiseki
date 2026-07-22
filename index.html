@@ -40,8 +40,10 @@
   .sub{color:var(--muted);font-size:13px;font-family:var(--mono);}
   /* ヘッダ右側のツール群（学校/シーズン/選手検索）は1つのまとまりとして右寄せする。
      個々にmargin-left:autoを付けると、複数あるときにauto同士が余白を取り合って中央に浮く */
-  .header-tools{margin-left:auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+  .header-tools{margin-left:auto;display:flex;gap:12px 14px;align-items:center;flex-wrap:wrap;justify-content:flex-end;
+    flex:1 1 auto;min-width:0;} /* flex:1 1 auto+min-width:0 で、箱ごと下段に落ちずタイトルと同じ行に入り、狭いときは箱の中だけで折り返す */
   .season-pick{display:flex;gap:6px;align-items:center;}
+  .header-tools select{max-width:210px;} /* 長いシーズン名で行が押し広げられて折り返すのを防ぐ（選択肢は開けば全文見える） */
   select,input,textarea,button{font-family:inherit;color:var(--ink);}
   option{background:var(--panel);color:var(--ink);}
   .entrygrid input.nm{color:var(--ink);}
@@ -6124,13 +6126,36 @@ function voteOcrReads(reads){
   // side/得点/イニング/coldは「イニングを持つread(=スコアボードのコマ)」だけで多数決（打者コマの既定bottomに引っ張られない）
   const sb=reads.filter(r=> r.innings && ((r.innings.top&&r.innings.top.length)||(r.innings.bottom&&r.innings.bottom.length)));
   const scoreReads=sb.length? sb : reads;
-  for(const key of ["innings","runsFor","runsAgainst","myTeamSide","cold"]){
-    const vals=scoreReads.map(r=>r[key]).filter(v=> v!=null && v!=="");
-    if(vals.length) g[key]=voteMode(vals);
+  // 得点まわりは項目ごとにバラバラに多数決すると、別コマ由来のsideと得点が混ざって
+  // 「イニング合計は味方15/相手2なのに得点欄は味方2/相手15」のような取り違えが起きる。
+  // → runsFor/runsAgainst/myTeamSide/innings/cold は1つのコマの組み合わせごと多数決して整合を保つ
+  {
+    const sig=r=>JSON.stringify([r.innings??null,r.runsFor??null,r.runsAgainst??null,r.myTeamSide??null,!!r.cold]);
+    const m=new Map();
+    for(const r of scoreReads){ const k=sig(r); const e=m.get(k)||{n:0,r}; e.n++; m.set(k,e); }
+    let best=null; for(const e of m.values()) if(!best||e.n>best.n) best=e;
+    if(best){
+      for(const key of ["innings","runsFor","runsAgainst","myTeamSide","cold"]){
+        const v=best.r[key];
+        if(v!=null && v!=="") g[key]=v;
+      }
+    }
   }
-  for(const key of ["date","opponent","order","batTotals"]){
+  for(const key of ["date","opponent","order"]){
     const vals=reads.map(r=>r[key]).filter(v=> v!=null && v!=="" && !(Array.isArray(v)&&v.length===0));
     if(vals.length) g[key]=voteMode(vals);
+  }
+  // batTotals: 合計欄が写っていないコマは全項目0で返ってくることがあり、
+  // それをそのまま多数決すると「個人成績はあるのに合計が全部0」になる。全0のコマは候補から除外し、
+  // 残りをセル単位で多数決する（一部の列だけ誤読したコマがあっても他の列は生かせる）
+  {
+    const TOT={AB:0,R:0,H:0,"2B":0,"3B":0,HR:0,RBI:0,SO:0,BB:0,SH:0,SB:0,GDP:0,E:0};
+    const cands=reads.map(r=>r.batTotals).filter(v=> v && typeof v==="object" && Object.keys(TOT).some(k=>n(v[k])>0));
+    if(cands.length){
+      const t={};
+      for(const k in TOT) t[k]=voteMode(cands.map(o=> o[k]==null? TOT[k] : o[k]));
+      g.batTotals=t;
+    }
   }
   return g;
 }
