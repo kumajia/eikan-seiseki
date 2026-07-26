@@ -7760,22 +7760,50 @@ function vpIsVideo(name){
   return VP_VIDEO_EXT.some(e=>s.endsWith(e));
 }
 function vpIsDone(name){ return String(name||"").startsWith(VP_DONE_PREFIX); }
-/* 第109弾: 中身が同じ動画の検出。サーバーが返す hash（サイズ＋先頭/末尾256KBの署名）でグループ化する。
+/* 第109/110弾: 同じ動画の検出。
+   実データを調べたところ、iPhoneは共有のたびに動画を書き出し直すため、**同じ試合の動画でも
+   作成日時などのメタデータ（moov/mvhd）だけが数バイト違い、ハッシュが一致しない**ことが分かった
+   （実測: 9,519,483バイト中わずか13バイトだけ相違・映像本体は完全同一）。
+   そこで判定を2段構えにする:
+     1. サーバーのhashが一致（完全に同じバイト列）
+     2. **サーバーが付ける連番(_1)と済ラベルを除いた名前＋サイズが一致**
+        → 実データ40本で15組すべてを検出でき、名前が同じでサイズが違う組は0件（誤検出なし）を確認済み
    戻り値: {groups:[{key,label,files[]}], dupOf:{ファイル名→ラベル}, newer:[後から来た方のファイル名]} */
+function vpDupKey(f){
+  if(!f || !f.name) return null;
+  const nm=String(f.name);
+  const dot=nm.lastIndexOf(".");
+  let stem=dot>0? nm.slice(0,dot) : nm;
+  const ext=dot>0? nm.slice(dot).toLowerCase() : "";
+  stem=stem.replace(/^済_(?:\d{4}(?:対[^_]*)?_)?/,"");  // 保存済みラベルを除去
+  stem=stem.replace(/_\d+$/,"");                        // サーバーが衝突時に付ける連番を除去
+  return "n:"+stem+ext+"|"+(Number(f.size)||0);
+}
 function vpDupGroups(files){
-  const byHash=new Map();
-  for(const f of (files||[])){
-    const h=f&&f.hash; if(!h) continue;               // ハッシュ非対応の古いサーバーでは何もしない
-    if(!byHash.has(h)) byHash.set(h,[]);
-    byHash.get(h).push(f);
-  }
+  const arr=(files||[]).filter(f=>f&&f.name);
+  // hash一致でも 名前＋サイズ一致でも同じ組にまとめる（どちらか一方でも一致すれば同一とみなす）
+  const parent=arr.map((_,i)=>i);
+  const find=i=>{ while(parent[i]!==i){ parent[i]=parent[parent[i]]; i=parent[i]; } return i; };
+  const union=(a,b)=>{ const ra=find(a), rb=find(b); if(ra!==rb) parent[rb]=ra; };
+  const seen=new Map();
+  arr.forEach((f,i)=>{
+    const keys=[];
+    if(f.hash) keys.push("h:"+f.hash);   // 完全に同じバイト列
+    const nk=vpDupKey(f); if(nk) keys.push(nk); // 連番/済ラベルを除いた名前＋サイズ
+    for(const k of keys){
+      if(seen.has(k)) union(seen.get(k), i);
+      else seen.set(k, i);
+    }
+  });
+  const byRoot=new Map();
+  arr.forEach((f,i)=>{ const r=find(i); if(!byRoot.has(r)) byRoot.set(r,[]); byRoot.get(r).push(f); });
   const groups=[], dupOf={}, newer=[];
   let i=0;
-  for(const [key,list] of byHash){
+  for(const [key,list] of byRoot){
     if(list.length<2) continue;
     const label=String.fromCharCode(65+(i%26)); i++;   // A, B, C...
     const sorted=[...list].sort((a,b)=>(Number(a.mtime)||0)-(Number(b.mtime)||0)); // 古い順
-    groups.push({key,label,files:sorted});
+    groups.push({key:String(key), label, files:sorted});
     sorted.forEach((f,idx)=>{ dupOf[f.name]=label; if(idx>0) newer.push(f.name); });
   }
   return {groups, dupOf, newer};
