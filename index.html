@@ -3894,6 +3894,24 @@ function generationSummaryHtml(ey){
   const txt=generationSummaryText(ey); if(!txt) return "";
   return `<div class="dim" style="font-size:12px;padding:6px 2px;border-bottom:1px solid var(--line);margin-bottom:6px">${esc(txt)}</div>`;
 }
+/* 第108弾: 日付とシーズンの食い違いを検出し、日付に合うシーズンを提案する。
+   「解析後にシーズンを変え忘れて別シーズンへ保存してしまう」事故を防ぐ。
+   戻り値: 一致していれば null / 不一致なら {dateYear, curYear, candidates[]} */
+function seasonMismatch(dateStr, curName, seasonNames){
+  const y=parseInt(String(dateStr||"").slice(0,4),10);
+  if(isNaN(y)) return null;                      // 日付が無ければ判定しない
+  const curY=(String(curName).match(/^(\d{4})/)||[])[1];
+  if(!curY) return null;                         // 年の付かないシーズン名（「練習試合」等）は対象外
+  if(parseInt(curY,10)===y) return null;         // 一致しているので問題なし
+  // 日付の年で始まるシーズンを候補に。同じ大会種別（年を除いた部分が一致）を優先して並べる
+  const kind=String(curName).replace(/^\d{4}/,"");
+  const cands=(seasonNames||[]).filter(nm=>nm!==curName && (String(nm).match(/^(\d{4})/)||[])[1]===String(y));
+  cands.sort((a,b)=>{
+    const ak=String(a).replace(/^\d{4}/,"")===kind?0:1, bk=String(b).replace(/^\d{4}/,"")===kind?0:1;
+    return ak-bk || String(a).localeCompare(String(b),"ja");
+  });
+  return {dateYear:y, curYear:parseInt(curY,10), candidates:cands};
+}
 function seasonYearOf(sname,games){
   const my=(String(sname).match(/^(\d{4})/)||[])[1];
   if(my) return parseInt(my,10);
@@ -7742,6 +7760,26 @@ function vpIsVideo(name){
   return VP_VIDEO_EXT.some(e=>s.endsWith(e));
 }
 function vpIsDone(name){ return String(name||"").startsWith(VP_DONE_PREFIX); }
+/* 第109弾: 中身が同じ動画の検出。サーバーが返す hash（サイズ＋先頭/末尾256KBの署名）でグループ化する。
+   戻り値: {groups:[{key,label,files[]}], dupOf:{ファイル名→ラベル}, newer:[後から来た方のファイル名]} */
+function vpDupGroups(files){
+  const byHash=new Map();
+  for(const f of (files||[])){
+    const h=f&&f.hash; if(!h) continue;               // ハッシュ非対応の古いサーバーでは何もしない
+    if(!byHash.has(h)) byHash.set(h,[]);
+    byHash.get(h).push(f);
+  }
+  const groups=[], dupOf={}, newer=[];
+  let i=0;
+  for(const [key,list] of byHash){
+    if(list.length<2) continue;
+    const label=String.fromCharCode(65+(i%26)); i++;   // A, B, C...
+    const sorted=[...list].sort((a,b)=>(Number(a.mtime)||0)-(Number(b.mtime)||0)); // 古い順
+    groups.push({key,label,files:sorted});
+    sorted.forEach((f,idx)=>{ dupOf[f.name]=label; if(idx>0) newer.push(f.name); });
+  }
+  return {groups, dupOf, newer};
+}
 function vpFmtSize(b){
   const n0=Number(b)||0;
   if(n0>=1024*1024*1024) return (n0/1024/1024/1024).toFixed(1)+"GB";
@@ -7819,15 +7857,21 @@ function renderVideoPool(errMsg){
     el.innerHTML=`<div class="empty">動画がまだありません。スマホから受信サーバーのページへ動画を送ってください。</div>`;
     return;
   }
+  const dup=vpDupGroups(vpFiles);
   const rows=[...vpFiles].sort((a,b)=>{
     const ad=vpIsDone(a.name)?1:0, bd=vpIsDone(b.name)?1:0;
     return ad-bd || (Number(b.mtime)||0)-(Number(a.mtime)||0); // 未解析を先に、新しい順
   });
-  el.innerHTML=rows.map(f=>{
+  const dupBanner = dup.groups.length? `<div style="border:1px solid var(--amber);background:rgba(245,179,1,.08);border-radius:8px;padding:9px 11px;margin-bottom:9px;line-height:1.6">
+      中身が同じ動画が <b>${dup.groups.length}組</b> あります（名前が違っても検出しています）。
+      <div style="margin-top:7px"><button type="button" class="mini ghost" id="vpSelDup">重複を選択（各組の新しい方 ${dup.newer.length}件）</button></div>
+    </div>` : "";
+  el.innerHTML=dupBanner+rows.map(f=>{
     const sel=vpSelected.has(f.name), done=vpIsDone(f.name);
     const cached=vpCacheFind(f.name,f.size);
     const cs=cached? vpCacheSummary(cached) : null;
-    return `<div class="vprow" style="display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid var(--line)">
+    const dlabel=dup.dupOf[f.name];
+    return `<div class="vprow" style="display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid var(--line)${dlabel?";background:rgba(245,179,1,.07);border-left:3px solid var(--amber);padding-left:6px":""}">
       <input type="checkbox" class="vpck" data-name="${esc(f.name)}" ${sel?"checked":""} ${done?'title="解析済みの動画（選び直せば再解析できます）"':""}>
       <span style="flex:1;min-width:0">
         <span class="dim" style="font-size:12px">${esc(vpFmtTime(f.mtime))}</span>
@@ -7836,6 +7880,7 @@ function renderVideoPool(errMsg){
       <span class="dim" style="font-size:12px;flex:none">${esc(vpFmtSize(f.size))}</span>
       ${cached&&!done? `<span class="mbadge green" style="flex:none" title="${esc((cs.when?cs.when+"に読み取り":"")+(cs.detail?" / "+cs.detail:""))}">解析結果あり</span>
         <button type="button" class="mini ghost" data-vpdropcache="${esc(f.name)}" data-size="${esc(String(f.size||0))}" title="保存されている解析結果を捨てる（動画は残ります）" style="flex:none">結果を捨てる</button>` : ""}
+      ${dlabel? `<span class="mbadge" style="flex:none;border-color:var(--amber);color:var(--amber)" title="中身が同じ動画が他にもあります">同一 ${esc(dlabel)}</span>` : ""}
       <span class="mbadge ${done?"green":""}" style="flex:none">${done?"済":"未解析"}</span>
       <button type="button" class="mini ghost" data-vprename="${esc(f.name)}" title="あとで分かるように名前を付ける" style="flex:none">名前</button>
     </div>`;
@@ -9203,6 +9248,24 @@ async function init(){
     toast(`画像${files.length}枚を貼り付けました`);
   });
 
+  // 不一致なら確認する。保存を続けるなら true、やめるなら false。移動先が選ばれたら DB.current を切り替える
+  function confirmSeasonBeforeSave(g){
+    if(editId!=null) return true;                  // 既存試合の編集は保存先が確定しているので触らない
+    const mm=seasonMismatch(g.date, DB.current, Object.keys(DB.seasons));
+    if(!mm) return true;
+    const head=`日付は ${g.date} ですが、いま選ばれているシーズンは「${DB.current}」（${mm.curYear}年）です。`;
+    if(mm.candidates.length){
+      const to=mm.candidates[0];
+      const ans=confirm(`${head}\n\nOK: 「${to}」に保存する（シーズンを切り替えます）\nキャンセル: 「${DB.current}」のまま保存する`);
+      if(ans){
+        DB.current=to;
+        fillSeasons(); fillRoundSelForSeason();
+        toast(`シーズンを「${to}」に切り替えて保存します`);
+      }
+      return true;
+    }
+    return confirm(`${head}\n${mm.dateYear}年のシーズンが見つかりませんでした。\n\nこのまま「${DB.current}」に保存しますか？`);
+  }
   async function persistGame(stay){
     // 連続入力で日付・大会を引き継ぐ設定なら、resetForm前に現在値を退避
     const keepCtx = stay && $("#keepContext") && $("#keepContext").checked;
@@ -9211,6 +9274,7 @@ async function init(){
     const keptRoundCustom = keepCtx ? $("#gRoundCustom").value : null;
     const g=collectForm();
     if(!g.batters.length && !g.pitchers.length){toast("選手が入力されていません",true);return;}
+    if(!confirmSeasonBeforeSave(g)) return; // 日付とシーズンの食い違いを確認（第108弾）
     if(editId==null){ // 二重登録ガード: 新規保存時に同一試合らしきものがあれば確認
       const dup=findMatchingGames(g);
       if(dup.length && !confirm(`同じ試合が保存済みの可能性があります（${dup[0].game.date||"日付なし"} ${dup[0].game.opponent||"(相手未設定)"}）。それでも新規で保存する？`)) return;
@@ -9280,6 +9344,11 @@ async function init(){
     $("#vpDelete").addEventListener("click",vpDeleteSelected);
     $("#vpList").addEventListener("click",e=>{
       const rn=e.target.closest("[data-vprename]"); if(rn){ vpRename(rn.dataset.vprename); return; }
+      if(e.target.closest("#vpSelDup")){ // 各組の「新しい方」だけを選択（古い方を残す想定）
+        vpSelected=new Set(vpDupGroups(vpFiles).newer); renderVideoPool();
+        toast(`重複${vpSelected.size}件を選びました。内容を確認してから削除してください`);
+        return;
+      }
       const dc=e.target.closest("[data-vpdropcache]");
       if(dc){ vpCacheDrop(dc.dataset.vpdropcache, Number(dc.dataset.size)||0); toast("保存されていた解析結果を捨てました"); renderVideoPool(); return; }
       const ck=e.target.closest(".vpck");
@@ -9463,7 +9532,9 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   saberPitchFrom, saberPitchRows, trophyShelf,
   // 第103弾: 動画プール / 第105弾: OCR結果キャッシュ
   vpDoneName, vpIsVideo, vpIsDone,
-  vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX };
+  vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
+  // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
+  seasonMismatch, vpDupGroups };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
