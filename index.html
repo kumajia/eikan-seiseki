@@ -1908,9 +1908,14 @@ function migrate(db){
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const n=v=>{const x=parseInt(v,10);return isNaN(x)?0:x;};
-function ip2outs(ip){ // "6.1" / "6⅓" / "6 1/3" -> 19 outs
+function ip2outs(ip){ // "6.1" / "6⅓" / "6 1/3" / "6 1⁄3" / "6･1/3" -> 19 outs
   if(ip==null||ip==="")return 0;
-  const s=String(ip).trim().replace(/⅓/g,".1").replace(/⅔/g,".2");
+  let s=String(ip).trim()
+    .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)) // 全角数字
+    .replace(/[⁄∕／]/g,"/")            // 分数用スラッシュ・全角スラッシュを半角に
+    .replace(/[．。･・]/g,".")          // 全角ピリオド・中黒を小数点に
+    .replace(/⅓/g,".1").replace(/⅔/g,".2")
+    .replace(/[\s　]+/g," ").trim();
   const m=s.match(/^(\d+)?\s*(?:と)?\s*([12])\s*\/\s*3$/); // "8 1/3"「8と2/3」単独の"1/3"にも対応
   if(m) return n(m[1]||0)*3+n(m[2]);
   if(s.includes(".")){const[a,b]=s.split(".");return n(a)*3+Math.min(2,n(b));}
@@ -7607,6 +7612,14 @@ const OCR_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』�
 
 【投手記録の列順】投球回,球数,打者,被安打,奪三振,四死球,失点,自責点,暴投,被本塁,防御率
 - 投球回は "8"(=8回) / "8.1"(=8回1/3、8⅓) / "0.2"(=0回2/3、0⅔) の形式で。左端に「勝」マークがある投手は "W":true。
+【投球回の分数の読み方（最重要・誤読が多い）】
+- 投球回の欄には「6⅓」「7⅔」のように、**整数の右に小さな分数**が付くことがある。分数は斜線(／)で区切られ、
+  左上に分子、右下に分母3が書かれる。**分母は必ず3**で、分子は**1か2のどちらかしかない**（3以上や0はありえない）。
+- 分子が **1** に見えたら "整数.1"（例: 6⅓ → "6.1"）、**2** に見えたら "整数.2"（例: 7⅔ → "7.2"）と出力する。
+- 分数だけで整数部が無い場合（⅓ / ⅔）は "0.1" / "0.2" とする。
+- 1と2の判別に迷ったら、次で確かめる: **全投手の投球回の合計は、相手チームが攻撃した回数と一致する**
+  （9回の試合なら合計9.0、7回コールドなら合計7.0）。合計が合うように分子を選び直すこと。
+- 分数を「13」「23」「1」「2」のような整数として読んではいけない。必ず "6.1" のような小数形式で出力する。
 - pitchers配列は画面の上から下の順（＝登板順。先発投手を必ず配列の先頭）に並べること。順序を逆にしないこと。
 
 【打順・途中出場（「打席結果」画面がある場合のみ）】
@@ -8625,6 +8638,33 @@ function expectedPitchOuts(){
   if(!last) return {outs:27, innings:9, fromInnings:false};
   return {outs:last*3, innings:last, fromInnings:true};
 }
+/* 第115弾: 投球回の分数(⅓/⅔)の誤読を自動補正する候補を探す。
+   誤読は「合計が1〜2アウトずれる」形で出るので、**1人の分数だけを直せば合計が合う**ケースを見つけて提案する。
+   rows: [{outs}] / expected: 期待アウト数 → {index, from, to} または null（候補が1つに絞れない時もnull） */
+function suggestIpFix(rows, expected){
+  const list=(rows||[]).map(r=>n(r.outs));
+  const total=list.reduce((a,b)=>a+b,0);
+  if(total===expected) return null;
+  const hits=[];
+  for(let i=0;i<list.length;i++){
+    const whole=Math.floor(list[i]/3)*3;
+    // 同じ回の中で端数を変える(0/1/2)ほか、切り上げて次の回ちょうど(+3)も候補にする
+    // （「9回」を「8⅔」と読み違えるケースがあるため）。差が3アウトを超える誤りは対象外
+    for(const cand of [whole, whole+1, whole+2, whole+3]){
+      if(cand===list[i] || cand<0) continue;
+      if(total-list[i]+cand===expected) hits.push({index:i, from:list[i], to:cand});
+    }
+  }
+  if(!hits.length) return null;
+  if(hits.length===1) return hits[0];
+  // 候補が複数ある場合は「分数（端数）を持つ投手」に絞る。誤読が起きるのは分数の欄だからで、
+  // 端数を持つ投手がちょうど1人ならその人を直すのが妥当。それでも絞れなければ提案しない。
+  const fracOnly=hits.filter(hh=>list[hh.index]%3!==0);
+  if(fracOnly.length===1) return fracOnly[0];
+  const idxs=new Set(fracOnly.map(hh=>hh.index));
+  if(idxs.size===1) return fracOnly[0];   // 同じ人への候補が複数（.1と.2）なら先頭を採る
+  return null;
+}
 function pitchOutsCheck(){
   const rows=$$("#pitEntry tbody tr");
   let outs=0, any=false;
@@ -8634,7 +8674,12 @@ function pitchOutsCheck(){
   });
   if(!any) return null;                       // 投手未入力なら何も言わない
   const exp=expectedPitchOuts();
-  const ok = outs<=exp.outs && outs>=exp.outs-2; // 多いのはNG、少ないのは2アウトまで許容
+  // 端数を許すのは「自チームが先攻で負けた」＝相手のサヨナラで最終回が途中で終わる場合だけ。
+  // それ以外は相手が9回攻撃しきるので、ぴったり一致するはず（甘くすると誤読を見逃す）
+  const side=$("#gSide")? $("#gSide").value : "bottom";
+  const lost = n($("#gRs")&&$("#gRs").value) < n($("#gRa")&&$("#gRa").value);
+  const allowShort = (side==="top" && lost) ? 2 : 0;
+  const ok = outs<=exp.outs && outs>=exp.outs-allowShort;
   return {outs, expected:exp.outs, innings:exp.innings, fromInnings:exp.fromInnings, ok};
 }
 function rowContradiction(vals){
@@ -8715,6 +8760,17 @@ function validateEntry(){
   if(pc && !pc.ok){
     const base=pc.fromInnings? `相手の攻撃は${pc.innings}回` : "9回";
     pitErr=`投手の合計投球回が合いません（合計 ${outs2ip(pc.outs)}回 / ${base}なので ${outs2ip(pc.expected)}回のはず）`;
+    // 分数(⅓/⅔)の誤読なら1箇所直すだけで合うことが多いので、その候補を提案する（第115弾）
+    const prows=$$("#pitEntry tbody tr").map(tr=>{
+      const ip=$("input[data-k='IP']",tr), nm=$(".nm",tr);
+      return {outs: ip? ip2outs(ip.value):0, name: nm? nm.value.trim():"", el:ip};
+    });
+    const fix=suggestIpFix(prows, pc.expected);
+    if(fix && prows[fix.index] && prows[fix.index].el){
+      const who=prows[fix.index].name||`${fix.index+1}人目`;
+      pitErr+=`<br><button type="button" class="mini ghost" id="fixIpBtn" data-i="${fix.index}" data-to="${fix.to}" style="margin-top:4px">`
+        +`${esc(who)} を ${outs2ip(fix.from)}回 → ${outs2ip(fix.to)}回 に直すと合います（タップで修正）</button>`;
+    }
   }
 
   if(!ocrBatTotals){
@@ -9387,6 +9443,13 @@ async function init(){
   $("#batEntry").addEventListener("input", window.markDirty);
   $("#pitEntry").addEventListener("input", window.markDirty);
   $("#valBanner").addEventListener("click",e=>{
+    const fx=e.target.closest("#fixIpBtn");   // 投球回の分数を1タップで補正（第115弾）
+    if(fx){
+      const tr=$$("#pitEntry tbody tr")[+fx.dataset.i];
+      const ip=tr && $("input[data-k='IP']",tr);
+      if(ip){ ip.value=outs2ip(+fx.dataset.to); validateEntry(); toast(`投球回を ${ip.value} 回に直しました`); }
+      return;
+    }
     if(!e.target.closest("#acceptEntryTotals")) return;
     const sum={}; BAT_INPUT.forEach(k=>sum[k]=0);
     $$("#batEntry tbody tr").forEach(tr=>{$$("input[data-k]",tr).forEach(i=>{sum[i.dataset.k]=(sum[i.dataset.k]||0)+n(i.value);});});
@@ -9758,8 +9821,8 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   seasonMismatch, vpDupGroups,
   // 第112弾: 投手の合計投球回チェック
   expectedPitchOuts, pitchOutsCheck,
-  // 第113弾: 投手行の矛盾判定
-  pitRowContradiction };
+  // 第113弾: 投手行の矛盾判定 / 第115弾: 投球回の分数補正
+  pitRowContradiction, suggestIpFix, ip2outs, outs2ip };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
