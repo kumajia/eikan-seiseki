@@ -4934,7 +4934,13 @@ function renderVs(){
   const rivalSet=new Set(DB.rivals||[]);
   el.innerHTML=rows.map(r=>{
     const isRival=rivalSet.has(r.school);
-    const gamesHtml=r.games.map(({g,season})=>{
+    // 第111弾: 対戦相手ごとの試合も日付順に（保存順のままだと時系列が前後する）
+    const gamesSorted=[...r.games].map((x,i)=>({x,i})).sort((a,b)=>{
+      const da=String(a.x.g.date||""), db=String(b.x.g.date||"");
+      if(da && db) return da.localeCompare(db) || a.i-b.i;
+      if(da) return -1; if(db) return 1; return a.i-b.i;
+    }).map(o=>o.x);
+    const gamesHtml=gamesSorted.map(({g,season})=>{
       const win=g.runsFor>g.runsAgainst, lose=g.runsFor<g.runsAgainst;
       return `<div style="display:flex;gap:10px;align-items:center;font-size:13px;border-bottom:1px solid var(--line);padding:6px 2px">
         <span class="glink num" role="link" tabindex="0" data-gid="${esc(String(g.id))}" style="font-size:12px">${esc(g.date||'日付なし')}</span>
@@ -6088,7 +6094,16 @@ function renderGames(){
   const renderGroups=(list)=>list.map(([sname,s])=>{
     if(!s.games.length) return "";
     const T=teamTotals(s.games);
-    const gamesHtml=s.games.map(g=>{
+    // 第111弾: 保存した順ではなく日付順に表示する（配列自体は並べ替えない＝保存データは触らない）。
+    // 日付が無い試合は末尾へ。同じ日付は元の並び順を保つ（安定ソート）
+    const ordered=s.games.map((g,i)=>({g,i})).sort((a,b)=>{
+      const da=String(a.g.date||""), db=String(b.g.date||"");
+      if(da && db) return da.localeCompare(db) || a.i-b.i;
+      if(da) return -1;            // 日付ありを先に
+      if(db) return 1;
+      return a.i-b.i;
+    }).map(x=>x.g);
+    const gamesHtml=ordered.map(g=>{
       const win=g.runsFor>g.runsAgainst, lose=g.runsFor<g.runsAgainst;
       // #36 高速化: 安打数の合計を出すだけなので、選手ごとに集約する aggBatting は使わず直接足す
       // （数百試合でも Map生成＋率計算＋ソートを試合ごとに走らせない。表示結果は従来と同一）
