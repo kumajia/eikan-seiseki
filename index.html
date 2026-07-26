@@ -7790,9 +7790,26 @@ function renderVideoPool(errMsg){
   const el=$("#vpList"), kp=$("#vpKpis"); if(!el) return;
   if(errMsg){
     if(kp) kp.innerHTML="";
-    el.innerHTML=`<div class="empty">受信サーバーに接続できませんでした（${esc(errMsg)}）。<br>
-      PCで <span class="num">photo_drop_server_qr_fixed.py</span> を起動してから「再読み込み」を押してください。<br>
-      <span class="dim" style="font-size:12px">別のPC/ポートの場合は上のアドレス欄を書き換えてください。</span></div>`;
+    const base=vpServerBase();
+    const httpsPage=location.protocol==="https:";
+    const localTarget=/^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/i.test(base);
+    // 原因の切り分けを画面に出す（サーバー未起動なのか、ブラウザにブロックされたのかで対処が違う）
+    let hint=`<div style="margin-top:8px">まず次の順に確認してください。</div>
+      <ol style="text-align:left;margin:6px auto;max-width:560px;line-height:1.7;font-size:12px">
+        <li>PCで <span class="num">photo_drop_server_qr_fixed.py</span> を起動しているか（QRが出た画面を閉じると止まります）</li>
+        <li>ブラウザで <span class="num">${esc(base)}/ping</span> を開いて <span class="num">version</span> が表示されるか
+          <div class="dim">表示されない → サーバーが起動していない、またはアドレス/ポートが違います</div>
+          <div class="dim">表示されるが古い版数 → Ctrl+Cで止めてから、もう一度起動しなおしてください（起動中のプロセスは古いコードのままです）</div></li>
+        <li>それでも繋がらない場合は F12 → Console のエラー文をご確認ください</li>
+      </ol>`;
+    if(httpsPage && localTarget){
+      hint+=`<div style="margin-top:8px;border-left:3px solid var(--amber);padding:6px 10px;text-align:left;max-width:560px;margin-left:auto;margin-right:auto;font-size:12px;line-height:1.6">
+        いまこのページは <span class="num">https</span> で開かれており、受信サーバーは <span class="num">http</span> です。
+        ブラウザの制限（Private Network Access）で弾かれることがあります。
+        サーバーを <b>version 1.2-eikan 以降</b>に更新して起動しなおすと解消します。</div>`;
+    }
+    el.innerHTML=`<div class="empty">受信サーバー（${esc(base)}）に接続できませんでした。<br>
+      <span class="dim" style="font-size:12px">${esc(errMsg)}</span>${hint}</div>`;
     return;
   }
   const pend=vpFiles.filter(f=>!vpIsDone(f.name)).length;
