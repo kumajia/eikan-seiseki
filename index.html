@@ -620,6 +620,11 @@
       <div class="stadium" id="bestNineStadium"></div>
       <div id="bestNineWarn" class="hint" style="color:var(--red); margin-top:8px;"></div>
     </section>
+    <section class="card" id="currentLineupCard">
+      <h2>今のおすすめ打線（参考）</h2>
+      <div class="note">今シーズンに出場した現役選手から、守備位置が重ならないように選んだ打線です（DH制・投手は打席に立たない前提）。1・2番は出塁率、3番はOPS、4・5番は長打率を重視。今シーズンの打席が少ない選手は通算成績で評価します。</div>
+      <div id="currentLineup"></div>
+    </section>
     <section class="card" id="historicalLineupCard">
       <h2>歴代打線（参考の打順）</h2>
       <div class="note">上のベストナインの9人を「打順」として並べた参考版です。守備配置ではなく、出塁率・OPS・長打率をもとに1〜9番の並びを提案します（断定ではありません）。</div>
@@ -2835,6 +2840,7 @@ function renderBestNine(){
   
   stadium.innerHTML = fieldSvg + cardsHtml;
   renderHistoricalLineup(bestNine, allBat);
+  renderCurrentLineup(); // 今のおすすめ打線（第117弾）
 }
 
 function render(){
@@ -6836,6 +6842,36 @@ const HIST_LINEUP_SLOTS=[
   {slot:8,stat:"OPS",label:"OPS"},
   {slot:9,stat:"OPS",label:"OPS"}
 ];
+/* 第117弾: 守備位置を考慮して打線の9人を選ぶ（DH制）。
+   捕・一・二・三・遊 を各1人＋外野3人＝8人に、**残りで一番打てる選手をDH**として9人目に据える。
+   投手は打席に立たない前提（DH制）なので守備枠からは選ばない。1人が2つの枠に入ることはない。
+   cands: [{key,name,pos,OBP,OPS,SLG,PA}] pos は "投手/捕手/一塁/二塁/三塁/遊撃/外野" または "投捕一二三遊外" */
+const LINEUP_SLOTS_DEF=[
+  {pos:"捕", n:1},{pos:"一", n:1},{pos:"二", n:1},{pos:"三", n:1},{pos:"遊", n:1},{pos:"外", n:3}
+];
+function posShort(p){
+  const s=String(p||"");
+  if(!s) return "";
+  if(s.length===1) return s;
+  return {"投手":"投","捕手":"捕","一塁":"一","二塁":"二","三塁":"三","遊撃":"遊","外野":"外"}[s] || s.charAt(0);
+}
+function pickLineupByPosition(cands){
+  const pool=(cands||[]).filter(c=>c&&c.key);
+  const used=new Set();
+  const picked=[];
+  const better=(a,b)=> fnum(b.OPS)-fnum(a.OPS) || fnum(b.PA)-fnum(a.PA) || String(a.name).localeCompare(String(b.name),"ja");
+  for(const def of LINEUP_SLOTS_DEF){
+    const avail=pool.filter(c=>!used.has(c.key) && posShort(c.pos)===def.pos).sort(better);
+    for(let i=0;i<def.n;i++){
+      const c=avail[i];
+      if(c){ used.add(c.key); picked.push({...c, slotPos:def.pos}); }
+    }
+  }
+  // DH: 守備枠に入らなかった選手のうち一番打てる人（投手は除く＝DH制のため打席に立たない）
+  const dh=pool.filter(c=>!used.has(c.key) && posShort(c.pos)!=="投").sort(better)[0];
+  if(dh){ used.add(dh.key); picked.push({...dh, slotPos:"DH"}); }
+  return picked;
+}
 function historicalLineupOrder(players){
   const pool=(players||[]).slice();
   const used=new Set();
@@ -6851,14 +6887,69 @@ function historicalLineupOrder(players){
   }
   return out;
 }
+/* 第117弾: 今のおすすめ打線。
+   候補は「今シーズンに出場した選手」（入学年が未設定でも動く）から、引退・卒業した選手を除いたもの。
+   評価は今シーズンの成績を基本とし、**打席が少ない選手だけ通算成績に切り替える**（サンプル不足の対策）。 */
+function currentLineupRows(){
+  const games=curGames();
+  if(!games.length) return {rows:[], teamG:0};
+  const cur=aggBatting(games).filter(hasPA);
+  const paMin=Math.max(3, games.length);      // 1試合1打席ぶんを目安に、これ未満は通算で評価する
+  const cands=cur.map(r=>{
+    const key=nameKey(r.name);
+    const meta=(DB.playerMeta&&DB.playerMeta[key])||{};
+    let src=r, byCareer=false;
+    if(n(r.PA)<paMin){                        // 今季のサンプルが足りない選手は通算で見る
+      const cr=aggBatting(careerGamesForKey(key)).find(x=>nameKey(x.name)===key);
+      if(cr && n(cr.PA)>n(r.PA)){ src=cr; byCareer=true; }
+    }
+    return {key, name:r.name, pos:meta.position||"", PA:n(src.PA), G:n(r.G),
+            OBP:fnum(src.OBP), OPS:fnum(src.OPS), SLG:fnum(src.SLG), byCareer};
+  }).filter(c=>!isPlayerRetired(c.key));      // 引退・卒業した選手は除く
+  const picked=pickLineupByPosition(cands);
+  if(!picked.length) return {rows:[], teamG:games.length};
+  const order=historicalLineupOrder(picked).filter(r=>r.key);
+  const byKey=new Map(picked.map(p=>[p.key,p]));
+  return {rows:order.map(r=>({...r, src:byKey.get(r.key)||{}})), teamG:games.length};
+}
+function renderCurrentLineup(){
+  const el=$("#currentLineup"); if(!el) return;
+  const {rows,teamG}=currentLineupRows();
+  if(!rows.length){
+    el.innerHTML=`<div class="empty">今シーズンの試合が入ると、おすすめ打線が出ます。</div>`;
+    return;
+  }
+  const body=rows.map(r=>{
+    const s=r.src;
+    return `<tr>
+      <td class="num" style="color:var(--amber);width:36px">${r.slot}番</td>
+      <td style="text-align:left">${plinkHtml(r.key,r.name)}${metaMarks(r.key)}
+        <span class="dim" style="font-size:11px">${esc(s.slotPos||"")}</span>
+        ${s.byCareer?`<span class="mbadge" style="border-color:var(--amber);color:var(--amber)" title="今シーズンの打席が少ないため通算成績で評価しています">通算で評価</span>`:""}</td>
+      <td class="num">${avg3(s.OBP||0)}</td>
+      <td class="num" style="color:var(--amber)">${avg3(s.OPS||0)}</td>
+      <td class="num">${avg3(s.SLG||0)}</td>
+      <td class="dim" style="font-size:11px;text-align:left">${esc(r.statLabel)}重視</td>
+    </tr>`;
+  }).join("");
+  // 9人に満たない場合は理由を添える（守備位置が未設定だと枠に入れられないため）
+  const short = rows.length<9
+    ? `<div class="hint" style="margin-top:6px;color:var(--amber)">${9-rows.length}人ぶん埋まりませんでした。捕手・内野・外野の枠に入る選手が足りないか、選手名簿で守備位置が未設定の可能性があります（選手名簿タブで設定できます）。</div>`
+    : "";
+  el.innerHTML=`<div class="scroll"><table><thead><tr><th style="text-align:left">打順</th><th style="text-align:left">選手（守備）</th><th>出塁率</th><th>OPS</th><th>長打率</th><th style="text-align:left">基準</th></tr></thead><tbody>${body}</tbody></table></div>`
+    + short
+    +`<div class="hint" style="margin-top:6px">${esc(DB.current)}（${teamG}試合）の出場選手から選出。実際の打順との比較は監督室の「打順別成績」で見られます。</div>`;
+}
 function renderHistoricalLineup(bestNine, allBat){
   const el=$("#historicalLineup"); if(!el) return;
   if(!bestNine){ el.innerHTML=""; return; }
   const batByKey=new Map((allBat||[]).map(b=>[nameKey(b.name), b]));
   const starters=[];
   const push=(cell,pos)=>{ if(cell && !cell.isEmpty){ const key=cell.key||nameKey(cell.name); if(!key) return; const b=batByKey.get(key)||{}; starters.push({key,name:cell.name,pos,OBP:b.OBP||0,OPS:b.OPS||0,SLG:b.SLG||0}); } };
-  ["投","捕","一","二","三","遊"].forEach(pos=>push(bestNine[pos],pos));
+  // 第117弾: DH制で組む（投手は打線に入れず、代わりにDHを9人目に据える）
+  ["捕","一","二","三","遊"].forEach(pos=>push(bestNine[pos],pos));
   (bestNine["外"]||[]).forEach(o=>push(o,"外"));
+  push(bestNine["DH"],"DH");
   if(starters.length<1){ el.innerHTML=`<div class="empty">ベストナインが揃うと打順の参考が出ます。</div>`; return; }
   const order=historicalLineupOrder(starters).filter(r=>r.key);
   const rows=order.map(r=>{ const b=batByKey.get(r.key)||{};
@@ -9878,8 +9969,8 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   expectedPitchOuts, pitchOutsCheck,
   // 第113弾: 投手行の矛盾判定 / 第115弾: 投球回の分数補正
   pitRowContradiction, suggestIpFix, ip2outs, outs2ip,
-  // 第116弾: 試合のシーズン移動
-  moveGameToSeason };
+  // 第116弾: 試合のシーズン移動 / 第117弾: 守備位置を考慮した打線
+  moveGameToSeason, pickLineupByPosition, posShort };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
