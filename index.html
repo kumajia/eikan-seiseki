@@ -4022,6 +4022,24 @@ function generationSummaryHtml(ey){
 /* 第108弾: 日付とシーズンの食い違いを検出し、日付に合うシーズンを提案する。
    「解析後にシーズンを変え忘れて別シーズンへ保存してしまう」事故を防ぐ。
    戻り値: 一致していれば null / 不一致なら {dateYear, curYear, candidates[]} */
+/* 第116弾: 保存済みの試合を別シーズンへ移動する。
+   同じ試合オブジェクトを移し替えるだけなので、id・打者・投手・イニング・バッジはすべて保持される。 */
+function moveGameToSeason(gameId, toSeason){
+  if(!gameId || !toSeason || !DB.seasons[toSeason]) return false;
+  let moved=null;
+  for(const [sname,s] of Object.entries(DB.seasons)){
+    const arr=(s&&s.games)||[];
+    const i=arr.findIndex(g=>String(g.id)===String(gameId));
+    if(i>=0){
+      if(sname===toSeason) return true;   // 既に移動先にある
+      moved=arr.splice(i,1)[0];
+      break;
+    }
+  }
+  if(!moved) return false;
+  DB.seasons[toSeason].games.push(moved);
+  return true;
+}
 function seasonMismatch(dateStr, curName, seasonNames){
   const y=parseInt(String(dateStr||"").slice(0,4),10);
   if(isNaN(y)) return null;                      // 日付が無ければ判定しない
@@ -6297,7 +6315,23 @@ function batRow(b={}){
     `${BAT_INPUT.map(k=>`<td><input type="number" data-k="${k}" value="${b[k]??''}"></td>`).join("")}<td><button class="mini danger" onclick="delEntryRow(this)">×</button></td></tr>`;
 }
 function pitRow(p={}){
-  return `<tr><td><input class="nm" value="${esc(p.name||'')}" placeholder="投手名"><span class="dupwarn"></span></td>${PIT_INPUT.map(k=>`<td><input ${k==='IP'?'type="text"':'type="number"'} data-k="${k}" value="${p[k]??''}" ${k==='IP'?'placeholder="9 / 6.1"':''}></td>`).join("")}<td><input type="checkbox" data-k="W" ${p.W?'checked':''}></td><td style="white-space:nowrap"><button type="button" class="mini ghost" title="1つ上へ（登板順の入れ替え）" onclick="moveEntryRow(this,-1)">↑</button><button class="mini danger" onclick="delEntryRow(this)">×</button></td></tr>`;
+  return `<tr><td><input class="nm" value="${esc(p.name||'')}" placeholder="投手名"><span class="dupwarn"></span></td>${PIT_INPUT.map(k=>`<td><input ${k==='IP'?'type="text"':'type="number"'} data-k="${k}" value="${p[k]??''}" ${k==='IP'?'placeholder="9 / 6.1"':''}></td>`).join("")}<td><input type="checkbox" data-k="W" ${p.W?'checked':''}></td><td style="white-space:nowrap"><button type="button" class="mini ghost" title="1つ上へ（登板順の入れ替え）" onclick="moveEntryRow(this,-1)">↑</button><button type="button" class="mini ghost" title="1つ下へ（登板順の入れ替え）" onclick="moveEntryRow(this,1)">↓</button><button class="mini danger" onclick="delEntryRow(this)">×</button></td></tr>`;
+}
+/* 第116弾: 投手行をOCRが読んだ登板順に並べ替える。
+   フォームは「そのシーズンで過去に登板した投手」で先に埋まっており、OCRはそこへ名前で流し込むため、
+   何もしないと表示順が過去の登板履歴順のままになってしまう（今回の登板順にならない）。
+   打者の sortBatRowsByOrder と対になる処理。OCRに出てこなかった行は末尾へ回す。 */
+function sortPitRowsByOcr(ocrPitchers){
+  const tb=$("#pitEntry tbody"); if(!tb) return;
+  const order=new Map();
+  (ocrPitchers||[]).forEach((p,i)=>{ if(p&&p.name) order.set(nameKey(p.name), i); });
+  if(!order.size) return;
+  const rows=$$("tr",tb);
+  if(rows.length<2) return;
+  const keyOf=tr=>{ const nm=$(".nm",tr); return nm? nameKey(nm.value) : ""; };
+  const sorted=rows.map((tr,i)=>({tr,i,rank: order.has(keyOf(tr))? order.get(keyOf(tr)) : 999}))
+    .sort((a,b)=> a.rank-b.rank || a.i-b.i);   // 同順位は元の並びを保つ
+  sorted.forEach(x=>tb.appendChild(x.tr));      // appendChildは既存ノードを移動する
 }
 function sortBatRowsByOrder(){
   // 打者行を打順の昇順に並べ替える。同じ打順は「最初からの選手→途中出場」の順。打順未入力は末尾。
@@ -8605,6 +8639,7 @@ function fillFormFromOcr(g){
     }
     existing.forEach(tr=>{ if(!rowHasData(tr)) tr.remove(); });
     if(!$$("tr",ptbody).length) ptbody.insertAdjacentHTML("beforeend",pitRow());
+    sortPitRowsByOcr(g.pitchers); // 過去の登板履歴順ではなく、この試合の登板順に並べ替える（第116弾）
   }
   // OCRが画面タイトルから判定した先攻/後攻を先に反映（sideが違うとイニング自動反映で得点がスワップするため必須）
   fixInningsXMisread(g); // 9回裏X誤読の自動補正（R列と検算）
@@ -9038,9 +9073,29 @@ async function init(){
     if(e.target.value==="__moreSeasons__"){ // シーズン切替ではなく「全部見せて」の合図
       seasonSelExpanded=true; fillSeasons(); toast("全シーズンを表示しました（もう一度開いてください）"); return;
     }
-    DB.current=e.target.value;
-    if(editId!=null){resetForm();} // 編集中にシーズン変えたら編集モード解除（別試合の上書き防止）
-    else { fillRoundSelForSeason(); $("#gRoundSel").value=""; }
+    const from=DB.current, to=e.target.value;
+    // 編集中にシーズンを変えた場合（第116弾）:
+    // 以前は resetForm() でフォームを丸ごと捨てていたため、入力が消えるうえ試合も移動できなかった。
+    // 「その試合を移動する」か「編集をやめて切り替えるだけ」かを選べるようにする。
+    if(editId!=null && from!==to){
+      const loc=findGameById(editId);
+      const label=loc? `${loc.game.date||"日付なし"} ${loc.game.opponent||"(相手未設定)"}` : "編集中の試合";
+      if(confirm(`編集中の試合「${label}」を「${to}」へ移動しますか？\n\nOK: この試合を移動する（入力内容は保持されます）\nキャンセル: 移動せず、編集をやめてシーズンだけ切り替える`)){
+        DB.current=to;
+        if(moveGameToSeason(editId, to)){
+          fillRoundSelForSeason();
+          saveDB(); render();
+          toast(`試合を「${to}」へ移動しました`);
+          return;
+        }
+        // 移動できなかった（元の試合が見つからない等）＝新規扱いにせず編集は続ける
+        toast("移動できませんでした。編集内容はそのままです",true);
+        fillRoundSelForSeason(); saveDB(); render(); return;
+      }
+      editId=null; resetForm();
+    }
+    DB.current=to;
+    if(editId==null){ fillRoundSelForSeason(); $("#gRoundSel").value=""; }
     saveDB();render();
   });
   $("#awardSeasonSel").addEventListener("change",e=>{ awardSeasonPick=e.target.value; renderAwards(); });
@@ -9822,7 +9877,9 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第112弾: 投手の合計投球回チェック
   expectedPitchOuts, pitchOutsCheck,
   // 第113弾: 投手行の矛盾判定 / 第115弾: 投球回の分数補正
-  pitRowContradiction, suggestIpFix, ip2outs, outs2ip };
+  pitRowContradiction, suggestIpFix, ip2outs, outs2ip,
+  // 第116弾: 試合のシーズン移動
+  moveGameToSeason };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
