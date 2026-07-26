@@ -180,7 +180,7 @@
   .chip.selected{background:var(--green);color:#04210f;border-color:var(--green);font-weight:700;}
   .chipList .chip:not(.selected){opacity:.68;} /* 複数選択リストの未選択だけ薄く（緑/赤のステータスチップには効かせない） */
   /* D8: OCRハイブリッド検算の確信度ハイライト（第101弾）。列の合計不一致=赤、行の矛盾=黄 */
-  #batEntry input.cell-colbad{border-color:var(--danger)!important;background:rgba(229,72,77,.16);}
+  #batEntry input.cell-colbad, #pitEntry input.cell-colbad{border-color:var(--danger)!important;background:rgba(229,72,77,.16);}
   #batEntry tr.row-badrow{background:rgba(245,179,1,.10);}
   #batEntry tr.row-badrow input{background:rgba(245,179,1,.06);}
   /* 第102弾: 大会別トロフィー棚 */
@@ -8491,6 +8491,32 @@ function fillFormFromOcr(g){
   validateEntry();
   checkAllNameDups();
 }
+/* 第112弾: 投手の合計投球回チェック。
+   「9回固定」ではコールド・延長・サヨナラで誤検出するため、**相手が攻撃した回数**を基準にする
+   （自チームの投手が投げる回数＝相手の攻撃回数）。イニング表が未入力なら9回とみなす。
+   端数の許容: サヨナラ負けなどで最終回が途中で終わる場合があるので、2アウト分まで少なくても許す。 */
+function expectedPitchOuts(){
+  const tbl=$("#gInningsTbl"); if(!tbl) return {outs:27, innings:9, fromInnings:false};
+  const side=$("#gSide")? $("#gSide").value : "bottom";
+  const oppSel = side==="bottom" ? "top" : "bottom";   // 相手が攻撃する側
+  const cells=$$(`.inn-cell[data-side='${oppSel}']`, tbl);
+  let last=0;
+  cells.forEach((c,i)=>{ if(String(c.value).trim()!=="") last=i+1; });
+  if(!last) return {outs:27, innings:9, fromInnings:false};
+  return {outs:last*3, innings:last, fromInnings:true};
+}
+function pitchOutsCheck(){
+  const rows=$$("#pitEntry tbody tr");
+  let outs=0, any=false;
+  rows.forEach(tr=>{
+    const ip=$("input[data-k='IP']",tr);
+    if(ip && String(ip.value).trim()!==""){ any=true; outs+=ip2outs(ip.value); }
+  });
+  if(!any) return null;                       // 投手未入力なら何も言わない
+  const exp=expectedPitchOuts();
+  const ok = outs<=exp.outs && outs>=exp.outs-2; // 多いのはNG、少ないのは2アウトまで許容
+  return {outs, expected:exp.outs, innings:exp.innings, fromInnings:exp.fromInnings, ok};
+}
 function rowContradiction(vals){
   // 1行だけで分かる矛盾（ほぼ確実に誤読）。安打>打数 / 長打合計>安打
   const ab=n(vals.AB), h=n(vals.H), xbh=n(vals["2B"])+n(vals["3B"])+n(vals.HR);
@@ -8514,6 +8540,11 @@ function clearEntryHighlights(){
     tr.classList.remove("row-badrow");
     $$("input[data-k]",tr).forEach(i=>i.classList.remove("cell-colbad"));
   });
+  $$("#pitEntry tbody input[data-k='IP']").forEach(i=>i.classList.remove("cell-colbad"));
+}
+// 投球回の合計が合わないときは、投手行の投球回セルをまとめて赤くする（第112弾）
+function highlightPitchOuts(bad){
+  $$("#pitEntry tbody input[data-k='IP']").forEach(i=>i.classList.toggle("cell-colbad", !!bad && String(i.value).trim()!==""));
 }
 function validateEntry(){
   const el=$("#valBanner");
@@ -8541,17 +8572,27 @@ function validateEntry(){
     }
   }
 
+  // 投手の合計投球回チェック（第112弾）。相手の攻撃回数と合わなければ投球回セルを赤くする
+  const pc=pitchOutsCheck();
+  highlightPitchOuts(pc && !pc.ok);
+  let pitErr="";
+  if(pc && !pc.ok){
+    const base=pc.fromInnings? `相手の攻撃は${pc.innings}回` : "9回";
+    pitErr=`投手の合計投球回が合いません（合計 ${outs2ip(pc.outs)}回 / ${base}なので ${outs2ip(pc.expected)}回のはず）`;
+  }
+
   if(!ocrBatTotals){
-    if(innErr){
+    const msgs=[innErr,pitErr].filter(Boolean);
+    if(msgs.length){
       el.className = "valban ng";
-      el.innerHTML = innErr;
+      el.innerHTML = msgs.join("<br>");
     } else {
       el.innerHTML = "";
       el.className = "";
     }
     return;
   }
-  
+
   const sum={}; BAT_INPUT.forEach(k=>sum[k]=0);
   $$("#batEntry tbody tr").forEach(tr=>{$$("input[data-k]",tr).forEach(i=>{sum[i.dataset.k]=(sum[i.dataset.k]||0)+n(i.value);});});
   const chips=[]; let allok=true; const badCols=new Set();
@@ -8562,10 +8603,11 @@ function validateEntry(){
     chips.push(`<span class="chip ${ok?'g':'r'}">${BAT_LBL[k]} ${sum[k]}${ok?'':'/'+t}</span>`);
   });
   highlightEntryCells(badCols); // 合計と合わない列＋行内矛盾を入力欄側で強調（D8）
-  el.className="valban "+((allok && !innErr)?"ok":"ng");
+  el.className="valban "+((allok && !innErr && !pitErr)?"ok":"ng");
   let html = "";
   if(innErr) html += innErr + "<br>";
-  html += (allok?"合計照合OK（全列一致）":"合計と不一致の列があるで（個人=/合計）")+"<br>"+chips.join("")+
+  if(pitErr) html += pitErr + "<br>";
+  html += (allok?"合計照合OK（全列一致）":"合計と不一致の列があります（個人=/合計）")+"<br>"+chips.join("")+
     (allok?"":`<br><button type="button" class="mini ghost" id="acceptEntryTotals" style="margin-top:6px">個人成績を正として合計を更新</button>`);
   el.innerHTML = html;
 }
@@ -9231,7 +9273,7 @@ async function init(){
   $("#gemKey").addEventListener("change",()=>{saveGemCfg();loadModels(false);});
   $("#gemModel").addEventListener("change",saveGemCfg);
   $("#batEntry").addEventListener("input",e=>{ validateEntry(); if(e.target.classList.contains("nm"))checkNameDup(e.target); }); // 常に検算＝行内矛盾のハイライトは手入力でも効く
-  $("#pitEntry").addEventListener("input",e=>{ if(e.target.classList.contains("nm"))checkNameDup(e.target); });
+  $("#pitEntry").addEventListener("input",e=>{ validateEntry(); if(e.target.classList.contains("nm"))checkNameDup(e.target); }); // 投球回の検算も走らせる（第112弾）
   $("#gDate").addEventListener("input",()=>{ delete $("#gDate").dataset.auto; checkAllNameDups(); }); // 手で触ったら自動プリセット扱いを解除
   $("#shotFiles").addEventListener("change",()=>{ clearOcrQueue(true); updateFileHint(); }); // 自分で選び直した時も待機を解除
   $("#shotFileHint").addEventListener("click",e=>{
@@ -9577,7 +9619,9 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   vpDoneName, vpIsVideo, vpIsDone,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
-  seasonMismatch, vpDupGroups };
+  seasonMismatch, vpDupGroups,
+  // 第112弾: 投手の合計投球回チェック
+  expectedPitchOuts, pitchOutsCheck };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
