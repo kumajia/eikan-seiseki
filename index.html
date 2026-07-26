@@ -181,8 +181,8 @@
   .chipList .chip:not(.selected){opacity:.68;} /* 複数選択リストの未選択だけ薄く（緑/赤のステータスチップには効かせない） */
   /* D8: OCRハイブリッド検算の確信度ハイライト（第101弾）。列の合計不一致=赤、行の矛盾=黄 */
   #batEntry input.cell-colbad, #pitEntry input.cell-colbad{border-color:var(--danger)!important;background:rgba(229,72,77,.16);}
-  #batEntry tr.row-badrow{background:rgba(245,179,1,.10);}
-  #batEntry tr.row-badrow input{background:rgba(245,179,1,.06);}
+  #batEntry tr.row-badrow, #pitEntry tr.row-badrow{background:rgba(245,179,1,.10);}
+  #batEntry tr.row-badrow input, #pitEntry tr.row-badrow input{background:rgba(245,179,1,.06);}
   /* 第102弾: 大会別トロフィー棚 */
   .shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;}
   .tro{background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;text-align:center;}
@@ -1496,6 +1496,126 @@
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script>
+/* ============================================================================
+   栄冠ノート — このファイルについて
+
+   単一ファイル構成です（HTML/CSS/JS を index.html に全部入れています）。
+   ESモジュール分割は「file:// で開けなくなる」「配布が1ファイルで済まなくなる」ため採用していません。
+   代わりに、下の目次と各セクションの見出しコメントで場所を探せるようにしています。
+
+   ・開発の作法・変更履歴 …… CHANGES-2026-07-09.md（第N弾として全変更を記録）
+   ・デザインの恒久ルール …… DESIGN-PROPOSAL.md
+   ・未実装のアイデア …………… やることリスト.md / FEATURE-BACKLOG.md
+   ・テスト …………………………… index.html#test を開くと自動テストが走ります（tests.js）
+
+   目次: 探したい機能の見出しをこのファイル内で検索してください（行番号は編集でずれるので載せていません）
+
+   ■ 土台（保存・移行・集計の共通部品）
+       ・storage layer (window.storage があれば併用、実ブラウザではlocalStorageで永続化)
+       ・#26 複数セーブ（プロファイル）
+       ・自動スナップショット（IndexedDB・1日1回・直近3日ぶん）
+       ・データ健康診断（#23）
+       ・seed
+       ・schema migration
+       ・helpers
+       ・aggregation
+       ・今日は何の日（#22）
+       ・CSVエクスポート（#25）
+       ・OCR取り込み履歴（#27・別localStorageキー・試合データは変えない）
+       ・エラーログ（#35・別localStorageキー・試合データは変えない）
+       ・render
+       ・定数定義（マジックナンバー一元管理）
+
+   ■ シーズン成績・期間集計・共通テーブル
+       ・sortable tables
+       ・部門別リーダー
+       ・table builders (共有: シーズン集計 & 期間集計)
+       ・ベストナイン選出関数（細分化）
+
+   ■ 監督室（分析カード）
+       ・監督室
+       ・打順別成績（#1・チーム全体）
+       ・イニング分析（#2 得点分布 / #4 接戦耐性 / #5 先制）
+       ・逆転試合（#3）
+       ・大会別成績比較（#6）
+       ・継投分析（#7）
+       ・監督マイルストーン（#20）
+       ・学校史年表（#19・節目のみ）
+       ・期間（年ごと）集計
+
+   ■ 選手ページ・選手名簿
+       ・選手個別ページ
+       ・選手検索（#14・ヘッダ常設）
+       ・成績カードPNG
+       ・選手比較
+       ・選手名簿（tab idは互換のため enrollYear のまま）
+       ・大会ラウンドのテンプレ（対戦相手の入力補助）
+       ・入学年まとめて設定
+       ・ポジション
+       ・ポジションまとめて設定
+       ・サブポジションまとめて設定
+       ・投手QS率・完投率（#13）
+       ・成長曲線（#8・年度別ミニ折れ線）
+       ・選手タグ（性格・特能）
+
+   ■ アーカイブ・シーズン比較・対戦成績
+       ・栄冠アーカイブ
+       ・旧チーム年表（旧データ互換のため関数は残す）
+       ・シーズン間比較
+       ・対戦成績（学校別）
+       ・表彰タブ（シーズン表彰式＋連続試合安打）
+
+   ■ 表彰・記録・年鑑
+       ・歴代記録ランキング（#16・1試合スナップショット最大値）
+       ・名勝負殿堂（#18）
+       ・1. 名試合オブザイヤー
+       ・年鑑（#32・外部ライブラリを使わない印刷方式）
+
+   ■ 分析カードの計算ロジック
+       ・2. ピタゴラス勝率
+       ・3. 連勝・連敗記録
+       ・4. 月別成績
+       ・5. セイバー指標
+       ・第102弾: 投手セイバー指標
+       ・第102弾: 大会別トロフィー棚
+       ・第102弾: 勝敗の帯グラフ（このシーズン）
+       ・6. 貢献度ランキング
+       ・7. 打線最適化の参考
+       ・8. 失策・守備の推移
+       ・9. 出場率・欠場検出
+
+   ■ 試合入力フォームと検算
+       ・add / edit game form
+
+   ■ 記録・楽しみ系
+       ・#1 「初」記録集（公式戦のみ・日付順に最初の該当を拾う）
+       ・#2 引退試合マーク（3年生として最後に出場した公式戦）
+       ・#3 歴代打線（ベストナインを打順として並べる・参考）
+       ・#4 ライバル校（DB.rivals・和集合マージはmergeDB側）
+       ・#5 二つ名（通算成績から自動判定・お遊び。閾値は下表に集約）
+       ・#6 節目まであと何本（公式戦の通算・MILESTONES_DEFSを流用）
+       ・#7 監督通信簿（采配傾向の数値化・傾向として提示）
+
+   ■ インポート・OCR
+       ・import
+       ・OCR (Gemini)
+
+   ■ 動画（フレーム抽出・動画プール）
+       ・動画からコマを選ぶ（ブラウザ内フレーム抽出＋ピッカー）
+       ・第103弾: 動画プール（受信サーバー連携）
+       ・第105弾: OCR結果キャッシュ（同じ動画を二度APIに投げない）
+       ・コマのおすすめ判定（ブラウザ内だけで完結。API消費ゼロ）
+       ・OCR JSON解析＋複数コマ多数決
+
+   ■ 新入生OCR・タブ・シーズン・起動
+       ・新入生OCR登録
+       ・tabs
+       ・seasons
+       ・シーズン作成モーダル
+       ・init
+       ・オフライン案内（#37）
+   ============================================================================ */
+
 "use strict";
 /* ---------- storage layer (window.storage があれば併用、実ブラウザではlocalStorageで永続化) ---------- */
 const KEY="eikan-stats-v1";
@@ -8522,6 +8642,16 @@ function rowContradiction(vals){
   const ab=n(vals.AB), h=n(vals.H), xbh=n(vals["2B"])+n(vals["3B"])+n(vals.HR);
   return h>ab || xbh>h;
 }
+// 投手1行だけで分かる矛盾（第113弾）: 自責点>失点 / 被本塁打>被安打 / 投球回0なのに投げた形跡がある
+function pitRowContradiction(vals){
+  const er=n(vals.ER), r=n(vals.R), hr=n(vals.HR), h=n(vals.H);
+  const outs=ip2outs(vals.IP);
+  const worked = n(vals.BF)>0 || h>0 || n(vals.K)>0 || n(vals.BB)>0 || r>0;
+  if(er>r) return true;              // 自責点は失点を超えない
+  if(hr>h) return true;              // 被本塁打は被安打に含まれる
+  if(outs===0 && worked) return true; // 投球回0なのに打者と対戦している
+  return false;
+}
 function highlightEntryCells(badCols){
   // badCols: 合計と合わない列キーのSet（OCR合計がある時のみ渡される。無ければ空）
   const cols = badCols || new Set();
@@ -8541,10 +8671,16 @@ function clearEntryHighlights(){
     $$("input[data-k]",tr).forEach(i=>i.classList.remove("cell-colbad"));
   });
   $$("#pitEntry tbody input[data-k='IP']").forEach(i=>i.classList.remove("cell-colbad"));
+  $$("#pitEntry tbody tr").forEach(tr=>tr.classList.remove("row-badrow"));
 }
-// 投球回の合計が合わないときは、投手行の投球回セルをまとめて赤くする（第112弾）
+// 投球回の合計が合わないときは投球回セルを赤く、行内矛盾がある投手行は黄色くする（第112/113弾）
 function highlightPitchOuts(bad){
   $$("#pitEntry tbody input[data-k='IP']").forEach(i=>i.classList.toggle("cell-colbad", !!bad && String(i.value).trim()!==""));
+  $$("#pitEntry tbody tr").forEach(tr=>{
+    const vals={}; $$("input[data-k]",tr).forEach(i=>{ vals[i.dataset.k]= i.type==="checkbox"? (i.checked?1:0) : i.value; });
+    const empty=PIT_INPUT.every(k=>String(vals[k]??"").trim()==="");
+    tr.classList.toggle("row-badrow", !empty && pitRowContradiction(vals));
+  });
 }
 function validateEntry(){
   const el=$("#valBanner");
@@ -9621,7 +9757,9 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
   // 第112弾: 投手の合計投球回チェック
-  expectedPitchOuts, pitchOutsCheck };
+  expectedPitchOuts, pitchOutsCheck,
+  // 第113弾: 投手行の矛盾判定
+  pitRowContradiction };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
