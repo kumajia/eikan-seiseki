@@ -4381,18 +4381,26 @@ function subBattingBreakdown(key,games){
 }
 /* ---------- 投手QS率・完投率（#13） ---------- */
 // QS=6回以上（18アウト以上）かつ自責3以内。完投=その試合の投手が1人（＝本人が投げ切り）。完封判定は既存の完投＋無失点勝ちに揃える。
+// 第120弾: QS・完投はどちらも先発投手の指標なので、**先発した試合だけ**を対象にし、分母も先発登板数(GS)にする。
+//   以前は救援登板も分母に入れていたため、抑えの選手ほど率が不当に低く出ていた。
+//   先発の判定は pitchers配列の先頭（OCRプロンプトで「先発投手を必ず配列の先頭」と規定済み。playerPitchStyleも同じ前提）。
 function pitcherQualityStats(key,games){
-  let G=0, QS=0, CG=0, SHO=0;
+  let G=0, GS=0, QS=0, CG=0, SHO=0;
   for(const g of games){
-    const p=(g.pitchers||[]).find(x=>nameKey(x.name)===key);
-    if(!p) continue;
-    G++;
-    if(ip2outs(p.IP)>=18 && n(p.ER)<=3) QS++;
-    const solo=(g.pitchers||[]).filter(x=>x.name).length===1;
-    if(solo){ CG++; if(n(g.runsAgainst)===0 && n(g.runsFor)>n(g.runsAgainst)) SHO++; }
+    const pit=(g.pitchers||[]).filter(x=>x && x.name);
+    const i=pit.findIndex(x=>nameKey(x.name)===key);
+    if(i<0) continue;
+    G++;                  // 総登板数（救援を含む・表示用）
+    if(i!==0) continue;   // 先発でない試合はQS・完投の対象外
+    GS++;
+    if(ip2outs(pit[0].IP)>=18 && n(pit[0].ER)<=3) QS++;
+    if(pit.length===1){   // 自分ひとりで投げ切った＝完投
+      CG++;
+      if(n(g.runsAgainst)===0 && n(g.runsFor)>n(g.runsAgainst)) SHO++;
+    }
   }
   if(!G) return null;
-  return {G,QS,CG,SHO,qsRate:QS/G,cgRate:CG/G};
+  return {G,GS,QS,CG,SHO,qsRate:GS?QS/GS:0,cgRate:GS?CG/GS:0};
 }
 /* ---------- 成長曲線（#8・年度別ミニ折れ線） ---------- */
 function playerGrowthData(key){
@@ -4537,12 +4545,15 @@ function renderPlayerContent(){
   // 投手QS率・完投率（#13）: 投手として登板がある選手だけ
   const qs=pitcherQualityStats(key,careerGames);
   if(qs){
+    // 第120弾: QS率・完投率は先発登板だけが対象。先発が無い投手には率を出さず、その旨を書く。
     html+=`<section class="card"><h2 style="font-size:15px"><span class="tag p">投</span> QS率・完投率</h2>
-      <div class="note">QS＝6回以上を自責3点以内。完投＝その試合を1人で投げ切り。完封＝完投かつ無失点勝ち。</div>
+      <div class="note">QS＝先発して6回以上を自責3点以内。完投＝先発してその試合を1人で投げ切り。完封＝完投かつ無失点勝ち。
+        <strong>どちらも先発した試合だけが対象</strong>で、率の分母は先発登板数です（救援登板は含みません）。</div>
       <div class="kpis">
-        ${kpi("登板",`${qs.G}試合`)}
-        ${kpi("QS率",avg3(qs.qsRate),"a",`${qs.QS}試合`)}
-        ${kpi("完投率",avg3(qs.cgRate),"",`${qs.CG}試合`)}
+        ${kpi("登板",`${qs.G}試合`,"",qs.G>qs.GS? `うち救援${qs.G-qs.GS}試合`:"")}
+        ${kpi("先発",`${qs.GS}試合`)}
+        ${qs.GS? kpi("QS率",avg3(qs.qsRate),"a",`先発${qs.GS}試合中${qs.QS}試合`) : kpi("QS率","-","","先発登板なし")}
+        ${qs.GS? kpi("完投率",avg3(qs.cgRate),"",`先発${qs.GS}試合中${qs.CG}試合`) : kpi("完投率","-","","先発登板なし")}
         ${kpi("完投",qs.CG)}
         ${kpi("完封",qs.SHO,"g")}
       </div></section>`;
