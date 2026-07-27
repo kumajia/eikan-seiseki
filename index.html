@@ -646,12 +646,12 @@
     </section>
     <section class="card" id="currentLineupCard">
       <h2>今のおすすめ打線（参考）</h2>
-      <div class="note">今シーズンに出場した現役選手から、守備位置が重ならないように選んだ打線です（DH制・投手は打席に立たない前提）。1・2番は出塁率、3番はOPS、4・5番は長打率を重視。今シーズンの打席が少ない選手は通算成績で評価します。</div>
+      <div class="note">今学校にいる選手を<strong>通算成績</strong>で評価し、守備位置が重ならないように選んだ打線です（卒業した選手は除く／DH制・投手は打席に立たない前提）。1・2番は出塁率、3番はOPS、4・5番は長打率を重視。通算10打席に満たない選手は、打率が極端な値になるため対象外にしています。</div>
       <div id="currentLineup"></div>
     </section>
     <section class="card" id="currentRelayCard">
       <h2>今のおすすめ投手リレー（参考）</h2>
-      <div class="note">今シーズンに登板した現役投手から、先発・中継ぎ・抑えを割り当てた参考の継投案です。先発は先発登板が多く長いイニングを投げられる投手、抑えは救援中心で防御率と奪三振率が良い投手を選びます。今シーズンの投球回が少ない投手は通算成績で評価します。</div>
+      <div class="note">今学校にいる投手を<strong>通算成績</strong>で評価し、先発・中継ぎ・抑えを割り当てた参考の継投案です（卒業した投手は除く）。先発は先発登板が多く長いイニングを投げられる投手、抑えは救援中心で防御率と奪三振率が良い投手を選びます。チーム防御率より1.50以上悪い投手は、枠が空いても推薦しません。</div>
       <div id="currentRelay"></div>
     </section>
     <section class="card" id="historicalLineupCard">
@@ -661,7 +661,7 @@
     </section>
     <section class="card" id="historicalRelayCard">
       <h2>歴代のおすすめ投手リレー（参考）</h2>
-      <div class="note">全期間の通算成績から、先発・中継ぎ・抑えを割り当てた参考の継投案です（卒業した投手も含みます）。規定に満たない投球回の投手は、防御率が極端な値になるため対象外にしています。</div>
+      <div class="note">全期間の通算成績から、先発・中継ぎ・抑えを割り当てた参考の継投案です（卒業した投手も含みます）。通算9回に満たない投手は、防御率が極端な値になるため対象外にしています。チーム防御率より1.50以上悪い投手は、枠が空いても推薦しません。</div>
       <div id="historicalRelay"></div>
     </section>
   </div>
@@ -7002,33 +7002,34 @@ function historicalLineupOrder(players){
 /* 第117弾: 今のおすすめ打線。
    候補は「今シーズンに出場した選手」（入学年が未設定でも動く）から、引退・卒業した選手を除いたもの。
    評価は今シーズンの成績を基本とし、**打席が少ない選手だけ通算成績に切り替える**（サンプル不足の対策）。 */
+const LINEUP_PA_MIN=10;   // 規定＝通算10打席以上。1〜2打席の選手が打率10割で上位に来るのを防ぐ
+/* 第132弾: 投手リレー（第131弾）と揃えて、**今学校にいる選手を通算成績で**評価する。
+   以前は今シーズンの出場だけを見て、打席が少ない選手だけ通算で補っていた。
+   これだと去年活躍した2年生がシーズン序盤に沈み、実際の戦力とずれる。
+   在校生の判定は isPlayerRetired（入学年からの学年計算。入学年不明は現役扱い）。 */
 function currentLineupRows(){
-  const games=curGames();
-  if(!games.length) return {rows:[], teamG:0};
-  const cur=aggBatting(games).filter(hasPA);
-  const paMin=Math.max(3, games.length);      // 1試合1打席ぶんを目安に、これ未満は通算で評価する
-  const cands=cur.map(r=>{
+  const games=allGamesFlat();
+  if(!games.length) return {rows:[], teamG:0, pool:0, under:0};
+  const all=aggBatting(games).filter(hasPA).map(r=>{
     const key=nameKey(r.name);
     const meta=(DB.playerMeta&&DB.playerMeta[key])||{};
-    let src=r, byCareer=false;
-    if(n(r.PA)<paMin){                        // 今季のサンプルが足りない選手は通算で見る
-      const cr=aggBatting(careerGamesForKey(key)).find(x=>nameKey(x.name)===key);
-      if(cr && n(cr.PA)>n(r.PA)){ src=cr; byCareer=true; }
-    }
-    return {key, name:r.name, pos:meta.position||"", PA:n(src.PA), G:n(r.G),
-            OBP:fnum(src.OBP), OPS:fnum(src.OPS), SLG:fnum(src.SLG), byCareer};
-  }).filter(c=>!isPlayerRetired(c.key));      // 引退・卒業した選手は除く
+    return {key, name:r.name, pos:meta.position||"", PA:n(r.PA), G:n(r.G),
+            OBP:fnum(r.OBP), OPS:fnum(r.OPS), SLG:fnum(r.SLG)};
+  }).filter(c=>!isPlayerRetired(c.key));      // 卒業した選手は除く
+  const cands=all.filter(c=>c.PA>=LINEUP_PA_MIN);
   const picked=pickLineupByPosition(cands);
-  if(!picked.length) return {rows:[], teamG:games.length};
+  if(!picked.length) return {rows:[], teamG:games.length, pool:cands.length, under:all.length-cands.length};
   const order=historicalLineupOrder(picked).filter(r=>r.key);
   const byKey=new Map(picked.map(p=>[p.key,p]));
-  return {rows:order.map(r=>({...r, src:byKey.get(r.key)||{}})), teamG:games.length};
+  return {rows:order.map(r=>({...r, src:byKey.get(r.key)||{}})), teamG:games.length,
+          pool:cands.length, under:all.length-cands.length};
 }
 function renderCurrentLineup(){
   const el=$("#currentLineup"); if(!el) return;
-  const {rows,teamG}=currentLineupRows();
+  const {rows,teamG,pool,under}=currentLineupRows();
   if(!rows.length){
-    el.innerHTML=`<div class="empty">今シーズンの試合が入ると、おすすめ打線が出ます。</div>`;
+    const why=under? `在校生はいますが、通算${LINEUP_PA_MIN}打席以上の選手がまだいません（規定に届かない選手 ${under}人）。` : "";
+    el.innerHTML=`<div class="empty">在校生の打席が貯まると、おすすめ打線が出ます。${esc(why)}</div>`;
     return;
   }
   const body=rows.map(r=>{
@@ -7036,8 +7037,7 @@ function renderCurrentLineup(){
     return `<tr>
       <td class="num" style="color:var(--amber);width:36px">${r.slot}番</td>
       <td style="text-align:left">${plinkHtml(r.key,r.name)}${metaMarks(r.key)}
-        <span class="dim" style="font-size:11px">${esc(s.slotPos||"")}</span>
-        ${s.byCareer?`<span class="mbadge" style="border-color:var(--amber);color:var(--amber)" title="今シーズンの打席が少ないため通算成績で評価しています">通算で評価</span>`:""}</td>
+        <span class="dim" style="font-size:11px">${esc(s.slotPos||"")}</span></td>
       <td class="num">${avg3(s.OBP||0)}</td>
       <td class="num" style="color:var(--amber)">${avg3(s.OPS||0)}</td>
       <td class="num">${avg3(s.SLG||0)}</td>
@@ -7050,7 +7050,7 @@ function renderCurrentLineup(){
     : "";
   el.innerHTML=`<div class="scroll"><table><thead><tr><th style="text-align:left">打順</th><th style="text-align:left">選手（守備）</th><th>出塁率</th><th>OPS</th><th>長打率</th><th style="text-align:left">基準</th></tr></thead><tbody>${body}</tbody></table></div>`
     + short
-    +`<div class="hint" style="margin-top:6px">${esc(DB.current)}（${teamG}試合）の出場選手から選出。実際の打順との比較は監督室の「打順別成績」で見られます。</div>`;
+    +`<div class="hint" style="margin-top:6px">在校生${pool}人の<strong>通算成績</strong>から選出（卒業した選手は除く／全期間${teamG}試合・練習試合を含む）。実際の打順との比較は監督室の「打順別成績」で見られます。</div>`;
 }
 /* ==================== 第130弾: おすすめ投手リレー ====================
    打線と同じ考え方で、投手を先発・中継ぎ・抑えに割り当てた参考の継投案を出す。
@@ -7060,6 +7060,11 @@ function renderCurrentLineup(){
    ==================================================================== */
 const RELAY_MAX_STARTERS=3;   // 先発は最大3人（連戦の大会を想定したローテーション）
 const RELAY_MAX_MIDDLE=2;     // 中継ぎは最大2人
+/* 推薦の足切り幅。「チーム防御率＋この値」より悪い投手は枠が空いても出さない（第131弾）。
+   チーム防御率ちょうどを基準にすると、投球回の多いエースに引っ張られて厳しくなりすぎるため余裕を持たせる。
+   絶対値（例: 防御率5.00以下）ではなくチーム内の相対値にしているのは、
+   栄冠ナインは難易度や年代で失点環境が変わり、絶対値だと機能しないため。 */
+const RELAY_ERA_SLACK=1.50;
 // 投手ごとに「先発した回数」「救援した回数」「先発時の平均アウト数」を数える
 function relayAppearances(games){
   const m=new Map();
@@ -7075,89 +7080,111 @@ function relayAppearances(games){
   return m;
 }
 /* 候補を先発/中継ぎ/抑えに割り当てる。rows は aggPitching の行に GS/RP/startOuts を足したもの。
-   純粋関数にしてあるのでテストから直接呼べる。 */
+   純粋関数にしてあるのでテストから直接呼べる。戻り値は {rows, bar, dropped}。
+
+   第131弾: **枠を埋めるために悪い投手を推薦しない**。
+   以前は「残りを防御率順に最大2人」と機械的に埋めていたため、候補が少ないチームでは
+   防御率6点台の投手が中継ぎとして出てしまっていた（ユーザー指摘）。
+   チーム全体の防御率を基準にし、それより悪い投手は枠を空けてでも出さない。
+   基準はチーム内の相対値にしている。栄冠ナインは難易度や年代で失点環境が変わるので、
+   「防御率3.00以下」のような絶対値だと機能しないため。 */
 function pickRelay(rows){
   const cands=(rows||[]).filter(r=>n(r.outs)>0);
-  if(!cands.length) return [];
-  // 先発中心＝先発登板が全登板の半分以上。1人しかいない投手は先発扱いにする
+  if(!cands.length) return {rows:[], bar:0, dropped:0};
+  /* チーム防御率（候補全体の自責点と投球回から。イニングの重みが効くので少投球の外れ値に振られない）。
+     ただしチーム防御率をそのまま基準にすると、投球回の多いエースに引っ張られて基準が厳しくなりすぎ、
+     防御率2点台の二番手まで落ちてしまう。「明らかに悪い投手を外す」のが目的なので余裕を持たせる。 */
+  const totOuts=cands.reduce((a,r)=>a+n(r.outs),0);
+  const totER=cands.reduce((a,r)=>a+n(r.ER),0);
+  const teamEra= totOuts? totER*9/(totOuts/3) : 0;
+  const bar= teamEra+RELAY_ERA_SLACK;
+  const okEra=r=>!totOuts || r.ERA<=bar;
+
+  // 先発中心＝先発登板が全登板の半分以上
   const isStarter=r=>n(r.GS)>0 && n(r.GS)*2>=n(r.GS)+n(r.RP);
   const byEra=(a,b)=>(a.ERA-b.ERA)||(b.outs-a.outs);
   const starters=cands.filter(isStarter).sort((a,b)=>{
-    // 先発は「長いイニングを投げられるか」も見る。先発時の平均イニングが1回以上違えばそちらを優先
-    const ai=n(a.GS)? a.startOuts/a.GS/3 : 0, bi=n(b.GS)? b.startOuts/b.GS/3 : 0;
-    if(Math.abs(ai-bi)>=1) return bi-ai;
+    /* 基本は防御率順。ただし防御率が僅差なら「長いイニングを投げられる方」を上に置く（連戦で価値が高いため）。
+       第131弾: この判定に**先発3試合以上**という条件を足した。
+       1試合だけ完投した1年生が、6試合投げて防御率の良い2年生より上に来てしまっていたため
+       （平均イニングは少ない登板数だと簡単に大きくなる）。 */
+    const enough=n(a.GS)>=3 && n(b.GS)>=3;
+    if(enough && Math.abs(a.ERA-b.ERA)<1.00){
+      const ai=a.startOuts/a.GS/3, bi=b.startOuts/b.GS/3;
+      if(Math.abs(ai-bi)>=1) return bi-ai;
+    }
     return byEra(a,b);
   });
   const relievers=cands.filter(r=>!isStarter(r)).sort(byEra);
 
-  const out=[];
-  const used=new Set();
-  starters.slice(0,RELAY_MAX_STARTERS).forEach((r,i)=>{
+  const out=[]; const used=new Set();
+  // 先発の1番手だけは基準を問わず出す（誰かが投げないと試合にならないため）。2・3番手からは基準を課す
+  starters.forEach((r,i)=>{
+    if(out.length>=RELAY_MAX_STARTERS) return;
+    if(i>0 && !okEra(r)) return;
     used.add(r.key);
-    out.push({...r, role:i===0? "先発":"先発"+"②③"[i-1], why:i===0? "防御率と投球回":"次に投げられる先発"});
+    out.push({...r, role:i===0? "先発":"先発"+"②③"[out.length-1],
+      why:i===0? "防御率と投球回":"次に投げられる先発"});
   });
-  // 抑えは救援中心の中から、防御率＋奪三振率が良い投手。短いイニングでも締められる指標を重く見る
-  const closerPool=relievers.filter(r=>!used.has(r.key));
+  // 抑えは救援中心の中から、防御率＋奪三振率が良い投手
+  const closerPool=relievers.filter(r=>!used.has(r.key) && okEra(r));
   if(closerPool.length){
     const best=[...closerPool].sort((a,b)=>((a.ERA-b.ERA)||(b.K9-a.K9)))[0];
     used.add(best.key);
     out.push({...best, role:"抑え", why:"救援での防御率と奪三振率"});
   }
-  relievers.filter(r=>!used.has(r.key)).slice(0,RELAY_MAX_MIDDLE).forEach(r=>{
+  relievers.filter(r=>!used.has(r.key) && okEra(r)).slice(0,RELAY_MAX_MIDDLE).forEach(r=>{
     used.add(r.key);
     out.push({...r, role:"中継ぎ", why:"防御率順"});
   });
-  // 先発が余っていれば中継ぎとして回す（投手が少ないチームでも枠が埋まるように）
-  starters.filter(r=>!used.has(r.key)).slice(0,Math.max(0,RELAY_MAX_MIDDLE-out.filter(x=>x.role==="中継ぎ").length))
+  // 中継ぎ枠が余っていて、基準を満たす先発が余っていればそちらを回す
+  const midLeft=()=>RELAY_MAX_MIDDLE-out.filter(x=>x.role==="中継ぎ").length;
+  starters.filter(r=>!used.has(r.key) && okEra(r)).slice(0,Math.max(0,midLeft()))
     .forEach(r=>{ used.add(r.key); out.push({...r, role:"中継ぎ", why:"先発だが継投にも回せる"}); });
-  // 表示順は 先発 → 中継ぎ → 抑え
+
   const ord={"先発":0,"先発②":1,"先発③":2,"中継ぎ":3,"抑え":4};
-  return out.sort((a,b)=>ord[a.role]-ord[b.role]);
+  return {rows:out.sort((a,b)=>ord[a.role]-ord[b.role]), bar, teamEra,
+          dropped:cands.length-out.length};   // 基準に届かず外した人数（案内文に使う）
 }
-/* 今シーズン版の候補づくり。打線と同じで、今季のサンプルが少ない投手は通算で評価し、
-   引退・卒業した選手は除く。 */
-function currentRelayRows(){
-  const games=curGames();
-  if(!games.length) return {rows:[], teamG:0, outsMin:0};
+const RELAY_OUTS_MIN=27;   // 規定＝通算9回以上。これ未満は防御率が極端になるので候補にしない
+/* 投手の候補行をまとめて作る。games は評価に使う試合（通算で見るので全期間を渡す）。 */
+function relayRowsFrom(games){
   const app=relayAppearances(games);
-  const outsMin=Math.max(9, games.length*3);   // 3回、または1試合1回ぶん
-  const rows=aggPitching(games).map(r=>{
+  return aggPitching(games).map(r=>{
     const key=nameKey(r.name);
     const a=app.get(key)||{GS:0,RP:0,startOuts:0};
-    let src=r, byCareer=false;
-    if(n(r.outs)<outsMin){                     // 今季の投球回が少ない投手は通算で見る
-      const cg=careerGamesForKey(key);
-      const cr=aggPitching(cg).find(x=>nameKey(x.name)===key);
-      if(cr && n(cr.outs)>n(r.outs)){
-        src=cr; byCareer=true;
-        const ca=relayAppearances(cg).get(key); if(ca) Object.assign(a,ca);
-      }
-    }
-    return {key, name:r.name, outs:n(src.outs), ERA:fnum(src.ERA), WHIP:fnum(src.WHIP), K9:fnum(src.K9),
-            G:n(src.G), ipNum:fnum(src.ipNum), GS:a.GS, RP:a.RP, startOuts:a.startOuts, byCareer};
-  }).filter(r=>!isPlayerRetired(r.key) && r.outs>=Math.min(outsMin,9));
-  return {rows:pickRelay(rows), teamG:games.length, outsMin};
+    return {key, name:r.name, outs:n(r.outs), ER:n(r.ER), ERA:fnum(r.ERA), WHIP:fnum(r.WHIP),
+            K9:fnum(r.K9), G:n(r.G), ipNum:fnum(r.ipNum), GS:a.GS, RP:a.RP, startOuts:a.startOuts};
+  });
+}
+/* 第131弾: 「今の」は**今学校にいる投手を通算成績で**評価する（ユーザー要望）。
+   以前は今シーズンの登板だけで見ていたが、それだと去年たくさん投げた2年生が
+   シーズン序盤に候補から消えてしまい、実際の戦力とずれる。
+   在校生の判定は打線と同じ isPlayerRetired（入学年からの学年計算。入学年不明は現役扱い）。 */
+function currentRelayRows(){
+  const games=allGamesFlat();
+  if(!games.length) return {rows:[], teamG:0, bar:0, teamEra:0, dropped:0, pool:0, under:0};
+  const all=relayRowsFrom(games).filter(r=>!isPlayerRetired(r.key));
+  const pool=all.filter(r=>r.outs>=RELAY_OUTS_MIN);
+  const p=pickRelay(pool);
+  return {rows:p.rows, bar:p.bar||0, teamEra:p.teamEra||0, dropped:p.dropped,
+          teamG:games.length, pool:pool.length,
+          under:all.length-pool.length};   // 規定に届かない在校生の人数
 }
 function historicalRelayRows(){
   const games=allGamesFlat();
-  if(!games.length) return {rows:[], teamG:0};
-  const app=relayAppearances(games);
-  const outsMin=Math.max(27, games.length);    // 通算なので9回ぶんは要求する
-  const rows=aggPitching(games).map(r=>{
-    const key=nameKey(r.name);
-    const a=app.get(key)||{GS:0,RP:0,startOuts:0};
-    return {key, name:r.name, outs:n(r.outs), ERA:fnum(r.ERA), WHIP:fnum(r.WHIP), K9:fnum(r.K9),
-            G:n(r.G), ipNum:fnum(r.ipNum), GS:a.GS, RP:a.RP, startOuts:a.startOuts};
-  }).filter(r=>r.outs>=outsMin);
-  return {rows:pickRelay(rows), teamG:games.length, outsMin};
+  if(!games.length) return {rows:[], teamG:0, bar:0, teamEra:0, dropped:0, pool:0};
+  const pool=relayRowsFrom(games).filter(r=>r.outs>=RELAY_OUTS_MIN);
+  const p=pickRelay(pool);
+  return {rows:p.rows, bar:p.bar||0, teamEra:p.teamEra||0, dropped:p.dropped,
+          teamG:games.length, pool:pool.length};
 }
 function relayTableHtml(rows){
   const body=rows.map(r=>{
     const closer=r.role==="抑え";
     return `<tr>
       <td class="num" style="width:52px;color:${closer?"var(--green)":"var(--amber)"}">${esc(r.role)}</td>
-      <td style="text-align:left">${plinkHtml(r.key,r.name)}${metaMarks(r.key)}
-        ${r.byCareer?`<span class="mbadge" style="border-color:var(--amber);color:var(--amber)" title="今シーズンの投球回が少ないため通算成績で評価しています">通算で評価</span>`:""}</td>
+      <td style="text-align:left">${plinkHtml(r.key,r.name)}${metaMarks(r.key)}</td>
       <td class="num" style="color:${closer?"var(--green)":"var(--amber)"}">${r.ipNum? r.ERA.toFixed(2):"-"}</td>
       <td class="num">${r.ipNum? r.WHIP.toFixed(2):"-"}</td>
       <td class="num">${r.ipNum? r.K9.toFixed(1):"-"}</td>
@@ -7171,20 +7198,35 @@ function relayTableHtml(rows){
   </tr></thead><tbody>${body}</tbody></table></div>`;
 }
 const RELAY_NOTE="先発＝先発登板が多く長いイニングを投げられる投手を防御率順に。抑え＝救援中心で防御率と奪三振率が良い投手。中継ぎ＝残りを防御率順に。調子・相手・スタミナは考慮していないので、そのまま採用すべき継投ではありません。";
+/* 基準に届かず枠が空いたときの案内。「候補がいないから空けている」と分かるようにする（第131弾）。
+   枠を埋めるために防御率の悪い投手を推薦すると、その表が信用できなくなるため。 */
+function relayShortNote(res){
+  const msgs=[];
+  const has=r=>res.rows.some(x=>x.role===r);
+  if(!has("抑え")) msgs.push("抑え");
+  if(!res.rows.some(x=>x.role==="中継ぎ")) msgs.push("中継ぎ");
+  if(!msgs.length) return "";
+  return `<div class="hint" style="margin-top:6px;color:var(--amber)">${msgs.join("・")}の枠は空けています。`
+    +`チーム防御率 ${res.teamEra.toFixed(2)} に対して基準（${res.bar.toFixed(2)}以下）を満たす投手が他にいないため、無理に埋めていません。</div>`;
+}
 function renderCurrentRelay(){
   const el=$("#currentRelay"); if(!el) return;
-  const {rows,teamG}=currentRelayRows();
-  if(!rows.length){ el.innerHTML=`<div class="empty">今シーズンの登板が入ると、おすすめの継投が出ます。</div>`; return; }
-  const only = rows.length===1? `<div class="hint" style="margin-top:6px;color:var(--amber)">規定を満たす投手が1人だけです。継投の候補が増えると中継ぎ・抑えも出ます。</div>` : "";
-  el.innerHTML=relayTableHtml(rows)+only+
-    `<div class="hint" style="margin-top:6px">${esc(DB.current)}（${teamG}試合）の登板から選出。${RELAY_NOTE}</div>`;
+  const res=currentRelayRows();
+  if(!res.rows.length){
+    const why=res.under? `在校生の投手はいますが、通算9回以上を投げた投手がまだいません（規定に届かない投手 ${res.under}人）。` : "";
+    el.innerHTML=`<div class="empty">在校生の投球回が貯まると、おすすめの継投が出ます。${esc(why)}</div>`;
+    return;
+  }
+  const only = res.rows.length===1? `<div class="hint" style="margin-top:6px;color:var(--amber)">規定を満たす在校生の投手が1人だけです。継投の候補が増えると中継ぎ・抑えも出ます。</div>` : relayShortNote(res);
+  el.innerHTML=relayTableHtml(res.rows)+only+
+    `<div class="hint" style="margin-top:6px">在校生の投手${res.pool}人の<strong>通算成績</strong>から選出（卒業した投手は除く）。${RELAY_NOTE}</div>`;
 }
 function renderHistoricalRelay(){
   const el=$("#historicalRelay"); if(!el) return;
-  const {rows,teamG}=historicalRelayRows();
-  if(!rows.length){ el.innerHTML=`<div class="empty">通算の登板が貯まると、歴代の継投案が出ます。</div>`; return; }
-  el.innerHTML=relayTableHtml(rows)+
-    `<div class="hint" style="margin-top:6px">全期間（${teamG}試合・練習試合を含む）の通算成績から選出。${RELAY_NOTE}</div>`;
+  const res=historicalRelayRows();
+  if(!res.rows.length){ el.innerHTML=`<div class="empty">通算9回以上を投げた投手が出てくると、歴代の継投案が出ます。</div>`; return; }
+  el.innerHTML=relayTableHtml(res.rows)+relayShortNote(res)+
+    `<div class="hint" style="margin-top:6px">全期間（${res.teamG}試合・練習試合を含む）の通算成績から、規定を満たす${res.pool}人を対象に選出。${RELAY_NOTE}</div>`;
 }
 function renderHistoricalLineup(bestNine, allBat){
   const el=$("#historicalLineup"); if(!el) return;
@@ -10423,7 +10465,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第129弾: 指摘の対象外リスト
   hiKey, hiHas, hiList, hiAdd, hiAddMany, hiClear, healthCheckData,
   // 第130弾: おすすめ投手リレー
-  pickRelay, relayAppearances, currentRelayRows, historicalRelayRows,
+  pickRelay, relayAppearances, relayRowsFrom, RELAY_ERA_SLACK, LINEUP_PA_MIN, currentLineupRows, currentRelayRows, historicalRelayRows, RELAY_OUTS_MIN,
   RELAY_MAX_STARTERS, RELAY_MAX_MIDDLE,
   // 第102弾: 投手セイバー・トロフィー棚
   saberPitchFrom, saberPitchRows, trophyShelf,
