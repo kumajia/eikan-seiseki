@@ -2,6 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<!-- 第123弾: スタジアム白問題の対策。ブラウザに「このページは元からダークだ」と最速で伝える。
+     :root{color-scheme:dark} はCSSにも書いてあるが、このファイルは<style>が巨大なので
+     Chromeが自動ダークモード(Auto Dark Mode)を適用するか判断する時点までに間に合わないことがある。
+     metaならhead解析の時点で効くので、CSSを待たずに自動ダーク変換を止められる。
+     ※実測ログで、指定 #0a1f12 が rgb(19,57,33) に化けていた（色相・彩度そのまま明度だけ上昇＝
+       ブラウザ側の色変換の特徴）ことからこの対策に至った。forced-colors は 0 だったため高コントラストではない。 -->
+<meta name="color-scheme" content="dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://generativelanguage.googleapis.com http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10010,6 +10017,35 @@ function showUpdateBar(msg){
 /* 第119弾: スタジアムが白くなる問題の自動診断。
    原因が特定できていないため、**白くなった瞬間の状態をエラーログに自動保存**する。
    次に発生したら「データ」タブのエラーログを見るだけで原因が分かる（その場でF12を開く必要がない）。 */
+/* 第123弾: 観測した色が「指定色の色相・彩度を保ったまま明度だけ変わったもの」かを判定する。
+   そうであればブラウザ側の色変換（Chromeの自動ダークモード等）が犯人で、CSSの当たり損ねではない。
+   実測例: 指定 #0a1f12(H.397 S.512 L.080) → 実際 rgb(19,57,33)(H.395 S.500 L.149) */
+function tintKind(cssColor){
+  const s0=String(cssColor||"");
+  if(/^\s*transparent\s*$/i.test(s0)) return "透明(背景なし)";
+  const am=s0.match(/rgba\([^)]*,\s*([\d.]+)\s*\)/);
+  if(am && parseFloat(am[1])===0) return "透明(背景なし)";   // 背景指定が一切効いていない状態
+  const m=s0.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if(!m) return "不明";
+  const got=[+m[1],+m[2],+m[3]], want=[10,31,18];
+  if(got[0]===want[0]&&got[1]===want[1]&&got[2]===want[2]) return "一致";
+  const hsl=(r,g,b)=>{
+    r/=255;g/=255;b/=255;
+    const mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2, d=mx-mn;
+    if(!d) return [0,0,l];
+    const s=l>0.5? d/(2-mx-mn) : d/(mx+mn);
+    let h = mx===r? (g-b)/d+(g<b?6:0) : mx===g? (b-r)/d+2 : (r-g)/d+4;
+    return [h/6, s, l];
+  };
+  const a=hsl(...want), b=hsl(...got);
+  const dh=Math.min(Math.abs(a[0]-b[0]), 1-Math.abs(a[0]-b[0]));
+  // 色相と彩度がほぼ同じで明度だけ違う → 明度だけの変換
+  if(dh<0.03 && Math.abs(a[1]-b[1])<0.12 && Math.abs(a[2]-b[2])>0.02){
+    return b[2]>a[2] ? "明度上昇(自動ダーク疑い)" : "明度低下";
+  }
+  if(got[0]>200 && got[1]>200 && got[2]>200) return "ほぼ白";
+  return "別色";
+}
 function diagnoseStadium(tag){
   try{
     const el=document.querySelector(".stadium");
@@ -10048,7 +10084,9 @@ function diagnoseStadium(tag){
       "cache="+(window.__servedFromCache?1:0),
       "online="+(navigator.onLine?1:0)
     ].join(" ");
-    errLogAdd("スタジアム白", info);
+    // 色が「色相・彩度そのままで明度だけ違う」＝ブラウザ側の色変換（自動ダークモード等）の特徴。
+    // 単なるCSSの当たり損ねと区別できるよう、種別を添えて記録する。
+    errLogAdd("スタジアム白", info+" type="+tintKind(bg));
     // 原因が分からなくても見た目だけは直す（インラインstyleはCSSの不発を素通しできる）
     el.style.background="#0a1f12";
     if(svg){ svg.style.display="block"; svg.style.width="100%"; svg.style.height="auto"; }
