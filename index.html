@@ -164,6 +164,11 @@
   .auditrow.bad .auditmsg{color:#ff9ca0;}
   .auditbadge{font-size:11px;padding:2px 8px;border-radius:8px;background:rgba(245,179,1,.18);color:var(--amber);}
   .auditbadge.bad{background:rgba(229,72,77,.18);color:#ff9ca0;}
+  /* 指摘の対象外ボタン（第129弾）。押し間違えを防ぐため、離れた位置ではなく項目のすぐ右に置く */
+  .hitem{white-space:nowrap;}
+  .hix{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;
+    padding:2px 5px;margin-left:2px;border-radius:5px;min-width:24px;min-height:24px;}
+  .hix:hover{color:var(--danger);background:rgba(229,72,77,.12);}
   .valban{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.7;}
   .valban.ok{background:rgba(56,196,107,.14);border:1px solid var(--green);}
   .valban.ng{background:rgba(229,72,77,.14);border:1px solid var(--danger);}
@@ -644,10 +649,20 @@
       <div class="note">今シーズンに出場した現役選手から、守備位置が重ならないように選んだ打線です（DH制・投手は打席に立たない前提）。1・2番は出塁率、3番はOPS、4・5番は長打率を重視。今シーズンの打席が少ない選手は通算成績で評価します。</div>
       <div id="currentLineup"></div>
     </section>
+    <section class="card" id="currentRelayCard">
+      <h2>今のおすすめ投手リレー（参考）</h2>
+      <div class="note">今シーズンに登板した現役投手から、先発・中継ぎ・抑えを割り当てた参考の継投案です。先発は先発登板が多く長いイニングを投げられる投手、抑えは救援中心で防御率と奪三振率が良い投手を選びます。今シーズンの投球回が少ない投手は通算成績で評価します。</div>
+      <div id="currentRelay"></div>
+    </section>
     <section class="card" id="historicalLineupCard">
       <h2>歴代打線（参考の打順）</h2>
       <div class="note">上のベストナインの9人を「打順」として並べた参考版です。守備配置ではなく、出塁率・OPS・長打率をもとに1〜9番の並びを提案します（断定ではありません）。</div>
       <div id="historicalLineup"></div>
+    </section>
+    <section class="card" id="historicalRelayCard">
+      <h2>歴代のおすすめ投手リレー（参考）</h2>
+      <div class="note">全期間の通算成績から、先発・中継ぎ・抑えを割り当てた参考の継投案です（卒業した投手も含みます）。規定に満たない投球回の投手は、防御率が極端な値になるため対象外にしています。</div>
+      <div id="historicalRelay"></div>
     </section>
   </div>
 
@@ -1811,6 +1826,29 @@ async function idbSnapshotSave(){
     db.close();
   }catch(e){}
 }
+/* ---------- 第129弾: 指摘の対象外リスト（健康診断・データ検算で共用） ----------
+   直しようがない指摘（スコアボードの記録が最初から無い試合など）を毎回見せないための仕組み。
+   **試合データそのものは一切書き換えない**。DB.healthIgnore に "分類:キー" を積むだけ。 */
+function hiKey(cat, key){ return String(cat)+":"+String(key); }
+function hiHas(cat, key){ return (DB.healthIgnore||[]).includes(hiKey(cat,key)); }
+function hiList(cat){ const p=String(cat)+":"; return (DB.healthIgnore||[]).filter(s=>s.startsWith(p)); }
+async function hiAdd(cat, key){
+  DB.healthIgnore=DB.healthIgnore||[];
+  const k=hiKey(cat,key);
+  if(!DB.healthIgnore.includes(k)) DB.healthIgnore.push(k);
+  await saveDB();
+}
+async function hiAddMany(cat, keys){
+  DB.healthIgnore=DB.healthIgnore||[];
+  const have=new Set(DB.healthIgnore);
+  for(const key of keys||[]){ const k=hiKey(cat,key); if(!have.has(k)){ DB.healthIgnore.push(k); have.add(k); } }
+  await saveDB();
+}
+async function hiClear(cat){
+  const p=String(cat)+":";
+  DB.healthIgnore=(DB.healthIgnore||[]).filter(s=>!s.startsWith(p));
+  await saveDB();
+}
 /* ---------- データ健康診断（#23） ---------- */
 function healthCheckData(){
   // 練習試合も含め全シーズンを走査（データ入力の取りこぼしチェックが目的）
@@ -1826,21 +1864,29 @@ function healthCheckData(){
   DB.playerMeta=DB.playerMeta||{};
   const noEnroll=roster.filter(([k])=>DB.playerMeta[k]?.enrollYear==null);
   const noPos=roster.filter(([k])=>!DB.playerMeta[k]?.position);
-  return {total:allGames.length,noInnings,noOpp,noEnroll,noPos};
+  // 第129弾: 「対象外」にした項目は一覧から外す（件数にも数えない）
+  const keepG=(cat,arr)=>arr.filter(x=>!hiHas(cat, x.g.id));
+  const keepP=(cat,arr)=>arr.filter(([k])=>!hiHas(cat, k));
+  return {total:allGames.length,
+    noInnings:keepG("noInnings",noInnings), noOpp:keepG("noOpp",noOpp),
+    noEnroll:keepP("noEnroll",noEnroll),    noPos:keepP("noPos",noPos)};
 }
 function renderHealthCheck(){
   const el=$("#healthContent"); if(!el) return;
   const h=healthCheckData();
   if(!h.total){ el.innerHTML=`<div class="empty">試合データが入ると診断します。</div>`; return; }
-  const gameLink=x=>`<span class="glink" role="link" tabindex="0" data-gid="${esc(String(x.g.id))}">${esc(x.g.date||"日付なし")}${x.g.opponent?" "+esc(x.g.opponent):""}</span>`;
-  const playerLink=([k,nm])=>plinkHtml(k,nm);
+  // 第129弾: 各項目の右に「×」を付けて、直しようがない指摘を個別に黙らせられるようにする
+  const xBtn=(cat,key)=>`<button type="button" class="hix" data-cat="${esc(cat)}" data-key="${esc(String(key))}" title="この指摘を対象外にする" aria-label="この指摘を対象外にする">×</button>`;
+  const gameLink=cat=>x=>`<span class="hitem"><span class="glink" role="link" tabindex="0" data-gid="${esc(String(x.g.id))}">${esc(x.g.date||"日付なし")}${x.g.opponent?" "+esc(x.g.opponent):""}</span>${xBtn(cat,x.g.id)}</span>`;
+  const playerLink=cat=>([k,nm])=>`<span class="hitem">${plinkHtml(k,nm)}${xBtn(cat,k)}</span>`;
   const cap=(arr,rf,limit=40)=>{
     if(!arr.length) return `<span class="dim" style="font-size:12px;color:var(--green)">問題なし</span>`;
     const shown=arr.slice(0,limit).map(rf).join("、");
     return shown+(arr.length>limit?`　<span class="dim" style="font-size:12px">他${arr.length-limit}件</span>`:"");
   };
-  const row=(label,arr,rf,desc)=>{
+  const row=(label,arr,cat,rf,desc)=>{
     const ok=arr.length===0;
+    const ign=hiList(cat).length;
     return `<div style="border-bottom:1px solid var(--line);padding:9px 2px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <span style="font-weight:600;font-size:14px">${esc(label)}</span>
@@ -1848,13 +1894,18 @@ function renderHealthCheck(){
       </div>
       ${desc?`<div class="dim" style="font-size:11px;margin:2px 0 5px">${esc(desc)}</div>`:''}
       <div style="font-size:13px;line-height:2">${cap(arr,rf)}</div>
+      <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${arr.length?`<button type="button" class="mini ghost hiAll" data-cat="${esc(cat)}">残り${arr.length}件をまとめて対象外にする</button>`:""}
+        ${ign?`<span class="dim" style="font-size:11px">対象外 ${ign}件</span><button type="button" class="mini ghost hiUndo" data-cat="${esc(cat)}">戻す</button>`:""}
+      </div>
     </div>`;
   };
   el.innerHTML=
-    row("イニング未入力の試合",h.noInnings,gameLink,"スコアボード（回別得点）が無い試合。イニング分析の対象外になる。")+
-    row("相手名なしの試合",h.noOpp,gameLink,"対戦相手が未設定の試合。")+
-    row("入学年未設定の選手",h.noEnroll,playerLink,"学年・引退/卒業判定に必要。選手ページで設定できる。")+
-    row("守備位置未設定の選手",h.noPos,playerLink,"ベストナイン選出に必要。投手のみの選手も含む。");
+    row("イニング未入力の試合",h.noInnings,"noInnings",gameLink("noInnings"),"スコアボード（回別得点）が無い試合。イニング分析の対象外になる。")+
+    row("相手名なしの試合",h.noOpp,"noOpp",gameLink("noOpp"),"対戦相手が未設定の試合。")+
+    row("入学年未設定の選手",h.noEnroll,"noEnroll",playerLink("noEnroll"),"学年・引退/卒業判定に必要。選手ページで設定できる。")+
+    row("守備位置未設定の選手",h.noPos,"noPos",playerLink("noPos"),"ベストナイン選出に必要。投手のみの選手も含む。")+
+    `<div class="hint" style="margin-top:8px">「×」でその指摘だけを消せます（試合や選手のデータは変わりません）。スコアボードの記録が最初から無い試合など、直しようがないものに使ってください。</div>`;
 }
 function renderBackupHint(){
   const el=document.getElementById("backupHint"); if(!el) return;
@@ -1923,6 +1974,10 @@ function migrate(db){
   db.dismissedDuplicateHints = Array.isArray(db.dismissedDuplicateHints) ? db.dismissedDuplicateHints : [];
   // 第94弾 ライバル校: 学校名の配列（欠落補完のみ。試合データではないので3点同期のうち軽い追加）
   db.rivals = Array.isArray(db.rivals) ? db.rivals.filter(x=>typeof x==="string" && x.trim()!=="") : [];
+  /* 第129弾 指摘の対象外リスト: "分類:対象キー" の文字列配列（例 "noInnings:1690000000123"）。
+     試合データ自体は書き換えず、健康診断・データ検算の指摘だけを黙らせるための控え。
+     スコアボードの記録が最初から無い試合など、直しようがない指摘を毎回見せないためのもの。 */
+  db.healthIgnore = Array.isArray(db.healthIgnore) ? db.healthIgnore.filter(x=>typeof x==="string" && x.trim()!=="") : [];
   // 旧データでidの無い試合にidを付与（id参照機能のため）。s.gamesが配列でない壊れたデータも空配列に矯正
   for(const s of Object.values(db.seasons)){
     if(!s || typeof s!=="object") continue;
@@ -2733,13 +2788,17 @@ function renderBestNine(){
   
   const games = seasonEntries().flatMap(([_, s]) => (s && s.games) || []);
   const G_total = games.length;
+  // 試合が1件も無いときは通算系のカードを隠す。
+  // 「今の」カード（currentLineupCard / currentRelayCard）は既存の作法どおり常に出し、
+  // 中身で「試合が入ると出ます」と案内する（第130弾で歴代リレーを追加）
+  const sideCards=["#historicalLineupCard","#historicalRelayCard"];
   if(G_total === 0){
     card.style.display = "none";
-    const lc=$("#historicalLineupCard"); if(lc) lc.style.display="none";
+    sideCards.forEach(s=>{ const e=$(s); if(e) e.style.display="none"; });
     return;
   }
   card.style.display = "";
-  const lc=$("#historicalLineupCard"); if(lc) lc.style.display="";
+  sideCards.forEach(s=>{ const e=$(s); if(e) e.style.display=""; });
   
   const PA_req = 50;
   const outs_req = 90; // 30投球回
@@ -2879,7 +2938,9 @@ function renderBestNine(){
     requestAnimationFrame(()=>requestAnimationFrame(()=>diagnoseStadium("renderBestNine")));
   }
   renderHistoricalLineup(bestNine, allBat);
-  renderCurrentLineup(); // 今のおすすめ打線（第117弾）
+  renderCurrentLineup();      // 今のおすすめ打線（第117弾）
+  renderCurrentRelay();       // 今のおすすめ投手リレー（第130弾）
+  renderHistoricalRelay();    // 歴代のおすすめ投手リレー（第130弾）
 }
 
 function render(){
@@ -6991,6 +7052,140 @@ function renderCurrentLineup(){
     + short
     +`<div class="hint" style="margin-top:6px">${esc(DB.current)}（${teamG}試合）の出場選手から選出。実際の打順との比較は監督室の「打順別成績」で見られます。</div>`;
 }
+/* ==================== 第130弾: おすすめ投手リレー ====================
+   打線と同じ考え方で、投手を先発・中継ぎ・抑えに割り当てた参考の継投案を出す。
+   ・先発かどうかは pitchers配列の先頭かで判定（OCRプロンプトで「先発を必ず先頭に」と規定済み。
+     第120弾のQS率・完投率も同じ前提なのでアプリ内で一貫している）。
+   ・防御率は少ないイニングで極端な値になるので、規定に満たない投手は候補から外す。
+   ==================================================================== */
+const RELAY_MAX_STARTERS=3;   // 先発は最大3人（連戦の大会を想定したローテーション）
+const RELAY_MAX_MIDDLE=2;     // 中継ぎは最大2人
+// 投手ごとに「先発した回数」「救援した回数」「先発時の平均アウト数」を数える
+function relayAppearances(games){
+  const m=new Map();
+  for(const g of (games||[])){
+    const pit=(g.pitchers||[]).filter(p=>p && String(p.name||"").trim()!=="");
+    pit.forEach((p,i)=>{
+      const key=nameKey(p.name);
+      if(!m.has(key)) m.set(key,{GS:0, RP:0, startOuts:0});
+      const t=m.get(key);
+      if(i===0){ t.GS++; t.startOuts+=ip2outs(p.IP); } else t.RP++;
+    });
+  }
+  return m;
+}
+/* 候補を先発/中継ぎ/抑えに割り当てる。rows は aggPitching の行に GS/RP/startOuts を足したもの。
+   純粋関数にしてあるのでテストから直接呼べる。 */
+function pickRelay(rows){
+  const cands=(rows||[]).filter(r=>n(r.outs)>0);
+  if(!cands.length) return [];
+  // 先発中心＝先発登板が全登板の半分以上。1人しかいない投手は先発扱いにする
+  const isStarter=r=>n(r.GS)>0 && n(r.GS)*2>=n(r.GS)+n(r.RP);
+  const byEra=(a,b)=>(a.ERA-b.ERA)||(b.outs-a.outs);
+  const starters=cands.filter(isStarter).sort((a,b)=>{
+    // 先発は「長いイニングを投げられるか」も見る。先発時の平均イニングが1回以上違えばそちらを優先
+    const ai=n(a.GS)? a.startOuts/a.GS/3 : 0, bi=n(b.GS)? b.startOuts/b.GS/3 : 0;
+    if(Math.abs(ai-bi)>=1) return bi-ai;
+    return byEra(a,b);
+  });
+  const relievers=cands.filter(r=>!isStarter(r)).sort(byEra);
+
+  const out=[];
+  const used=new Set();
+  starters.slice(0,RELAY_MAX_STARTERS).forEach((r,i)=>{
+    used.add(r.key);
+    out.push({...r, role:i===0? "先発":"先発"+"②③"[i-1], why:i===0? "防御率と投球回":"次に投げられる先発"});
+  });
+  // 抑えは救援中心の中から、防御率＋奪三振率が良い投手。短いイニングでも締められる指標を重く見る
+  const closerPool=relievers.filter(r=>!used.has(r.key));
+  if(closerPool.length){
+    const best=[...closerPool].sort((a,b)=>((a.ERA-b.ERA)||(b.K9-a.K9)))[0];
+    used.add(best.key);
+    out.push({...best, role:"抑え", why:"救援での防御率と奪三振率"});
+  }
+  relievers.filter(r=>!used.has(r.key)).slice(0,RELAY_MAX_MIDDLE).forEach(r=>{
+    used.add(r.key);
+    out.push({...r, role:"中継ぎ", why:"防御率順"});
+  });
+  // 先発が余っていれば中継ぎとして回す（投手が少ないチームでも枠が埋まるように）
+  starters.filter(r=>!used.has(r.key)).slice(0,Math.max(0,RELAY_MAX_MIDDLE-out.filter(x=>x.role==="中継ぎ").length))
+    .forEach(r=>{ used.add(r.key); out.push({...r, role:"中継ぎ", why:"先発だが継投にも回せる"}); });
+  // 表示順は 先発 → 中継ぎ → 抑え
+  const ord={"先発":0,"先発②":1,"先発③":2,"中継ぎ":3,"抑え":4};
+  return out.sort((a,b)=>ord[a.role]-ord[b.role]);
+}
+/* 今シーズン版の候補づくり。打線と同じで、今季のサンプルが少ない投手は通算で評価し、
+   引退・卒業した選手は除く。 */
+function currentRelayRows(){
+  const games=curGames();
+  if(!games.length) return {rows:[], teamG:0, outsMin:0};
+  const app=relayAppearances(games);
+  const outsMin=Math.max(9, games.length*3);   // 3回、または1試合1回ぶん
+  const rows=aggPitching(games).map(r=>{
+    const key=nameKey(r.name);
+    const a=app.get(key)||{GS:0,RP:0,startOuts:0};
+    let src=r, byCareer=false;
+    if(n(r.outs)<outsMin){                     // 今季の投球回が少ない投手は通算で見る
+      const cg=careerGamesForKey(key);
+      const cr=aggPitching(cg).find(x=>nameKey(x.name)===key);
+      if(cr && n(cr.outs)>n(r.outs)){
+        src=cr; byCareer=true;
+        const ca=relayAppearances(cg).get(key); if(ca) Object.assign(a,ca);
+      }
+    }
+    return {key, name:r.name, outs:n(src.outs), ERA:fnum(src.ERA), WHIP:fnum(src.WHIP), K9:fnum(src.K9),
+            G:n(src.G), ipNum:fnum(src.ipNum), GS:a.GS, RP:a.RP, startOuts:a.startOuts, byCareer};
+  }).filter(r=>!isPlayerRetired(r.key) && r.outs>=Math.min(outsMin,9));
+  return {rows:pickRelay(rows), teamG:games.length, outsMin};
+}
+function historicalRelayRows(){
+  const games=allGamesFlat();
+  if(!games.length) return {rows:[], teamG:0};
+  const app=relayAppearances(games);
+  const outsMin=Math.max(27, games.length);    // 通算なので9回ぶんは要求する
+  const rows=aggPitching(games).map(r=>{
+    const key=nameKey(r.name);
+    const a=app.get(key)||{GS:0,RP:0,startOuts:0};
+    return {key, name:r.name, outs:n(r.outs), ERA:fnum(r.ERA), WHIP:fnum(r.WHIP), K9:fnum(r.K9),
+            G:n(r.G), ipNum:fnum(r.ipNum), GS:a.GS, RP:a.RP, startOuts:a.startOuts};
+  }).filter(r=>r.outs>=outsMin);
+  return {rows:pickRelay(rows), teamG:games.length, outsMin};
+}
+function relayTableHtml(rows){
+  const body=rows.map(r=>{
+    const closer=r.role==="抑え";
+    return `<tr>
+      <td class="num" style="width:52px;color:${closer?"var(--green)":"var(--amber)"}">${esc(r.role)}</td>
+      <td style="text-align:left">${plinkHtml(r.key,r.name)}${metaMarks(r.key)}
+        ${r.byCareer?`<span class="mbadge" style="border-color:var(--amber);color:var(--amber)" title="今シーズンの投球回が少ないため通算成績で評価しています">通算で評価</span>`:""}</td>
+      <td class="num" style="color:${closer?"var(--green)":"var(--amber)"}">${r.ipNum? r.ERA.toFixed(2):"-"}</td>
+      <td class="num">${r.ipNum? r.WHIP.toFixed(2):"-"}</td>
+      <td class="num">${r.ipNum? r.K9.toFixed(1):"-"}</td>
+      <td class="num">${outs2ip(r.outs)}回</td>
+      <td class="dim" style="font-size:11px;text-align:left">${esc(r.why)}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="scroll"><table><thead><tr>
+    <th style="text-align:left">役割</th><th style="text-align:left">選手</th>
+    <th>防御率</th><th>WHIP</th><th>K/9</th><th>投球回</th><th style="text-align:left">基準</th>
+  </tr></thead><tbody>${body}</tbody></table></div>`;
+}
+const RELAY_NOTE="先発＝先発登板が多く長いイニングを投げられる投手を防御率順に。抑え＝救援中心で防御率と奪三振率が良い投手。中継ぎ＝残りを防御率順に。調子・相手・スタミナは考慮していないので、そのまま採用すべき継投ではありません。";
+function renderCurrentRelay(){
+  const el=$("#currentRelay"); if(!el) return;
+  const {rows,teamG}=currentRelayRows();
+  if(!rows.length){ el.innerHTML=`<div class="empty">今シーズンの登板が入ると、おすすめの継投が出ます。</div>`; return; }
+  const only = rows.length===1? `<div class="hint" style="margin-top:6px;color:var(--amber)">規定を満たす投手が1人だけです。継投の候補が増えると中継ぎ・抑えも出ます。</div>` : "";
+  el.innerHTML=relayTableHtml(rows)+only+
+    `<div class="hint" style="margin-top:6px">${esc(DB.current)}（${teamG}試合）の登板から選出。${RELAY_NOTE}</div>`;
+}
+function renderHistoricalRelay(){
+  const el=$("#historicalRelay"); if(!el) return;
+  const {rows,teamG}=historicalRelayRows();
+  if(!rows.length){ el.innerHTML=`<div class="empty">通算の登板が貯まると、歴代の継投案が出ます。</div>`; return; }
+  el.innerHTML=relayTableHtml(rows)+
+    `<div class="hint" style="margin-top:6px">全期間（${teamG}試合・練習試合を含む）の通算成績から選出。${RELAY_NOTE}</div>`;
+}
 function renderHistoricalLineup(bestNine, allBat){
   const el=$("#historicalLineup"); if(!el) return;
   if(!bestNine){ el.innerHTML=""; return; }
@@ -7546,6 +7741,13 @@ function mergeDB(d){
     let rivAdded=0;
     for(const s of d.rivals) if(typeof s==="string" && s.trim() && !have.has(s)){ DB.rivals.push(s); have.add(s); rivAdded++; }
     if(rivAdded) lines.push(`ライバル校: ${rivAdded}校を合流`);
+  }
+  if(Array.isArray(d.healthIgnore)){ // 第129弾 指摘の対象外リストの合流（和集合。この端末の設定は消さない）
+    DB.healthIgnore=DB.healthIgnore||[];
+    const have=new Set(DB.healthIgnore);
+    let igAdded=0;
+    for(const s of d.healthIgnore) if(typeof s==="string" && s.trim() && !have.has(s)){ DB.healthIgnore.push(s); have.add(s); igAdded++; }
+    if(igAdded) lines.push(`指摘の対象外設定: ${igAdded}件を合流`);
   }
   migrate(DB); // 合流後のDBもmigrate()を通してスキーマを揃える（他のインポート経路と挙動を合わせる）
   return {lines,totalAdded};
@@ -8996,6 +9198,7 @@ function auditAllGames(includeSum){
   for(const [sname,s] of seasonEntries()){
     for(const g of ((s&&s.games)||[])){
       checked++;
+      if(hiHas("audit", g.id)) continue;   // 第129弾: 対象外にした試合は挙げない
       const issues=gameAudit(g, includeSum);
       if(!issues.length) continue;
       rows.push({season:sname, id:g.id, date:g.date||"", opponent:g.opponent||"",
@@ -9026,6 +9229,7 @@ function renderAudit(){
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <span class="auditbadge ${isBad?"bad":"warn"}">${isBad?"矛盾":"要確認"}</span>
           <button type="button" class="mini ghost auditOpen" data-season="${esc(String(row.season))}" data-id="${esc(String(row.id))}">開く</button>
+          <button type="button" class="hix" data-cat="audit" data-key="${esc(String(row.id))}" title="この指摘を対象外にする" aria-label="この指摘を対象外にする">×</button>
         </div>
       </div>
       <div class="auditmsg">${lines}</div>
@@ -9037,7 +9241,10 @@ function renderAudit(){
       ${kpi("要確認",r.warn,r.warn?"a":"g")}
     </div>
     <div style="margin-top:10px">${cards}</div>
-    <div class="hint" style="margin-top:8px">「開く」でその試合の編集画面に移動します。問題が無い試合は一覧に出ません。</div>`;
+    <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      ${hiList("audit").length?`<span class="dim" style="font-size:11px">対象外 ${hiList("audit").length}件</span><button type="button" class="mini ghost hiUndo" data-cat="audit">戻す</button>`:""}
+    </div>
+    <div class="hint" style="margin-top:8px">「開く」でその試合の編集画面に移動します。「×」はその試合の指摘だけを消します（データは変わりません）。問題が無い試合は一覧に出ません。</div>`;
 }
 function highlightEntryCells(badCols){
   // badCols: 合計と合わない列キーのSet（OCR合計がある時のみ渡される。無ければ空）
@@ -10150,6 +10357,28 @@ async function init(){
       editGame(b.dataset.season, b.dataset.id); // 該当試合を編集で開く（シーズンもそちらへ切り替わる）
     });
   }
+  /* 第129弾: 指摘の対象外（健康診断・データ検算で共通）。
+     どちらのカードからでも同じ操作になるよう、親要素にまとめて委譲する。 */
+  { const handler=async e=>{
+      const x=e.target.closest(".hix");
+      if(x){ e.stopPropagation(); await hiAdd(x.dataset.cat, x.dataset.key); renderHealthCheck(); renderAudit(); toast("この指摘を対象外にしました"); return; }
+      const undo=e.target.closest(".hiUndo");
+      if(undo){ await hiClear(undo.dataset.cat); renderHealthCheck(); renderAudit(); toast("対象外の設定を戻しました"); return; }
+      const all=e.target.closest(".hiAll");
+      if(all){
+        const cat=all.dataset.cat;
+        const h=healthCheckData();
+        const arr=h[cat]||[];
+        if(!arr.length) return;
+        if(!confirm(`表示中の${arr.length}件をまとめて対象外にします。よろしいですか（あとで「戻す」で元に戻せます）`)) return;
+        // 試合の一覧は {season,g} の形、選手の一覧は [key,name] の形なので取り出し方を分ける
+        await hiAddMany(cat, arr.map(v=>Array.isArray(v)? v[0] : v.g.id));
+        renderHealthCheck(); renderAudit(); toast(`${arr.length}件を対象外にしました`);
+      }
+    };
+    const hc=$("#healthContent"); if(hc) hc.addEventListener("click",handler);
+    const ac=$("#auditContent");  if(ac) ac.addEventListener("click",handler);
+  }
   // #37 オフライン案内バー（起動時＋切替時）
   window.addEventListener("online",updateOfflineBar);
   window.addEventListener("offline",updateOfflineBar);
@@ -10191,6 +10420,11 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   gameAudit, auditAllGames, expectedPitchOutsOf,
   // 第128弾: 最終回裏が行われたかを含めた期待アウト数（フォームと保存済み試合で共通）
   expectedOutsFor,
+  // 第129弾: 指摘の対象外リスト
+  hiKey, hiHas, hiList, hiAdd, hiAddMany, hiClear, healthCheckData,
+  // 第130弾: おすすめ投手リレー
+  pickRelay, relayAppearances, currentRelayRows, historicalRelayRows,
+  RELAY_MAX_STARTERS, RELAY_MAX_MIDDLE,
   // 第102弾: 投手セイバー・トロフィー棚
   saberPitchFrom, saberPitchRows, trophyShelf,
   // 第103弾: 動画プール / 第105弾: OCR結果キャッシュ
