@@ -9,6 +9,10 @@
      ※実測ログで、指定 #0a1f12 が rgb(19,57,33) に化けていた（色相・彩度そのまま明度だけ上昇＝
        ブラウザ側の色変換の特徴）ことからこの対策に至った。forced-colors は 0 だったため高コントラストではない。 -->
 <meta name="color-scheme" content="dark">
+<!-- 第126弾: スタジアム白問題の真犯人は拡張機能 Dark Reader だった（診断ログの agent=DarkReader で確定）。
+     このタグがあると Dark Reader は処理そのものを丸ごと省く＝色を一切いじらない。公式に用意された仕組み。
+     このアプリは元からダークテーマなので、二重にダーク化される必要がない。 -->
+<meta name="darkreader-lock">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://generativelanguage.googleapis.com http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10056,14 +10060,16 @@ function tintKind(cssColor){
 function colorAgent(){
   try{
     const de=document.documentElement;
-    const marks=[];
-    if(de.hasAttribute("data-darkreader-mode")||de.hasAttribute("data-darkreader-scheme")) marks.push("DarkReader");
-    if(document.querySelector('style.darkreader, style[class*="darkreader"], meta[name="darkreader"]')) marks.push("DarkReader");
+    const marks=new Set();   // 同じ主体を二重に数えないようSetで持つ
+    if(de.hasAttribute("data-darkreader-mode")||de.hasAttribute("data-darkreader-scheme")) marks.add("DarkReader");
+    if(document.querySelector('style.darkreader, style[class*="darkreader"], meta[name="darkreader"]')) marks.add("DarkReader");
     // 拡張が挿し込んだstyle要素（アプリ自身のものではないstyle）を数える
-    const mine=2; // このファイルが持つstyleの数（head内の1つ＋printなど）
+    const mine=2; // このファイルが持つstyleの数（実測で確認済み）
     const styles=document.querySelectorAll("style").length;
-    if(styles>mine) marks.push("外部style"+(styles-mine));
-    return marks.length? marks.join("+") : "なし";
+    if(styles>mine) marks.add("外部style"+(styles-mine));
+    // ロックが効いているかも記録する（効いていればDarkReaderの痕跡は消えるはず）
+    if(!document.querySelector('meta[name="darkreader-lock"]')) marks.add("lock無");
+    return marks.size? [...marks].join("+") : "なし";
   }catch(e){ return "不明"; }
 }
 function diagnoseStadium(tag){
