@@ -2787,34 +2787,38 @@ function renderBestNine(){
   const fieldSvg = `
     <svg class="field" viewBox="0 0 400 340" width="400" height="340" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;background:#0a1f12" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <defs>
-        <radialGradient id="grass" cx="50%" cy="88%" r="90%"><stop offset="0%" stop-color="#2f7d3c"/><stop offset="55%" stop-color="#256a31"/><stop offset="100%" stop-color="#184c22"/></radialGradient>
-        <linearGradient id="dirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c58a4c"/><stop offset="100%" stop-color="#9c6633"/></linearGradient>
-        <radialGradient id="mound" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#cf9457"/><stop offset="100%" stop-color="#a06a37"/></radialGradient>
+        <radialGradient id="grass" cx="50%" cy="88%" r="90%"><stop offset="0%" style="stop-color:#2f7d3c"/><stop offset="55%" style="stop-color:#256a31"/><stop offset="100%" style="stop-color:#184c22"/></radialGradient>
+        <linearGradient id="dirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:#c58a4c"/><stop offset="100%" style="stop-color:#9c6633"/></linearGradient>
+        <radialGradient id="mound" cx="50%" cy="40%" r="70%"><stop offset="0%" style="stop-color:#cf9457"/><stop offset="100%" style="stop-color:#a06a37"/></radialGradient>
       </defs>
-      <rect x="0" y="0" width="400" height="340" fill="#0a1f12"/>
-      <path d="M200,300 L22,78 Q200,4 378,78 Z" fill="url(#grass)"/>
-      <g opacity="0.10" fill="#ffffff">
+      <!-- 第125弾: 地の色は fill属性ではなく style（CSSプロパティ）で指定する。
+           実測ログで、CSSのbackgroundは守られたのに fill属性 だけが rgb(219,216,211)＝ほぼ白に
+           変換されていた（＝これが「スタジアムが白い」の正体）。CSS側は変換を免れているので、
+           同じくCSSとして書けば守られる。SVG要素自身のstyleにも背景を入れて二重に保険をかけてある。 -->
+      <rect x="0" y="0" width="400" height="340" style="fill:#0a1f12"/>
+      <path d="M200,300 L22,78 Q200,4 378,78 Z" style="fill:url(#grass)"/>
+      <g opacity="0.10" style="fill:#ffffff">
         <path d="M200,300 L70,138 L110,138 Z"/><path d="M200,300 L150,96 L190,96 Z"/><path d="M200,300 L250,96 L210,96 Z"/><path d="M200,300 L330,138 L290,138 Z"/>
       </g>
-      <path d="M30,86 Q200,20 370,86" fill="none" stroke="#a86b3a" stroke-width="11" stroke-linecap="round"/>
-      <path d="M24,80 Q200,8 376,80" fill="none" stroke="#0e3016" stroke-width="6" stroke-linecap="round"/>
-      <path d="M24,80 Q200,8 376,80" fill="none" stroke="#f5b301" stroke-width="1.4" stroke-linecap="round" opacity=".5"/>
-      <line x1="200" y1="300" x2="24" y2="80" stroke="#eef5fb" stroke-width="2"/>
-      <line x1="200" y1="300" x2="376" y2="80" stroke="#eef5fb" stroke-width="2"/>
-      <line x1="24" y1="80" x2="24" y2="58" stroke="#f5b301" stroke-width="2.5"/>
-      <line x1="376" y1="80" x2="376" y2="58" stroke="#f5b301" stroke-width="2.5"/>
-      <path d="M200,300 L104,204 A135,135 0 0 1 296,204 Z" fill="url(#dirt)"/>
-      <path d="M200,286 L251,237 L200,190 L149,237 Z" fill="url(#grass)"/>
-      <circle cx="200" cy="230" r="17" fill="url(#mound)"/>
-      <rect x="196" y="228" width="8" height="3" rx="1" fill="#f3f6fa"/>
-      <g fill="#f3f6fa" stroke="#c9d6e2" stroke-width="1">
+      <path d="M30,86 Q200,20 370,86" stroke-width="11" stroke-linecap="round" style="fill:none;stroke:#a86b3a"/>
+      <path d="M24,80 Q200,8 376,80" stroke-width="6" stroke-linecap="round" style="fill:none;stroke:#0e3016"/>
+      <path d="M24,80 Q200,8 376,80" stroke-width="1.4" stroke-linecap="round" opacity=".5" style="fill:none;stroke:#f5b301"/>
+      <line x1="200" y1="300" x2="24" y2="80" stroke-width="2" style="stroke:#eef5fb"/>
+      <line x1="200" y1="300" x2="376" y2="80" stroke-width="2" style="stroke:#eef5fb"/>
+      <line x1="24" y1="80" x2="24" y2="58" stroke-width="2.5" style="stroke:#f5b301"/>
+      <line x1="376" y1="80" x2="376" y2="58" stroke-width="2.5" style="stroke:#f5b301"/>
+      <path d="M200,300 L104,204 A135,135 0 0 1 296,204 Z" style="fill:url(#dirt)"/>
+      <path d="M200,286 L251,237 L200,190 L149,237 Z" style="fill:url(#grass)"/>
+      <circle cx="200" cy="230" r="17" style="fill:url(#mound)"/>
+      <rect x="196" y="228" width="8" height="3" rx="1" style="fill:#f3f6fa"/>
+      <g stroke-width="1" style="fill:#f3f6fa;stroke:#c9d6e2">
         <rect x="257" y="231" width="12" height="12" rx="1.5" transform="rotate(45 263 237)"/>
         <rect x="194" y="168" width="12" height="12" rx="1.5" transform="rotate(45 200 174)"/>
         <rect x="131" y="231" width="12" height="12" rx="1.5" transform="rotate(45 137 237)"/>
       </g>
-      <polygon points="192,296 208,296 208,303 200,309 192,303" fill="#f3f6fa" stroke="#c9d6e2" stroke-width="1"/>
-      <rect x="171" y="290" width="12" height="20" fill="none" stroke="#ffffff" stroke-width="1.2" opacity=".55"/>
-      <rect x="217" y="290" width="12" height="20" fill="none" stroke="#ffffff" stroke-width="1.2" opacity=".55"/>
+      <polygon points="192,296 208,296 208,303 200,309 192,303" stroke-width="1" style="fill:#f3f6fa;stroke:#c9d6e2"/>
+      <rect x="171" y="290" width="12" height="20" stroke-width="1.2" opacity=".55" style="fill:none;stroke:#ffffff"/>
+      <rect x="217" y="290" width="12" height="20" stroke-width="1.2" opacity=".55" style="fill:none;stroke:#ffffff"/>
     </svg>
   `;
   
@@ -10046,6 +10050,22 @@ function tintKind(cssColor){
   if(got[0]>200 && got[1]>200 && got[2]>200) return "ほぼ白";
   return "別色";
 }
+/* 第124弾: 色を変換している主体が「拡張機能」か「ブラウザ本体の自動ダーク」かを切り分ける。
+   Dark Reader等の拡張はDOMに痕跡（専用のstyle要素やhtml属性）を残すので、それを探す。
+   痕跡が無いのに色が変わっているなら、ブラウザ本体（Chromeの自動ダークモード）が犯人。 */
+function colorAgent(){
+  try{
+    const de=document.documentElement;
+    const marks=[];
+    if(de.hasAttribute("data-darkreader-mode")||de.hasAttribute("data-darkreader-scheme")) marks.push("DarkReader");
+    if(document.querySelector('style.darkreader, style[class*="darkreader"], meta[name="darkreader"]')) marks.push("DarkReader");
+    // 拡張が挿し込んだstyle要素（アプリ自身のものではないstyle）を数える
+    const mine=2; // このファイルが持つstyleの数（head内の1つ＋printなど）
+    const styles=document.querySelectorAll("style").length;
+    if(styles>mine) marks.push("外部style"+(styles-mine));
+    return marks.length? marks.join("+") : "なし";
+  }catch(e){ return "不明"; }
+}
 function diagnoseStadium(tag){
   try{
     const el=document.querySelector(".stadium");
@@ -10074,7 +10094,7 @@ function diagnoseStadium(tag){
     const info=[
       "at="+tag,
       "bg="+bg.replace(/\s/g,""),
-      "rect="+(rect? rectFill.replace(/\s/g,"") : "none")+"/"+(rect? rect.getAttribute("fill") : "-"),
+      "rect="+(rect? rectFill.replace(/\s/g,"") : "none")+"/"+(rect? tintKind(rectFill) : "-"),
       "svg="+(svg?1:0)+" "+Math.round(svgBox.width)+"x"+Math.round(svgBox.height)+" "+(svg?getComputedStyle(svg).display:"-"),
       "box="+Math.round(box.width)+"x"+Math.round(box.height),
       "forced="+mq("(forced-colors: active)"),
@@ -10086,10 +10106,13 @@ function diagnoseStadium(tag){
     ].join(" ");
     // 色が「色相・彩度そのままで明度だけ違う」＝ブラウザ側の色変換（自動ダークモード等）の特徴。
     // 単なるCSSの当たり損ねと区別できるよう、種別を添えて記録する。
-    errLogAdd("スタジアム白", info+" type="+tintKind(bg));
-    // 原因が分からなくても見た目だけは直す（インラインstyleはCSSの不発を素通しできる）
+    // inline= は決め手。要素に直接書いた色（CSSのどのルールにも負けない）と実測がズレていれば、
+    // それはCSSの問題ではなくブラウザ側の色変換だと断定できる。
+    errLogAdd("スタジアム白", info+" type="+tintKind(bg)+" inline="+(el.style.background||"なし")+" agent="+colorAgent());
+    // 見た目だけは直す。fill属性が変換される環境があるので、CSSプロパティとして上書きし直す（第125弾）
     el.style.background="#0a1f12";
-    if(svg){ svg.style.display="block"; svg.style.width="100%"; svg.style.height="auto"; }
+    if(svg){ svg.style.display="block"; svg.style.width="100%"; svg.style.height="auto"; svg.style.background="#0a1f12"; }
+    if(rect) rect.style.fill="#0a1f12";
     // 画面にも出す（気づけるように・1回だけ）
     if(!document.getElementById("stadiumDiagBar")){
       const d=document.createElement("div");
