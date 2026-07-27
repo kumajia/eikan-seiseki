@@ -9062,6 +9062,11 @@ function switchTab(name,mode){
   window.scrollTo({top:0,behavior:"smooth"});
   if(name === "add") showDraftBannerIfExist();
   if(name === "videopool") vpFetchList(); // 開いたときに受信サーバーから一覧を取り直す
+  // 第122弾: スタジアムの自己診断は「実際に画面に出ている」タイミングでしか意味がない。
+  //   描画時（renderBestNine）は別タブだと0x0で測れないため、このタブを開いた瞬間に測り直す。
+  if(name === "bestnine" && typeof requestAnimationFrame==="function"){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>diagnoseStadium("switchTab")));
+  }
   const hash="#"+name;
   if(mode!=="silent"){
     if(mode==="replace") history.replaceState({tab:name},"",hash);
@@ -10016,8 +10021,12 @@ function diagnoseStadium(tag){
     const svg=el.querySelector("svg");
     const rect=el.querySelector("svg rect");
     const rectFill=rect? (getComputedStyle(rect).fill||"") : "";
-    const okRect=/rgb\(\s*10\s*,\s*31\s*,\s*18\s*\)/.test(rectFill);
     const box=el.getBoundingClientRect();
+    // 第122弾: タブがdisplay:noneのときは要素が0x0になる（＝壊れているのではなく単に非表示）。
+    //   ここで打ち切らないと、別タブを見ているだけで毎回「異常」を記録してしまう（実際に誤検知した）。
+    if(!el.offsetParent && getComputedStyle(el).position!=="fixed") return;
+    if(box.width<1) return;
+    const okRect=/rgb\(\s*10\s*,\s*31\s*,\s*18\s*\)/.test(rectFill);
     const svgBox=svg? svg.getBoundingClientRect() : {width:0,height:0};
     // SVGが潰れている（高さがほぼ無い／極端に低い）のも異常とみなす
     const okSize=!!svg && svgBox.height>40;
@@ -10097,7 +10106,36 @@ if("serviceWorker" in navigator && location.protocol!=="file:"){
   }).catch(()=>{});
 }
 </script>
-<script src="tests.js" defer></script>
+<script>
+/* 第121弾: tests.js は開発用でGitHub Pagesには置かない（個人利用のため配布不要）。
+   静的なscriptタグ（src=tests.js）のままだと公開版で毎回404が出るので、
+   #test を開いたときだけ動的に読み込む。無ければ静かに案内するだけで、アプリ本体には影響しない。 */
+(function(){
+  var loading=false, loaded=false;
+  function wantTest(){ return location.hash==="#test" || /[?&]test\b/.test(location.search); }
+  function loadTests(){
+    if(loading||loaded) return;
+    loading=true;
+    var s=document.createElement("script");
+    s.src="tests.js";
+    s.onload=function(){ loaded=true; loading=false; };
+    s.onerror=function(){
+      loading=false;
+      var msg="自動テスト（tests.js）はこの環境には置いていません。開発用のローカル環境で実行してください。";
+      if(typeof toast==="function"){ toast(msg); return; }
+      var d=document.createElement("div");
+      d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:110px;background:#1b2430;border:1px solid #3a4757;color:#e8eef6;padding:9px 14px;border-radius:10px;font-size:12.5px;z-index:99;max-width:92vw;text-align:center";
+      d.textContent=msg;
+      document.body.appendChild(d);
+      setTimeout(function(){ d.remove(); },6000);
+    };
+    document.body.appendChild(s);
+  }
+  if(wantTest()) loadTests();
+  // 後からアドレスバーで #test を付けた場合にも読み込む
+  window.addEventListener("hashchange",function(){ if(wantTest()) loadTests(); });
+})();
+</script>
 
 </body>
 </html>
