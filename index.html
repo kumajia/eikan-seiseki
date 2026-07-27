@@ -156,6 +156,14 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .toast.err{background:var(--danger);color:#fff;}
   .empty{text-align:center;color:var(--muted);padding:30px 10px;}
+  /* データ検算（第127弾）。左の縦線で深刻度を示す（片側ボーダーなので角丸は付けない） */
+  .auditrow{background:var(--panel2);border-left:3px solid var(--amber);padding:10px 12px;margin-bottom:8px;}
+  .auditrow.bad{border-left-color:var(--danger);}
+  .audithead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .auditmsg{font-size:12px;line-height:1.7;margin-top:5px;color:var(--amber);}
+  .auditrow.bad .auditmsg{color:#ff9ca0;}
+  .auditbadge{font-size:11px;padding:2px 8px;border-radius:8px;background:rgba(245,179,1,.18);color:var(--amber);}
+  .auditbadge.bad{background:rgba(229,72,77,.18);color:#ff9ca0;}
   .valban{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.7;}
   .valban.ok{background:rgba(56,196,107,.14);border:1px solid var(--green);}
   .valban.ng{background:rgba(229,72,77,.14);border:1px solid var(--danger);}
@@ -1288,6 +1296,16 @@
       <h2>データ健康診断</h2>
       <div class="note">OCR取り込みの取りこぼしチェック。未入力の項目を洗い出します。試合はタップで試合ログへ、選手はタップで選手ページへ飛べる（練習試合も含む）。</div>
       <div id="healthContent"></div>
+    </section>
+    <section class="card">
+      <h2>データ検算</h2>
+      <div class="note">保存済みの全試合の数字を検算し、辻褄が合わない試合を集めます。OCRの読み間違いが残っている試合を見つけるためのものです（練習試合も含む）。</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0">
+        <label class="inline" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox" id="auditIncludeSum"> 得点合計の不一致も見る</label>
+        <button type="button" class="mini ghost" id="auditRefresh">再検算</button>
+      </div>
+      <div class="note" id="auditSumNote" style="margin-top:-2px">得点合計の照合は、控え選手を省いて手入力した試合でも不一致になります。OCRの行漏れを拾える代わりに、その分だけ「要確認」が増えます。</div>
+      <div id="auditContent"></div>
     </section>
     <section class="card">
       <h2>OCR取り込み履歴</h2>
@@ -2932,6 +2950,7 @@ function render(){
   renderWinLossBand();
   renderTodayInHistory();
   renderHealthCheck();
+  renderAudit(); // データ検算（第127弾）。試合を保存・編集するたびに最新の状態で数え直す
   renderOcrLog();
   renderErrLog();
   fillNenkanScope();
@@ -8855,6 +8874,141 @@ function pitRowContradiction(vals){
   if(outs===0 && worked) return true; // 投球回0なのに打者と対戦している
   return false;
 }
+/* ==================== 第127弾: 保存済み試合の検算（データ検算） ====================
+   目的: OCRの読み間違いが残ったまま保存された試合を後から見つける。
+   入力フォームの検算（validateEntry）は「いま入力中の試合」しか見ないので、
+   保存済みの試合を同じ観点で洗い直す純粋関数を用意する。
+   ・OCRの合計値(ocrBatTotals)は試合に保存されないので、ここでは使えない。
+     代わりに**試合データだけで完結する照合**（得点・イニング・投球回・行内矛盾）を使う。
+   ・レベルは2段階。bad=ほぼ確実に誤り / warn=入力の省略でも起こり得るので要確認。
+   ==================================================================== */
+// 相手が攻撃したイニング数から、投手の合計アウト数の期待値を出す（保存済み試合版）
+function expectedPitchOutsOf(g){
+  const side=(g&&g.side==="top")? "top" : "bottom";
+  const oppArr=((g&&g.innings)||{})[side==="bottom"?"top":"bottom"]||[];
+  let last=0;
+  oppArr.forEach((v,i)=>{ if(String(v??"").trim()!=="") last=i+1; });
+  if(!last) return {outs:27, innings:9, fromInnings:false};
+  return {outs:last*3, innings:last, fromInnings:true};
+}
+// 1試合を検算して問題の配列を返す。includeSum=false なら得点合計の照合を省く
+function gameAudit(g, includeSum){
+  const out=[];
+  if(!g) return out;
+  const bats=(g.batters||[]).filter(b=>b && (b.name||"").trim()!=="");
+  const pits=(g.pitchers||[]).filter(p=>p && (p.name||"").trim()!=="");
+  const rf=n(g.runsFor), ra=n(g.runsAgainst);
+  const bad=m=>out.push({level:"bad", msg:m});
+  const warn=m=>out.push({level:"warn", msg:m});
+
+  // --- 行内矛盾（1行だけで分かる。ほぼ確実に誤読） ---
+  bats.forEach(b=>{
+    if(rowContradiction(b)){
+      const ab=n(b.AB), h=n(b.H), xbh=n(b["2B"])+n(b["3B"])+n(b.HR);
+      if(h>ab) bad(`打者 ${b.name}: 安打 ${h} が打数 ${ab} を超えています`);
+      if(xbh>h) bad(`打者 ${b.name}: 二塁+三塁+本塁 ${xbh} が安打 ${h} を超えています`);
+    }
+  });
+  pits.forEach(p=>{
+    if(!pitRowContradiction(p)) return;
+    const er=n(p.ER), r=n(p.R), hr=n(p.HR), h=n(p.H);
+    if(er>r) bad(`投手 ${p.name}: 自責点 ${er} が失点 ${r} を超えています`);
+    if(hr>h) bad(`投手 ${p.name}: 被本塁打 ${hr} が被安打 ${h} を超えています`);
+    if(ip2outs(p.IP)===0) bad(`投手 ${p.name}: 投球回が0なのに打者と対戦した記録があります`);
+  });
+  // 打点は得点を超えない（打点が少ないのは正常＝失策や暴投での生還）
+  if(bats.length){
+    const rbi=bats.reduce((a,b)=>a+n(b.RBI),0);
+    if(rbi>rf) bad(`打点の合計 ${rbi} が試合の得点 ${rf} を超えています`);
+  }
+
+  // --- イニング合計と得点欄 ---
+  const inn=g.innings||{};
+  const hasInn=(inn.top||[]).some(v=>String(v??"").trim()!=="")||(inn.bottom||[]).some(v=>String(v??"").trim()!=="");
+  if(hasInn){
+    const side=(g.side==="top")? "top":"bottom";
+    const sum=a=>(a||[]).reduce((x,v)=>x+n(v),0);
+    const mine=side==="bottom"? sum(inn.bottom) : sum(inn.top);
+    const opp =side==="bottom"? sum(inn.top)    : sum(inn.bottom);
+    if(mine!==rf) warn(`イニング合計 ${mine} が得点欄 ${rf} と一致しません（味方）`);
+    if(opp!==ra)  warn(`イニング合計 ${opp} が得点欄 ${ra} と一致しません（相手）`);
+  }
+
+  // --- 投手の合計投球回 ---
+  if(pits.length){
+    const outs=pits.reduce((a,p)=>a+ip2outs(p.IP),0);
+    const exp=expectedPitchOutsOf(g);
+    // 端数を許すのは「自チームが先攻で負けた」＝相手のサヨナラで最終回が途中で終わる場合だけ
+    const allowShort=((g.side==="top") && rf<ra)? 2 : 0;
+    if(!(outs<=exp.outs && outs>=exp.outs-allowShort)){
+      const base=exp.fromInnings? `相手の攻撃は${exp.innings}回` : "回別得点が未入力のため9回と仮定";
+      warn(`投手の合計投球回 ${outs2ip(outs)}回 — ${base}なので ${outs2ip(exp.outs)}回のはず`);
+    }
+  }
+
+  // --- 得点合計の照合（任意。手入力で控えを省くと合わないのでwarn止まり） ---
+  if(includeSum){
+    if(bats.length){
+      const r=bats.reduce((a,b)=>a+n(b.R),0);
+      if(r!==rf) warn(`打者の得点合計 ${r} が試合の得点 ${rf} と一致しません`);
+    }
+    if(pits.length){
+      const r=pits.reduce((a,p)=>a+n(p.R),0);
+      if(r!==ra) warn(`投手の失点合計 ${r} が相手の得点 ${ra} と一致しません`);
+    }
+  }
+  return out;
+}
+// 全シーズンを検算。日付の新しい順に並べて返す
+function auditAllGames(includeSum){
+  const rows=[];
+  let checked=0;
+  for(const [sname,s] of seasonEntries()){
+    for(const g of ((s&&s.games)||[])){
+      checked++;
+      const issues=gameAudit(g, includeSum);
+      if(!issues.length) continue;
+      rows.push({season:sname, id:g.id, date:g.date||"", opponent:g.opponent||"",
+        level: issues.some(i=>i.level==="bad")? "bad":"warn", issues});
+    }
+  }
+  rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  return {checked, rows,
+    bad: rows.filter(r=>r.level==="bad").length,
+    warn: rows.filter(r=>r.level==="warn").length};
+}
+function renderAudit(){
+  const el=$("#auditContent"); if(!el) return;
+  const inc=!!($("#auditIncludeSum") && $("#auditIncludeSum").checked);
+  const r=auditAllGames(inc);
+  if(!r.checked){ el.innerHTML=`<div class="empty">まだ試合が保存されていません。</div>`; return; }
+  if(!r.rows.length){
+    el.innerHTML=`<div class="kpis">${kpi("検算した試合",r.checked,"g")}</div>
+      <div class="empty" style="margin-top:4px">${r.checked}試合すべて数字の辻褄が合っています。</div>`;
+    return;
+  }
+  const cards=r.rows.map(row=>{
+    const isBad=row.level==="bad";
+    const lines=row.issues.map(i=>esc(i.msg)).join("<br>");
+    return `<div class="auditrow ${isBad?"bad":"warn"}">
+      <div class="audithead">
+        <div>${esc(row.date||"日付なし")} 対 ${esc(row.opponent||"(相手未設定)")} <span class="dim" style="font-size:11.5px">${esc(row.season)}</span></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+          <span class="auditbadge ${isBad?"bad":"warn"}">${isBad?"矛盾":"要確認"}</span>
+          <button type="button" class="mini ghost auditOpen" data-season="${esc(String(row.season))}" data-id="${esc(String(row.id))}">開く</button>
+        </div>
+      </div>
+      <div class="auditmsg">${lines}</div>
+    </div>`;
+  }).join("");
+  el.innerHTML=`<div class="kpis">
+      ${kpi("検算した試合",r.checked)}
+      ${kpi("矛盾あり",r.bad,r.bad?"":"g")}
+      ${kpi("要確認",r.warn,r.warn?"a":"g")}
+    </div>
+    <div style="margin-top:10px">${cards}</div>
+    <div class="hint" style="margin-top:8px">「開く」でその試合の編集画面に移動します。問題が無い試合は一覧に出ません。</div>`;
+}
 function highlightEntryCells(badCols){
   // badCols: 合計と合わない列キーのSet（OCR合計がある時のみ渡される。無ければ空）
   const cols = badCols || new Set();
@@ -9958,6 +10112,14 @@ async function init(){
 
   { const b=$("#nenkanBtn"); if(b) b.addEventListener("click",openNenkan); }
   { const b=$("#errorLogClear"); if(b) b.addEventListener("click",()=>{ errLogClear(); toast("エラーログを消去しました"); }); }
+  // データ検算（第127弾）
+  { const c=$("#auditIncludeSum"); if(c) c.addEventListener("change",renderAudit); }
+  { const b=$("#auditRefresh"); if(b) b.addEventListener("click",()=>{ renderAudit(); toast("検算し直しました"); }); }
+  { const el=$("#auditContent"); if(el) el.addEventListener("click",e=>{
+      const b=e.target.closest(".auditOpen"); if(!b) return;
+      editGame(b.dataset.season, b.dataset.id); // 該当試合を編集で開く（シーズンもそちらへ切り替わる）
+    });
+  }
   // #37 オフライン案内バー（起動時＋切替時）
   window.addEventListener("online",updateOfflineBar);
   window.addEventListener("offline",updateOfflineBar);
@@ -9995,6 +10157,8 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   tieResponseData,
   // 第101弾: OCRハイブリッド検算（行内矛盾の判定）
   rowContradiction,
+  // 第127弾: 保存済み試合の検算（データ検算）
+  gameAudit, auditAllGames, expectedPitchOutsOf,
   // 第102弾: 投手セイバー・トロフィー棚
   saberPitchFrom, saberPitchRows, trophyShelf,
   // 第103弾: 動画プール / 第105弾: OCR結果キャッシュ
