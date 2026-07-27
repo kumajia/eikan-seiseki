@@ -8806,14 +8806,13 @@ function fillFormFromOcr(g){
    （自チームの投手が投げる回数＝相手の攻撃回数）。イニング表が未入力なら9回とみなす。
    端数の許容: サヨナラ負けなどで最終回が途中で終わる場合があるので、2アウト分まで少なくても許す。 */
 function expectedPitchOuts(){
-  const tbl=$("#gInningsTbl"); if(!tbl) return {outs:27, innings:9, fromInnings:false};
+  const tbl=$("#gInningsTbl"); if(!tbl) return {outs:27, innings:9, fromInnings:false, allowShort:0};
   const side=$("#gSide")? $("#gSide").value : "bottom";
-  const oppSel = side==="bottom" ? "top" : "bottom";   // 相手が攻撃する側
-  const cells=$$(`.inn-cell[data-side='${oppSel}']`, tbl);
-  let last=0;
-  cells.forEach((c,i)=>{ if(String(c.value).trim()!=="") last=i+1; });
-  if(!last) return {outs:27, innings:9, fromInnings:false};
-  return {outs:last*3, innings:last, fromInnings:true};
+  // 第128弾: 「後攻がリードしていて最終回裏を攻撃しなかった」場合の判定を保存済み試合版と共通化する。
+  // 判定には両チームの回別得点が要るので、表の中身をそのまま {top,bottom} の形にして渡す
+  const grab=s=>$$(`.inn-cell[data-side='${s}']`, tbl).map(c=>c.value);
+  return expectedOutsFor(side, n($("#gRs")&&$("#gRs").value), n($("#gRa")&&$("#gRa").value),
+    {top:grab("top"), bottom:grab("bottom")});
 }
 /* 第115弾: 投球回の分数(⅓/⅔)の誤読を自動補正する候補を探す。
    誤読は「合計が1〜2アウトずれる」形で出るので、**1人の分数だけを直せば合計が合う**ケースを見つけて提案する。
@@ -8850,13 +8849,10 @@ function pitchOutsCheck(){
     if(ip && String(ip.value).trim()!==""){ any=true; outs+=ip2outs(ip.value); }
   });
   if(!any) return null;                       // 投手未入力なら何も言わない
+  // 期待値と「サヨナラで途中終了した分の許容」は expectedOutsFor がまとめて出す（第128弾）。
+  // 甘くすると誤読を見逃すので、許容するのは相手のサヨナラ勝ちの1〜2アウトぶんだけ
   const exp=expectedPitchOuts();
-  // 端数を許すのは「自チームが先攻で負けた」＝相手のサヨナラで最終回が途中で終わる場合だけ。
-  // それ以外は相手が9回攻撃しきるので、ぴったり一致するはず（甘くすると誤読を見逃す）
-  const side=$("#gSide")? $("#gSide").value : "bottom";
-  const lost = n($("#gRs")&&$("#gRs").value) < n($("#gRa")&&$("#gRa").value);
-  const allowShort = (side==="top" && lost) ? 2 : 0;
-  const ok = outs<=exp.outs && outs>=exp.outs-allowShort;
+  const ok = outs<=exp.outs && outs>=exp.outs-(exp.allowShort||0);
   return {outs, expected:exp.outs, innings:exp.innings, fromInnings:exp.fromInnings, ok};
 }
 function rowContradiction(vals){
@@ -8882,14 +8878,50 @@ function pitRowContradiction(vals){
      代わりに**試合データだけで完結する照合**（得点・イニング・投球回・行内矛盾）を使う。
    ・レベルは2段階。bad=ほぼ確実に誤り / warn=入力の省略でも起こり得るので要確認。
    ==================================================================== */
-// 相手が攻撃したイニング数から、投手の合計アウト数の期待値を出す（保存済み試合版）
+/* 相手が攻撃したイニング数から、投手の合計アウト数の期待値を出す。
+   第128弾の修正点: **後攻チームは最終回にリードしていれば攻撃しない**（スコアボードの「X」）。
+   この「X」はデータには保存されず表示時に合成しているだけなので、
+   保存データの最終回裏は 0 として残る＝そのまま数えると1回ぶん多く見積もってしまう。
+   そこで「最終回の得点を除いても後攻が勝っていたか」で、最終回裏が行われたかを判定する。
+   引数はフォームからも保存済み試合からも渡せるよう素の値で受ける。
+     side: 自チームの攻撃順 / rf,ra: 自チームと相手の得点 / oppArr: 相手の回別得点
+   戻り値の allowShort は「サヨナラで最終回が途中で終わった」ぶんの許容アウト数。 */
+function expectedOutsFor(side, rf, ra, innings){
+  const inn=innings||{};
+  // 「X」「✕」「-」等は攻撃しなかった印（表示用の合成値だが、混ざっていても正しく扱う）
+  const notBatted=s=>s===""||/^[xX✕×✖－ー―-]+$/.test(s);
+  const lastOf=arr=>{ let k=0; (arr||[]).forEach((v,i)=>{ if(!notBatted(String(v??"").trim())) k=i+1; }); return k; };
+  const topN=lastOf(inn.top), botN=lastOf(inn.bottom);
+  const total=Math.max(topN, botN);                 // 試合が何回まで進んだか
+  if(!total) return {outs:27, innings:9, fromInnings:false, allowShort:0};
+
+  const weAreTop = side==="top";                    // 自チームが先攻＝相手が後攻（ホーム）
+  const oppArr = weAreTop? (inn.bottom||[]) : (inn.top||[]);
+  const oppN   = weAreTop? botN : topN;
+  const oppWon = n(ra) > n(rf);
+
+  let played=total, allowShort=0;
+  if(weAreTop){
+    if(oppWon){
+      if(oppN < total){
+        played=oppN;                                // 最終回裏が記録されていない＝行われなかった
+      }else{
+        // 最終回の得点を除いても相手がリードしていたなら、最終回裏はそもそも行われていない
+        const lastRuns=n(oppArr[oppN-1]);
+        if(n(ra)-lastRuns > n(rf)) played=total-1;
+        else allowShort=2;                          // サヨナラ勝ち＝最終回裏が1〜2アウトで終わる
+      }
+    }else{
+      played=total;                                 // 相手（後攻）が負け・引き分けなら最終回まで攻撃する
+    }
+  }else{
+    played=topN||total;                             // 相手が先攻なら毎回攻撃する
+  }
+  return {outs:played*3, innings:played, fromInnings:true, allowShort};
+}
 function expectedPitchOutsOf(g){
-  const side=(g&&g.side==="top")? "top" : "bottom";
-  const oppArr=((g&&g.innings)||{})[side==="bottom"?"top":"bottom"]||[];
-  let last=0;
-  oppArr.forEach((v,i)=>{ if(String(v??"").trim()!=="") last=i+1; });
-  if(!last) return {outs:27, innings:9, fromInnings:false};
-  return {outs:last*3, innings:last, fromInnings:true};
+  const side=(g&&g.side==="top")? "top":"bottom";
+  return expectedOutsFor(side, n(g&&g.runsFor), n(g&&g.runsAgainst), (g&&g.innings)||{});
 }
 // 1試合を検算して問題の配列を返す。includeSum=false なら得点合計の照合を省く
 function gameAudit(g, includeSum){
@@ -8937,10 +8969,8 @@ function gameAudit(g, includeSum){
   // --- 投手の合計投球回 ---
   if(pits.length){
     const outs=pits.reduce((a,p)=>a+ip2outs(p.IP),0);
-    const exp=expectedPitchOutsOf(g);
-    // 端数を許すのは「自チームが先攻で負けた」＝相手のサヨナラで最終回が途中で終わる場合だけ
-    const allowShort=((g.side==="top") && rf<ra)? 2 : 0;
-    if(!(outs<=exp.outs && outs>=exp.outs-allowShort)){
+    const exp=expectedPitchOutsOf(g);   // 最終回裏が行われたかも含めて期待値を出す（第128弾）
+    if(!(outs<=exp.outs && outs>=exp.outs-exp.allowShort)){
       const base=exp.fromInnings? `相手の攻撃は${exp.innings}回` : "回別得点が未入力のため9回と仮定";
       warn(`投手の合計投球回 ${outs2ip(outs)}回 — ${base}なので ${outs2ip(exp.outs)}回のはず`);
     }
@@ -10159,6 +10189,8 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   rowContradiction,
   // 第127弾: 保存済み試合の検算（データ検算）
   gameAudit, auditAllGames, expectedPitchOutsOf,
+  // 第128弾: 最終回裏が行われたかを含めた期待アウト数（フォームと保存済み試合で共通）
+  expectedOutsFor,
   // 第102弾: 投手セイバー・トロフィー棚
   saberPitchFrom, saberPitchRows, trophyShelf,
   // 第103弾: 動画プール / 第105弾: OCR結果キャッシュ
