@@ -1,4 +1,8 @@
-const CACHE = "eikan-stats-v17";
+// v18: 起動直後（Wi-Fi未接続）に古いキャッシュが表示される問題への対応。
+//  - ページ本体(navigate)は毎回 no-store で取りに行き、ブラウザのHTTPキャッシュに邪魔されないようにする
+//  - キャッシュから配信した場合はアプリへ知らせ、通信が戻ったら更新を促せるようにする
+//  - バージョンを上げることで activate 時に古いキャッシュが破棄される
+const CACHE = "eikan-stats-v18";
 const SHARE_CACHE = "eikan-share-tmp";
 const CORE_FILES = ["./", "./index.html", "./manifest.json"];
 
@@ -39,19 +43,35 @@ self.addEventListener("fetch", e => {
   // （Gemini APIへのPOSTや、APIキーがURLに入るリクエストをCache Storageに残さないため）
   if (e.request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
+
+  const isNav = e.request.mode === "navigate";
+
+  // 開いているタブ全部に知らせる（アプリ側で「キャッシュを表示中」のバーを出すため）
+  const notify = async (type) => {
+    const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of list) c.postMessage({ sw: type });
+  };
+
   e.respondWith(
-    fetch(e.request)
+    // ページ本体はブラウザのHTTPキャッシュを経由させない（古いHTMLを掴まないため）
+    fetch(isNav ? new Request(e.request, { cache: "no-store" }) : e.request)
       .then(res => {
-        const resClone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, resClone));
+        if (res && res.ok) {
+          const resClone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, resClone));
+        }
         return res;
       })
       .catch(async () => {
+        // ここに来る＝通信できなかった。起動直後でWi-Fi未接続のときもここを通る
         const hit = await caches.match(e.request);
-        if (hit) return hit;
-        if (e.request.mode === "navigate") {
+        if (hit) {
+          if (isNav) notify("served-from-cache");
+          return hit;
+        }
+        if (isNav) {
           const idx = await caches.match("./index.html");
-          if (idx) return idx;
+          if (idx) { notify("served-from-cache"); return idx; }
         }
         return Response.error();
       })

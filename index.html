@@ -2778,7 +2778,7 @@ function renderBestNine(){
   const bestNine = selectBestNine(posMap);
   
   const fieldSvg = `
-    <svg class="field" viewBox="0 0 400 340" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg class="field" viewBox="0 0 400 340" width="400" height="340" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;background:#0a1f12" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <defs>
         <radialGradient id="grass" cx="50%" cy="88%" r="90%"><stop offset="0%" stop-color="#2f7d3c"/><stop offset="55%" stop-color="#256a31"/><stop offset="100%" stop-color="#184c22"/></radialGradient>
         <linearGradient id="dirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c58a4c"/><stop offset="100%" stop-color="#9c6633"/></linearGradient>
@@ -2839,6 +2839,12 @@ function renderBestNine(){
   }).join("");
   
   stadium.innerHTML = fieldSvg + cardsHtml;
+  // 第119弾: CSSが何らかの理由で効かなくても地の色だけは必ず暗くする（白背景の保険）
+  stadium.style.background = "#0a1f12";
+  // 描画が落ち着いてから自己診断。異常なら状態をエラーログに残して見た目も直す
+  if(typeof requestAnimationFrame==="function"){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>diagnoseStadium("renderBestNine")));
+  }
   renderHistoricalLineup(bestNine, allBat);
   renderCurrentLineup(); // 今のおすすめ打線（第117弾）
 }
@@ -9972,17 +9978,87 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第116弾: 試合のシーズン移動 / 第117弾: 守備位置を考慮した打線
   moveGameToSeason, pickLineupByPosition, posShort };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
-function showUpdateBar(){
+function showUpdateBar(msg){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
   if(document.getElementById("updateBar")) return;
   const d=document.createElement("div");
   d.id="updateBar";
   d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:64px;background:var(--panel2);border:1px solid var(--amber);color:var(--ink);padding:10px 16px;border-radius:10px;font-size:13px;z-index:99;display:flex;gap:10px;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,.4)";
-  d.innerHTML=`新しいバージョンがあります <button type="button" class="mini primary" id="updateReload">リロードして更新</button> <button type="button" class="mini ghost" id="updateLater">あとで</button>`;
+  d.innerHTML=`${esc(msg||"新しいバージョンがあります")} <button type="button" class="mini primary" id="updateReload">リロードして更新</button> <button type="button" class="mini ghost" id="updateLater">あとで</button>`;
   document.body.appendChild(d);
   d.addEventListener("click",e=>{
     if(e.target.closest("#updateReload")) location.reload();
     else if(e.target.closest("#updateLater")) d.remove();
+  });
+}
+/* 第119弾: スタジアムが白くなる問題の自動診断。
+   原因が特定できていないため、**白くなった瞬間の状態をエラーログに自動保存**する。
+   次に発生したら「データ」タブのエラーログを見るだけで原因が分かる（その場でF12を開く必要がない）。 */
+function diagnoseStadium(tag){
+  try{
+    const el=document.querySelector(".stadium");
+    if(!el) return;
+    const cs=getComputedStyle(el);
+    const bg=cs.backgroundColor||"";
+    // 期待は #0a1f12 = rgb(10, 31, 18)。それ以外なら異常として記録する
+    const okBg=/rgb\(\s*10\s*,\s*31\s*,\s*18\s*\)/.test(bg);
+    const svg=el.querySelector("svg");
+    const rect=el.querySelector("svg rect");
+    const rectFill=rect? (getComputedStyle(rect).fill||"") : "";
+    const okRect=/rgb\(\s*10\s*,\s*31\s*,\s*18\s*\)/.test(rectFill);
+    const box=el.getBoundingClientRect();
+    const svgBox=svg? svg.getBoundingClientRect() : {width:0,height:0};
+    // SVGが潰れている（高さがほぼ無い／極端に低い）のも異常とみなす
+    const okSize=!!svg && svgBox.height>40;
+    if(okBg && okSize && (!rect || okRect)) return;   // 正常なら何もしない
+    // errLogAddは詳細を300字で切るので、短いキーで詰めて記録する
+    const mq=q=>(window.matchMedia && matchMedia(q).matches)?1:0;
+    let cssNg=0;
+    for(const s of document.styleSheets){ try{ if(!s.cssRules||!s.cssRules.length) cssNg++; }catch(_){ cssNg++; } }
+    const info=[
+      "at="+tag,
+      "bg="+bg.replace(/\s/g,""),
+      "rect="+(rect? rectFill.replace(/\s/g,"") : "none")+"/"+(rect? rect.getAttribute("fill") : "-"),
+      "svg="+(svg?1:0)+" "+Math.round(svgBox.width)+"x"+Math.round(svgBox.height)+" "+(svg?getComputedStyle(svg).display:"-"),
+      "box="+Math.round(box.width)+"x"+Math.round(box.height),
+      "forced="+mq("(forced-colors: active)"),
+      "dark="+mq("(prefers-color-scheme: dark)"),
+      "css="+document.styleSheets.length+"/ng"+cssNg,
+      "sw="+((navigator.serviceWorker&&navigator.serviceWorker.controller)?1:0),
+      "cache="+(window.__servedFromCache?1:0),
+      "online="+(navigator.onLine?1:0)
+    ].join(" ");
+    errLogAdd("スタジアム白", info);
+    // 原因が分からなくても見た目だけは直す（インラインstyleはCSSの不発を素通しできる）
+    el.style.background="#0a1f12";
+    if(svg){ svg.style.display="block"; svg.style.width="100%"; svg.style.height="auto"; }
+    // 画面にも出す（気づけるように・1回だけ）
+    if(!document.getElementById("stadiumDiagBar")){
+      const d=document.createElement("div");
+      d.id="stadiumDiagBar";
+      d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:110px;background:var(--panel2);border:1px solid var(--danger);color:var(--ink);padding:9px 14px;border-radius:10px;font-size:12.5px;z-index:99;max-width:92vw;text-align:center";
+      d.innerHTML=`スタジアムの表示が乱れたので記録を残しました（データタブ→エラーログ）<button type="button" class="mini ghost" id="stadiumDiagClose" style="margin-left:8px">閉じる</button>`;
+      document.body.appendChild(d);
+      d.addEventListener("click",e=>{ if(e.target.closest("#stadiumDiagClose")) d.remove(); });
+    }
+  }catch(e){}
+}
+/* 第118弾: 起動直後（Wi-Fi未接続）にキャッシュの古い版が表示される問題への対策。
+   Service Workerが「通信できずキャッシュを出した」と知らせてきたら記録しておき、
+   通信が戻った時点でリロードを促す。オフラインのままなら邪魔しない。 */
+let servedFromCache=false;
+window.__servedFromCache=false;   // diagnoseStadiumから安全に読むための控え
+function watchStaleCache(){
+  if(!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener("message",ev=>{
+    if(ev.data && ev.data.sw==="served-from-cache"){
+      servedFromCache=true; window.__servedFromCache=true;
+      if(navigator.onLine) showUpdateBar("保存済みの表示です。最新版に更新できます");
+    }
+  });
+  window.addEventListener("online",()=>{
+    // 起動直後に通信できずキャッシュで開いた場合、ネットが戻ったこの時点で更新を促す
+    if(servedFromCache) showUpdateBar("通信が回復しました。最新版に更新できます");
   });
 }
 /* ---------- オフライン案内（#37）----------
@@ -9999,6 +10075,7 @@ function showOfflineBar(){
 function hideOfflineBar(){ const d=document.getElementById("offlineBar"); if(d) d.remove(); }
 function updateOfflineBar(){ if(typeof navigator!=="undefined" && navigator.onLine===false) showOfflineBar(); else hideOfflineBar(); }
 if("serviceWorker" in navigator && location.protocol!=="file:"){
+  watchStaleCache(); // 古いキャッシュで開いたことを検知して更新を促す（第118弾）
   navigator.serviceWorker.register("sw.js").then(reg=>{
     reg.addEventListener("updatefound",()=>{
       const nw=reg.installing; if(!nw) return;
