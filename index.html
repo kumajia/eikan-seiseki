@@ -308,9 +308,13 @@
   table.grate td:first-child{text-align:left;color:var(--muted);}
   table.grate tr:last-child td{border-bottom:none;}
   table.grate td b{color:var(--amber);}
+  /* 第137弾: 回別得点の入力欄。以前は width:28px で、数値入力の上下矢印(スピナー)が
+     出ると文字領域が12px程度しか残らず、**2桁の得点が1桁にしか見えなかった**
+     （17点入れた回が「1」と表示されていた）。矢印は残したいので、
+     2桁＋矢印が同時に収まる幅にする。打者・投手の入力欄(52px)は元から足りていたのでそのまま。 */
   #gInningsTbl input {
-    width: 28px;
-    padding: 3px;
+    width: 44px;
+    padding: 3px 2px;
     text-align: center;
     background: var(--panel);
     border: 1px solid var(--line2);
@@ -318,6 +322,9 @@
     font-family: var(--mono);
     font-size: 12px;
   }
+  /* 矢印を常に出しておく。ホバーした瞬間だけ数字が隠れる/位置がずれるのを防ぐ */
+  #gInningsTbl input::-webkit-inner-spin-button,
+  #gInningsTbl input::-webkit-outer-spin-button{ opacity:1; }
   #gInningsTbl input:focus {
     outline: 1px solid var(--amber);
   }
@@ -850,7 +857,8 @@
         <div class="field" style="flex:1; width:100%">
           <label>スコアボード（各回の得点、空欄は自動カット）</label>
           <div class="scroll" style="width:100%; border:1px solid var(--line); border-radius:8px; background:var(--panel2);">
-            <table id="gInningsTbl" style="min-width:600px; font-size:13px; text-align:center; width:100%;">
+            <!-- min-width: 入力欄を44pxに広げたぶん（第137弾）。12回ぶん＋チーム名列が潰れずに並ぶ幅 -->
+            <table id="gInningsTbl" style="min-width:840px; font-size:13px; text-align:center; width:100%;">
               <thead>
                 <tr id="gInningsHead">
                   <th class="name" style="text-align:left; width:90px; background:var(--panel2); z-index: 5;">チーム</th>
@@ -2387,7 +2395,10 @@ function renderErrLog(){
 }
 
 /* ---------- render ---------- */
-const BAT_COLS=[["G","試合"],["AB","打数"],["R","得点"],["H","安打"],["2B","二塁"],["3B","三塁"],["HR","本"],["RBI","打点"],["BB","四死"],["SO","三振"],["SH","犠打"],["SB","盗塁"],["E","失策"]];
+/* 第137弾: 見出しを「本」→「本塁」に。列幅は見出しの文字数で決まり数字は右寄せなので、
+   1文字だけの見出しがあると その列だけ狭くなり「左隣とは近く右隣とは遠い」非対称ができる。
+   入力フォーム側のBAT_LBLは元から「本塁」だったので、表記の統一にもなる。 */
+const BAT_COLS=[["G","試合"],["AB","打数"],["R","得点"],["H","安打"],["2B","二塁"],["3B","三塁"],["HR","本塁"],["RBI","打点"],["BB","四死"],["SO","三振"],["SH","犠打"],["SB","盗塁"],["E","失策"]];
 const CALC_COLS=[["AVG","打率"],["OBP","出塁率"],["SLG","長打率"],["OPS","OPS"]];
 const PC_COLS=[["G","登板"],["W","勝"],["IPstr","投球回"],["BF","打者"],["H","被安打"],["K","奪三振"],["BB","四死"],["R","失点"],["ER","自責"],["HR","被本"],["WP","暴投"]];
 const PC_CALC_COLS=[["ERA","防御率"],["WHIP","WHIP"],["K9","K/9"]];
@@ -7279,16 +7290,39 @@ function renderRivalSummary(rows){
 }
 
 /* ---------- #5 二つ名（通算成績から自動判定・お遊び。閾値は下表に集約） ---------- */
+/* 二つ名。閾値は実データ（栄冠ナインの通算成績）を見て調整してある。
+   dir:"min" = その値以上で該当 / dir:"max" = その値以下で該当（少ないほど良い指標）。
+   guard は「規定」。率や少ない方が良い指標は、出場が少ないと簡単に達成できてしまうので必須。
+   第136弾: 韋駄天の閾値を20→10に下げ（盗塁20は栄冠ナインでは到達者が出ず、一度も付いていなかった）、
+            打者8種・投手5種を追加。表示は1人あたり上位5つまで。 */
 const NICKNAME_DEFS=[
-  {id:"avg",    title:"安打製造機",     type:"bat", stat:"AVG", dir:"min", th:0.320, guard:{k:"PA",  min:50}, statLabel:"打率"},
+  // ---- 打者: 率 ----
+  {id:"avg",    title:"アベレージヒッター", type:"bat", stat:"AVG", dir:"min", th:0.350, guard:{k:"PA",  min:50}, statLabel:"打率"},
   {id:"onbase", title:"出塁マシン",     type:"bat", stat:"OBP", dir:"min", th:0.430, guard:{k:"PA",  min:50}, statLabel:"出塁率"},
-  {id:"cannon", title:"大砲",           type:"bat", stat:"HR",  dir:"min", th:15,    guard:null,              statLabel:"本塁打", unit:"本"},
+  {id:"slug",   title:"豪打",           type:"bat", stat:"SLG", dir:"min", th:0.600, guard:{k:"PA",  min:50}, statLabel:"長打率"},
+  {id:"star",   title:"打線の主役",     type:"bat", stat:"OPS", dir:"min", th:1.100, guard:{k:"PA",  min:50}, statLabel:"OPS"},
+  // ---- 打者: 積み上げ ----
+  {id:"cannon", title:"大砲",           type:"bat", stat:"HR",  dir:"min", th:10,    guard:null,              statLabel:"本塁打", unit:"本"},
   {id:"clutch", title:"チャンスに強い男", type:"bat", stat:"RBI", dir:"min", th:40,   guard:null,              statLabel:"打点", unit:"打点"},
-  {id:"speed",  title:"韋駄天",         type:"bat", stat:"SB",  dir:"min", th:20,    guard:null,              statLabel:"盗塁", unit:"盗塁"},
+  {id:"speed",  title:"韋駄天",         type:"bat", stat:"SB",  dir:"min", th:10,    guard:null,              statLabel:"盗塁", unit:"盗塁"},
+  {id:"hits",   title:"安打製造機",     type:"bat", stat:"H",   dir:"min", th:70,    guard:null,              statLabel:"安打", unit:"安打"},
+  {id:"dbl",    title:"二塁打職人",     type:"bat", stat:"2B",  dir:"min", th:12,    guard:null,              statLabel:"二塁打", unit:"本"},
+  {id:"runs",   title:"生還請負人",     type:"bat", stat:"R",   dir:"min", th:40,    guard:null,              statLabel:"得点", unit:"得点"},
+  {id:"bunt",   title:"バント職人",     type:"bat", stat:"SH",  dir:"min", th:8,     guard:null,              statLabel:"犠打", unit:"犠打"},
+  {id:"iron",   title:"鉄人",           type:"bat", stat:"G",   dir:"min", th:40,    guard:null,              statLabel:"出場", unit:"試合"},
+  // ---- 打者: 少ない方が良い ----
+  {id:"noK",    title:"三振しない男",   type:"bat", stat:"SO",  dir:"max", th:10,    guard:{k:"PA",  min:50}, statLabel:"三振", unit:"三振"},
+  // ---- 投手 ----
   {id:"kmac",   title:"奪三振マシン",   type:"pit", stat:"K",   dir:"min", th:100,   guard:null,              statLabel:"奪三振", unit:"奪三振"},
+  {id:"ace",    title:"勝利の立役者",   type:"pit", stat:"W",   dir:"min", th:15,    guard:null,              statLabel:"勝利", unit:"勝"},
+  {id:"horse",  title:"大黒柱",         type:"pit", stat:"ipNum",dir:"min",th:150,   guard:null,              statLabel:"投球回", unit:"回"},
+  {id:"kshow",  title:"奪三振ショー",   type:"pit", stat:"K9",  dir:"min", th:10.0,  guard:{k:"outs",min:90}, statLabel:"奪三振率"},
   {id:"wall",   title:"鉄壁のエース",   type:"pit", stat:"ERA", dir:"max", th:2.00,  guard:{k:"outs",min:90}, statLabel:"防御率"},
-  {id:"ace",    title:"勝利の立役者",   type:"pit", stat:"W",   dir:"min", th:15,    guard:null,              statLabel:"勝利", unit:"勝"}
+  {id:"precise",title:"走者を許さない男", type:"pit", stat:"WHIP",dir:"max", th:1.00,  guard:{k:"outs",min:90}, statLabel:"WHIP"},
+  {id:"noHR",   title:"被弾しない男",   type:"pit", stat:"HR",  dir:"max", th:3,     guard:{k:"outs",min:150},statLabel:"被本塁打", unit:"本"},
+  {id:"ctrl",   title:"精密機械",       type:"pit", stat:"BB",  dir:"max", th:10,    guard:{k:"outs",min:150},statLabel:"与四死球", unit:"四死球"}
 ];
+const NICKNAME_MAX=5;   // 1人に表示する二つ名の数
 function assignNicknames(bat, pit, defs){
   const D=defs||NICKNAME_DEFS;
   const hits=[];
@@ -7296,19 +7330,33 @@ function assignNicknames(bat, pit, defs){
     const src=d.type==="bat"?bat:pit;
     if(!src) continue;
     if(d.guard && !((Number(src[d.guard.k])||0)>=d.guard.min)) continue;
+    // 「少ない方が良い」指標は、項目自体が無い（未集計）ときに0扱いされると
+    // 実力と関係なく最上位で付いてしまうので、値が存在する行だけを対象にする
+    if(d.dir==="max" && src[d.stat]==null) continue;
     const v=fnum(src[d.stat]);
     if(d.dir==="min"){ if(v>=d.th) hits.push({...d, val:v, score:v/(d.th||1)}); }
-    else { if(v<=d.th) hits.push({...d, val:v, score:d.th/(v+0.05)}); }
+    else {
+      /* 第136弾: 少ない方が良い指標のスコア。以前は th/(v+0.05) だったが、
+         被本塁打0のようにvが0になり得る指標を足すと score が60超になって他を全部押しのけてしまう。
+         分母に閾値の1/4を足して上限4程度に収め、min側（v/th）と釣り合う大きさにする。 */
+      if(v<=d.th) hits.push({...d, val:v, score:d.th/(v + d.th*0.25 || 1)});
+    }
   }
   hits.sort((a,b)=>b.score-a.score);
-  return hits.slice(0,2);
+  return hits.slice(0,NICKNAME_MAX);
 }
 function nicknameCardHtml(bat, pit){
   const list=assignNicknames(bat, pit);
   if(!list.length) return "";
   const pills=list.map(d=>`<span class="mbadge gold" style="margin-right:6px">${esc(d.title)}</span>`).join("");
   const foot=list.map(d=>{
-    const valTxt = (d.stat==="AVG"||d.stat==="OBP")? avg3(d.val) : d.stat==="ERA"? d.val.toFixed(2) : `${Math.round(d.val)}${d.unit||""}`;
+    // 指標ごとに書式を変える（率は.333形式、防御率とWHIPは小数2桁、奪三振率は1桁、それ以外は整数＋単位）
+    const v=d.val;
+    const valTxt =
+      ["AVG","OBP","SLG","OPS"].includes(d.stat) ? avg3(v)
+      : ["ERA","WHIP"].includes(d.stat)          ? v.toFixed(2)
+      : d.stat==="K9"                            ? v.toFixed(1)
+      : `${Math.round(v)}${d.unit||""}`;
     return `${esc(d.title)}（${esc(d.statLabel)} ${esc(valTxt)}）`;
   }).join(" / ");
   return `<section class="card"><h2 style="font-size:15px">二つ名</h2>
@@ -10465,7 +10513,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   contribBatScore, contribPitScore, CONTRIB_WEIGHTS, lineupSuggestions, LINEUP_SUGGEST,
   appearanceRates, errorTrend, gameOfTheYearList,
   // 第94弾: 記録・楽しみ系7機能の純粋関数
-  computeFirstRecords, pickRetirementGame, historicalLineupOrder, assignNicknames, NICKNAME_DEFS,
+  computeFirstRecords, pickRetirementGame, historicalLineupOrder, assignNicknames, NICKNAME_DEFS, NICKNAME_MAX,
   nextMilestones, managerReportCard,
   // 第95弾: 年鑑・OCRゴールデン・エラーログの純粋関数/ヘルパー
   buildNenkanHtml, nenkanScopeSeasons, nenkanGenerations, ocrGoldenTemplate,
