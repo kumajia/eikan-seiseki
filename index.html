@@ -156,6 +156,11 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .toast.err{background:var(--danger);color:#fff;}
   .empty{text-align:center;color:var(--muted);padding:30px 10px;}
+  /* 第139弾: 率で並べたとき、規定に満たない選手をまとめる区切りと薄い表示 */
+  tr.qualsep td{background:rgba(245,179,1,.10);color:var(--amber);font-size:11px;
+    text-align:left;padding:4px 9px;border-bottom:1px solid var(--amber);}
+  tr.underqual td{color:var(--muted);}
+  tr.underqual .plink{color:var(--muted);}
   /* データ検算（第127弾）。左の縦線で深刻度を示す（片側ボーダーなので角丸は付けない） */
   .auditrow{background:var(--panel2);border-left:3px solid var(--amber);padding:10px 12px;margin-bottom:8px;}
   .auditrow.bad{border-left-color:var(--danger);}
@@ -647,7 +652,7 @@
   <div id="tab-bestnine" style="display:none">
     <section class="card" id="bestNineCard">
       <h2>歴代ベストナイン</h2>
-      <div class="note">全期間の公式試合（練習試合除く）通算成績から自動選出。選出の最低基準（規定）は「50打席以上」または「30投球回以上」。</div>
+      <div class="note">全期間の公式試合（練習試合除く）通算成績から自動選出。選出の最低基準（規定）は「60打席以上」または「30投球回以上」。</div>
       <div class="stadium" id="bestNineStadium"></div>
       <div id="bestNineWarn" class="hint" style="color:var(--red); margin-top:8px;"></div>
     </section>
@@ -2411,7 +2416,10 @@ let detailedView=true;   // 第135弾: 既定でオン（全項目表示）。�
 
 /* ---------- 定数定義（マジックナンバー一元管理） ---------- */
 const CONSTANTS = {
-  BESTNINE_BAT_PA_REQ: 50,          // ベストナイン打者規定打席
+  // 第140弾: 50→60。打席数の分布を見ると 44〜62 の帯に切れ目があり、
+  // 50でも60でも候補者は同じ19人（62打席の選手が境目）。70にすると その選手が落ちる。
+  // 成績表の規定の上限にも同じ値を使うので、少し厳しめの60に揃えた。
+  BESTNINE_BAT_PA_REQ: 60,          // ベストナイン打者規定打席
   BESTNINE_PIT_OUTS_REQ: 90,        // ベストナイン投手規定投球回（30イニング）
   PROMINENT_THRESHOLD: 30,          // 有力選手の打席/投球回判定
   AVG_HIGHLIGHT_THRESHOLD: 0.25,    // 打率強調基準
@@ -2477,26 +2485,65 @@ function leaderKpisHtml(brows,gameCount){
   }).join("");
 }
 
+/* ==================== 第139弾: 率で並べたときの規定 ====================
+   打率で並べると「2打数1安打の.500」が首位に来てしまう（ユーザー指摘）。
+   規定はアプリ内の既存ルールに合わせる: **打者=チーム試合数×2打席 / 投手=チーム試合数×1投球回**
+   （シーズン表彰式・セイバー指標と同じ）。
+   規定未満の選手も表からは消さず、**率で並べたときだけ下にまとめる**。
+   打数や本塁打など積み上げの列で並べたときは、従来どおり普通に混ざる。 */
+const RATE_BAT_KEYS=["AVG","OBP","SLG","OPS"];
+const RATE_PIT_KEYS=["ERA","WHIP","K9"];
+const QUAL_PA_PER_GAME=2;    // 打者の規定打席＝チーム試合数×2
+const QUAL_OUTS_PER_GAME=3;  // 投手の規定＝チーム試合数×1投球回（3アウト）
+/* 第140弾: 下限と上限。試合数に比例させるだけだと両端で壊れる。
+   ・下限: 3試合しかないシーズンだと規定6打席になり、2試合出ただけの選手が上位に来てしまう。
+   ・上限: 全期間(66試合)だと規定132打席になるが、**選手の在籍は3年で頭打ち**なので
+     どれだけ活躍しても届かない。実データでは31人中7人しか規定を満たさなくなっていた。
+     上限はベストナインの規定打席と同じ値にして、アプリ内で規定が2種類に増えないようにする。 */
+const QUAL_PA_MIN=12;
+const QUAL_OUTS_MIN=9;       // 3投球回（打者の12打席＝約3試合ぶんと釣り合う）
+function qualPaMin(teamG){
+  const g=n(teamG); if(!g) return 0;   // チーム試合数が不明なら規定を課さない
+  return Math.min(Math.max(g*QUAL_PA_PER_GAME, QUAL_PA_MIN), CONSTANTS.BESTNINE_BAT_PA_REQ);
+}
+function qualOutsMin(teamG){
+  const g=n(teamG); if(!g) return 0;
+  return Math.min(Math.max(g*QUAL_OUTS_PER_GAME, QUAL_OUTS_MIN), CONSTANTS.BESTNINE_PIT_OUTS_REQ);
+}
+/* 並べ替え結果を「規定を満たす人」と「満たさない人」に分ける。
+   率の列で並べたときだけ分割し、それ以外は全員まとめて返す（純粋関数・テストから直接呼ぶ）。 */
+function splitByQualified(rows, sort, rateKeys, qualFn){
+  const sorted=sortRows(rows, sort&&sort.key, sort&&sort.dir);
+  if(!sort || !sort.key || !rateKeys.includes(sort.key)) return {main:sorted, under:[]};
+  return {main:sorted.filter(qualFn), under:sorted.filter(r=>!qualFn(r))};
+}
 /* ---------- table builders (共有: シーズン集計 & 期間集計) ---------- */
 function battingTableHtml(brows,T,sort,detailed){
   const bcols = detailed? BAT_COLS : BAT_COLS.filter(c=>SIMPLE_BAT_KEYS.includes(c[0]));
   const ccols = detailed? CALC_COLS : CALC_COLS.filter(c=>SIMPLE_CALC_KEYS.includes(c[0]));
-  const rows = sortRows(brows, sort.key, sort.dir);
-  if(!rows.length) return emptyTbl(bcols.length+ccols.length+1);
+  const paMin = qualPaMin(T&&T.G);
+  const {main,under} = splitByQualified(brows, sort, RATE_BAT_KEYS, r=>!paMin || n(r.PA)>=paMin);
+  const rows = main;
+  if(!rows.length && !under.length) return emptyTbl(bcols.length+ccols.length+1);
   let h=`<thead><tr><th class="name" data-key="name" title="選手名">選手${sortArrow(sort,"name")}</th>`+
     bcols.map(c=>th_(c[0],c[1],sort)).join("")+
     ccols.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
-  for(const r of rows){
-    h+=`<tr><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
-      bcols.map(c=>`<td class="num${c[0]==='HR'&&r.HR?' hi':''}">${r[c[0]]||( r[c[0]]===0?'0':'')}</td>`).join("")+
+  const batRow=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
+      bcols.map(c=>`<td class="num${c[0]==='HR'&&r.HR&&!dim?' hi':''}">${r[c[0]]||( r[c[0]]===0?'0':'')}</td>`).join("")+
       ccols.map(c=>{
         const v=r[c[0]];
         let cls='';
-        if(c[0]==='AVG'&&v>=.25)cls=' hi2';
-        if(c[0]==='SLG'&&v>=.4)cls=' hi';
-        if(c[0]==='OPS'&&v>=.8)cls=' hi';
+        if(!dim){                      // 規定未満は強調色を付けない（首位に見えてしまうため）
+          if(c[0]==='AVG'&&v>=.25)cls=' hi2';
+          if(c[0]==='SLG'&&v>=.4)cls=' hi';
+          if(c[0]==='OPS'&&v>=.8)cls=' hi';
+        }
         return `<td class="num${cls}">${avg3(v)}</td>`;
       }).join("")+`</tr>`;
+  for(const r of rows) h+=batRow(r,false);
+  if(under.length){
+    h+=`<tr class="qualsep"><td colspan="${bcols.length+ccols.length+1}">ここから規定打席（${paMin}打席）未満</td></tr>`;
+    for(const r of under) h+=batRow(r,true);
   }
   if(T){
     h+=`</tbody><tfoot><tr><td class="name">チーム</td>`+
@@ -2506,23 +2553,27 @@ function battingTableHtml(brows,T,sort,detailed){
   } else h+=`</tbody>`;
   return h;
 }
-function pitchingTableHtml(prows,sort,detailed){
+function pitchingTableHtml(prows,sort,detailed,teamG){
   const pcols = detailed? PC_COLS : PC_COLS.filter(c=>SIMPLE_PIT_KEYS.includes(c[0]));
   const pccols = detailed? PC_CALC_COLS : PC_CALC_COLS.filter(c=>SIMPLE_PITCALC_KEYS.includes(c[0]));
-  const rows = sortRows(prows, sort.key, sort.dir);
-  if(!rows.length) return emptyTbl(pcols.length+pccols.length+1);
+  const outsMin = qualOutsMin(teamG);   // 第139弾: 規定投球回＝チーム試合数×1回（上下限つき）
+  const {main,under} = splitByQualified(prows, sort, RATE_PIT_KEYS, r=>!outsMin || n(r.outs)>=outsMin);
+  if(!main.length && !under.length) return emptyTbl(pcols.length+pccols.length+1);
   let h=`<thead><tr><th class="name" data-key="name" title="投手名">選手${sortArrow(sort,"name")}</th>`+
     pcols.map(c=>c[0]==='IPstr'? th_("ipNum",c[1],sort) : th_(c[0],c[1],sort)).join("")+
     pccols.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
-  for(const r of rows){
-    h+=`<tr><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
+  const pitRowHtml=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
       pcols.map(c=>`<td class="num">${r[c[0]]??''}</td>`).join("")+
       pccols.map(c=>{
-        if(c[0]==='ERA') return `<td class="num${r.ipNum&&r.ERA<1?' hi2':''}">${r.ipNum?r.ERA.toFixed(2):'-'}</td>`;
+        if(c[0]==='ERA') return `<td class="num${r.ipNum&&r.ERA<1&&!dim?' hi2':''}">${r.ipNum?r.ERA.toFixed(2):'-'}</td>`;
         if(c[0]==='WHIP') return `<td class="num">${r.ipNum?r.WHIP.toFixed(2):'-'}</td>`;
         if(c[0]==='K9') return `<td class="num">${r.ipNum?r.K9.toFixed(1):'-'}</td>`;
         return `<td class="num">${r[c[0]]??''}</td>`;
       }).join("")+`</tr>`;
+  for(const r of main) h+=pitRowHtml(r,false);
+  if(under.length){
+    h+=`<tr class="qualsep"><td colspan="${pcols.length+pccols.length+1}">ここから規定投球回（${outs2ip(outsMin)}回）未満</td></tr>`;
+    for(const r of under) h+=pitRowHtml(r,true);
   }
   h+=`</tbody>`;
   return h;
@@ -2814,8 +2865,9 @@ function renderBestNine(){
   card.style.display = "";
   sideCards.forEach(s=>{ const e=$(s); if(e) e.style.display=""; });
   
-  const PA_req = 50;
-  const outs_req = 90; // 30投球回
+  // 第140弾: 定数を直接使う（以前は50を直書きしていて CONSTANTS と二重管理になっていた）
+  const PA_req = CONSTANTS.BESTNINE_BAT_PA_REQ;
+  const outs_req = CONSTANTS.BESTNINE_PIT_OUTS_REQ; // 30投球回
   
   const allBat = aggBatting(games);
   const allPit = aggPitching(games);
@@ -2985,7 +3037,7 @@ function render(){
 
   // pitching table
   const prows=aggPitching(games);
-  $("#pitTbl").innerHTML=pitchingTableHtml(prows,sortState.summaryPit,detailedView);
+  $("#pitTbl").innerHTML=pitchingTableHtml(prows,sortState.summaryPit,detailedView,T.G);
 
   const msCard = $("#summaryMilestonesCard");
   const msList = $("#summaryMilestonesList");
@@ -3648,7 +3700,7 @@ function renderPeriod(){
       </div>
       <div class="kpis" style="margin-bottom:10px">${leaderKpisHtml(brows,gs.length)}</div>
       <div class="scroll" data-bucket="${esc(label)}" data-kind="bat"><table>${battingTableHtml(brows,T,bst,detailedView)}</table></div>
-      <div class="scroll" data-bucket="${esc(label)}" data-kind="pit" style="margin-top:10px"><table>${pitchingTableHtml(prows,pst,detailedView)}</table></div>
+      <div class="scroll" data-bucket="${esc(label)}" data-kind="pit" style="margin-top:10px"><table>${pitchingTableHtml(prows,pst,detailedView,T.G)}</table></div>
     </section>`;
   }).join("");
 }
@@ -10510,6 +10562,9 @@ async function init(){
 window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
   // 第93弾: 分析カード群の純粋関数
   pythagExpected, pythagSummary, computeStreaks, gameResultSeq, monthlyStats, saberFrom, saberRows,
+  // 第139弾: 率で並べたときの規定判定
+  splitByQualified, RATE_BAT_KEYS, RATE_PIT_KEYS, QUAL_PA_PER_GAME, QUAL_OUTS_PER_GAME,
+  qualPaMin, qualOutsMin, QUAL_PA_MIN, QUAL_OUTS_MIN, CONSTANTS,
   contribBatScore, contribPitScore, CONTRIB_WEIGHTS, lineupSuggestions, LINEUP_SUGGEST,
   appearanceRates, errorTrend, gameOfTheYearList,
   // 第94弾: 記録・楽しみ系7機能の純粋関数
