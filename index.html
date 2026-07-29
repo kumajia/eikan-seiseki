@@ -507,7 +507,7 @@
   <!-- SUMMARY -->
   <div id="tab-summary">
     <div style="margin-bottom:10px"><label class="inline" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
-      <input type="checkbox" id="detailToggle"> 全項目表示（OFFのときは主要な数字だけ）</label></div>
+      <input type="checkbox" id="detailToggle" checked> 全項目表示（OFFのときは主要な数字だけ）</label></div>
     <div id="backupHint"></div>
     <div id="todayInHistory"></div>
     <section class="card" id="bandCard">
@@ -2211,7 +2211,9 @@ function aggPitching(games){
 }
 function teamTotals(games){
   const b=aggBatting(games);
-  const T={G:games.length,AB:0,H:0,BB:0,"2B":0,"3B":0,HR:0,R:0,E:0,SB:0,SO:0};
+  // 第135弾: RBI(打点)とSH(犠打)も合計する。以前は集計対象に入れていなかったため、
+  // 表のチーム行だけこの2列が空欄になり、そこだけ穴が空いて見えていた
+  const T={G:games.length,AB:0,H:0,BB:0,"2B":0,"3B":0,HR:0,R:0,E:0,SB:0,SO:0,RBI:0,SH:0};
   for(const r of b)for(const k in T)if(k!=="G")T[k]+=r[k]||0;
   const tb=T.H+T["2B"]+2*T["3B"]+3*T.HR;
   T.AVG=T.AB?T.H/T.AB:0;
@@ -2394,7 +2396,7 @@ const SIMPLE_BAT_KEYS=["G","AB","H","HR","RBI","SB"];
 const SIMPLE_CALC_KEYS=["AVG","OPS"];
 const SIMPLE_PIT_KEYS=["G","W","IPstr","K"];
 const SIMPLE_PITCALC_KEYS=["ERA"];
-let detailedView=false;
+let detailedView=true;   // 第135弾: 既定でオン（全項目表示）。チェックボックスの初期状態と揃えること
 
 /* ---------- 定数定義（マジックナンバー一元管理） ---------- */
 const CONSTANTS = {
@@ -2487,7 +2489,8 @@ function battingTableHtml(brows,T,sort,detailed){
   }
   if(T){
     h+=`</tbody><tfoot><tr><td class="name">チーム</td>`+
-      bcols.map(c=>{const map={G:T.G,AB:T.AB,R:T.R,H:T.H,"2B":T["2B"],"3B":T["3B"],HR:T.HR,RBI:'',BB:T.BB,SO:T.SO,SH:'',SB:T.SB,E:T.E};return `<td class="num">${map[c[0]]??''}</td>`;}).join("")+
+      // 第135弾: 打点・犠打もチーム合計を出す（ここだけ空欄だと表に穴が空いて見えるため）
+      bcols.map(c=>`<td class="num">${T[c[0]]??''}</td>`).join("")+
       ccols.map(c=>`<td class="num">${avg3(T[c[0]])}</td>`).join("")+`</tr></tfoot>`;
   } else h+=`</tbody>`;
   return h;
