@@ -6455,7 +6455,7 @@ function renderGames(){
   // 公式戦と練習試合を分けて表示（公式戦→区切り見出し→練習試合）
   const official=entries.filter(([name])=>!name.includes("練習"));
   const practice=entries.filter(([name])=>name.includes("練習"));
-  const renderGroups=(list)=>list.map(([sname,s])=>{
+  const seasonBlock=([sname,s])=>{
     if(!s.games.length) return "";
     const T=teamTotals(s.games);
     // 第111弾: 保存した順ではなく日付順に表示する（配列自体は並べ替えない＝保存データは触らない）。
@@ -6499,7 +6499,44 @@ function renderGames(){
       </div>
       <div class="gbody">${gamesHtml}</div>
     </div>`;
-  }).join("");
+  };
+  /* 第148弾: シーズンをさらに年度で束ねる。
+     4年で18シーズンあり、続けるほど1列に並び続けて探しにくくなるため。
+     公式戦と練習試合を分けて出す既存の作り（案B）は維持し、それぞれの中で年度にまとめる。
+     年度は新しい順（下へ行くほど過去）。年度の中のシーズンは今までどおりの並びのまま。
+     最初に開くのは「今のシーズンがある年度」だけで、その中の現在シーズンも開く。 */
+  const renderGroups=(list)=>{
+    const withGames=list.filter(([,s])=>s.games.length);
+    if(!withGames.length) return "";
+    const byYear=new Map();
+    for(const e of withGames){
+      const y=getSeasonYear(e[0]);
+      const key=(y==null)? "年不明" : String(y);
+      if(!byYear.has(key)) byYear.set(key,[]);
+      byYear.get(key).push(e);
+    }
+    const years=[...byYear.keys()].filter(k=>k!=="年不明").sort((a,b)=>Number(b)-Number(a));
+    if(byYear.has("年不明")) years.push("年不明");   // 年が読めないシーズンは末尾へ
+    return years.map(y=>{
+      const arr=byYear.get(y);
+      /* その年度にシーズンが1つしか無いなら、年度の箱を作らずシーズンをそのまま出す。
+         練習試合は1年に1シーズンなので、包むと「2034年度 ＞ 2034練習試合」という
+         中身が同じ入れ子になってしまう。 */
+      if(arr.length===1) return seasonBlock(arr[0]);
+      const games=arr.flatMap(([,s])=>s.games);
+      const T=teamTotals(games);
+      const open=arr.some(([sname])=>sname===DB.current);
+      const label=(y==="年不明")? y : `${y}年度`;
+      return `<div class="game yeargroup${open?' open':''}" data-year="${esc(y)}">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">${esc(label)}</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">${games.length}試合 ${T.W}勝${T.L}敗${T.D?T.D+'分':''}</span>
+        </div>
+        <div class="gbody">${arr.map(seasonBlock).join("")}</div>
+      </div>`;
+    }).join("");
+  };
   const practiceHasGames=practice.some(([,s])=>s.games.length);
   el.innerHTML = renderGroups(official)
     + (practiceHasGames? `<div class="dim" style="font-size:12px;font-weight:600;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)">練習試合</div>`+renderGroups(practice) : "");
