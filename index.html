@@ -2310,7 +2310,7 @@ function csvJoin(rows){ return rows.map(r=>r.map(csvCell).join(",")).join("\r\n"
 function buildCsvExports(){
   const gameRows=[["シーズン","日付","相手","味方得点","相手得点","勝敗","攻撃順","コールド","バッジ"]];
   const batRows=[["シーズン","日付","相手","選手","打順","途中出場","打数","得点","安打","二塁打","三塁打","本塁打","打点","三振","四死球","犠打","盗塁","併殺","失策"]];
-  const pitRows=[["シーズン","日付","相手","選手","勝","投球回","対戦打者","被安打","奪三振","四死球","失点","自責点","暴投","被本塁打"]];
+  const pitRows=[["シーズン","日付","相手","選手","勝","投球回","球数","対戦打者","被安打","奪三振","四死球","失点","自責点","暴投","被本塁打"]];
   for(const [sname,se] of Object.entries(DB.seasons||{})){
     for(const g of (se.games||[])){
       const rf=n(g.runsFor), ra=n(g.runsAgainst);
@@ -2323,7 +2323,7 @@ function buildCsvExports(){
       }
       for(const p of (g.pitchers||[])){
         if(!p.name) continue;
-        pitRows.push([sname,g.date||"",g.opponent||"",String(p.name).trim(),p.W?"1":"",(p.IP==null?"":p.IP),n(p.BF),n(p.H),n(p.K),n(p.BB),n(p.R),n(p.ER),n(p.WP),n(p.HR)]);
+        pitRows.push([sname,g.date||"",g.opponent||"",String(p.name).trim(),p.W?"1":"",(p.IP==null?"":p.IP),n(p.P),n(p.BF),n(p.H),n(p.K),n(p.BB),n(p.R),n(p.ER),n(p.WP),n(p.HR)]);
       }
     }
   }
@@ -3758,8 +3758,13 @@ function playerRoster(){
       for(const p of (g.pitchers||[])) if(p.name) map.set(nameKey(p.name),String(p.name).trim());
     }
   }
-  // 試合記録が無くても、名簿登録済み（nameを持つplayerMeta）の選手は名簿に含める（新入生対応）
+  /* 試合記録が無くても、名簿登録済み（nameを持つplayerMeta）の選手は名簿に含める（新入生対応）。
+     ただし**選手の統合で他のキーへ寄せた元のキー**は除く（第147弾）。
+     mergePlayerAlias は統合を解除できるように playerMeta[統合元] を消さずに残すので、
+     ここで弾かないと「鈴木 健悟（出場なし）」と「鈴木 健悟（23試合）」のように名簿へ二重に出る。 */
+  const aliases=DB.playerAliases||{};
   for(const [key,meta] of Object.entries(DB.playerMeta||{})){
+    if(aliases[key] && aliases[key]!==key) continue;   // 統合されて別キーになっている
     if(meta && meta.name && !map.has(key)) map.set(key, String(meta.name).trim());
   }
   return [...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],"ja"));
@@ -8496,7 +8501,11 @@ function shotDirFor(game, season){
   // 試合名は「大会名 vs 相手」。opponent がその形で入っているのでそのまま使う。
   // 日付だけの試合や相手未設定でも、必ず何かの名前になるようにする。
   const label = String(g.opponent||"").trim() || String(g.date||"").trim() || "試合";
-  return [shotSchoolName(), sn, label].join("/");
+  /* 学校名・シーズン名・相手名のどれかに「/」や「\」が入っていると、
+     そこが区切りと解釈されてフォルダの階層が増えてしまう（例:「決勝 vs A/B学園」で4階層）。
+     区切り文字は各段で潰してから連結する。 */
+  const seg=x=>String(x).replace(/[\/\\]+/g,"／").trim() || "不明";
+  return [seg(shotSchoolName()), seg(sn), seg(label)].join("/");
 }
 /* 保存済みの試合に、OCRで使った画像を紐づけてサーバーへ送る。
    サーバーが動いていないときは黙って何もしない（記録の保存を邪魔しない）。
@@ -8960,11 +8969,23 @@ function pitchCountPlausible(p, val){
 /* 読み取り結果を既存の投手行に突き合わせる。名前が一致した行だけが対象。
    戻り値: {apply:[{name,P}], skip:[{name,why}]} */
 function pitchCountMerge(gamePitchers, read){
-  const byKey=new Map((gamePitchers||[]).map(p=>[nameKey(p.name), p]));
+  const list=(gamePitchers||[]);
+  /* 同じ投手が1試合に2行あると（降板後にまた登板した記録など）、
+     どちらの行に書くべきかを名前だけでは決められない。
+     以前は Map が後の行を、書き込み側は最初の行を選んでいて食い違っていた。
+     曖昧なまま書くと誤った行に球数が入るので、その名前は丸ごと見送る。 */
+  const dupKeys=new Set();
+  { const seen=new Set();
+    for(const p of list){ const k=nameKey(p.name); if(seen.has(k)) dupKeys.add(k); else seen.add(k); } }
+  const byKey=new Map(list.map(p=>[nameKey(p.name), p]));
   const apply=[], skip=[];
   for(const r of (read||[])){
     const nm=String(r.name||"").trim();
     if(!nm) continue;
+    if(dupKeys.has(nameKey(nm))){
+      skip.push({name:nm, why:"同じ名前の投手行が2つあり、どちらの記録か決められない"});
+      continue;
+    }
     const p=byKey.get(nameKey(nm));
     if(!p){ skip.push({name:nm, why:"この試合の投手に居ない名前"}); continue; }
     const chk=pitchCountPlausible(p, r.P);
@@ -9080,7 +9101,9 @@ function voteOcrReads(reads){
   reads=(reads||[]).filter(r=>r&&typeof r==="object");
   if(reads.length<=1) return reads[0]||{};
   const BAT={AB:0,R:0,H:0,"2B":0,"3B":0,HR:0,RBI:0,SO:0,BB:0,SH:0,SB:0,GDP:0,E:0};
-  const PIT={IP:"0",BF:0,H:0,K:0,BB:0,R:0,ER:0,WP:0,HR:0,W:false};
+  // 第146弾: Pを追加。ここに無い項目は多数決の対象外＝結果から丸ごと消えるため、
+  //           PIT_INPUT に項目を足したらこのテンプレートも必ず揃えること。
+  const PIT={IP:"0",P:0,BF:0,H:0,K:0,BB:0,R:0,ER:0,WP:0,HR:0,W:false};
   const g={};
   g.batters=voteRows(reads,"batters",BAT);
   g.pitchers=voteRows(reads,"pitchers",PIT);
