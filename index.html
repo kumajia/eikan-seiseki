@@ -6515,7 +6515,10 @@ function renderGames(){
       if(!byYear.has(key)) byYear.set(key,[]);
       byYear.get(key).push(e);
     }
-    const years=[...byYear.keys()].filter(k=>k!=="年不明").sort((a,b)=>Number(b)-Number(a));
+    /* 年度の並びは**従来どおり古い順**（上から下へ時系列）。
+       第148弾で一度「新しい順」にしたが、これは頼まれていない変更で、
+       試合ログの並びが逆転してしまった。年度でまとめるのと並び順を変えるのは別の話。 */
+    const years=[...byYear.keys()].filter(k=>k!=="年不明").sort((a,b)=>Number(a)-Number(b));
     if(byYear.has("年不明")) years.push("年不明");   // 年が読めないシーズンは末尾へ
     return years.map(y=>{
       const arr=byYear.get(y);
