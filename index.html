@@ -915,7 +915,7 @@
     <section class="card">
       <h2>JSONで一括インポート</h2>
       <div class="hint">スクショから作ったJSONをここに貼って「取り込む」。1試合分でも複数試合の配列でもOK。<br>
-        形式: <code>{"date","opponent","runsFor","runsAgainst","batters":[{"name","AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"}],"pitchers":[{"name","IP","BF","H","K","BB","R","ER","WP","HR","W"}]}</code></div>
+        形式: <code>{"date","opponent","runsFor","runsAgainst","batters":[{"name","AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"}],"pitchers":[{"name","IP","P","BF","H","K","BB","R","ER","WP","HR","W"}]}</code></div>
       <textarea id="importGame" placeholder='ここにJSONを貼り付け'></textarea>
       <div style="margin-top:8px"><button class="primary" id="doImportGame">取り込む</button></div>
     </section>
@@ -1306,6 +1306,11 @@
         <button class="mini ghost" id="vpReload">再読み込み</button>
         <span id="vpStatus" class="hint"></span>
       </div>
+      <div style="margin-bottom:8px">
+        <label class="inline" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted)">
+          <input type="checkbox" id="vpSaveShots" checked> 試合を保存したら、読み取りに使ったコマを受信サーバーへ残す</label>
+        <div class="hint" style="margin-top:2px">「学校名 / シーズン / 試合名」のフォルダに置きます（例: ドスター高校 / 2034夏甲子園 / 甲子園3回戦 vs 白老）。動画を消しても数字の出どころを確認できます。サーバーが起動していないときは何もしません。</div>
+      </div>
       <div class="kpis" id="vpKpis"></div>
       <div id="vpList" style="margin-top:10px"></div>
       <div class="row" style="margin-top:10px;flex-wrap:wrap;align-items:center">
@@ -1334,6 +1339,11 @@
       </div>
       <div class="note" id="auditSumNote" style="margin-top:-2px">得点合計の照合は、控え選手を省いて手入力した試合でも不一致になります。OCRの行漏れを拾える代わりに、その分だけ「要確認」が増えます。</div>
       <div id="auditContent"></div>
+    </section>
+    <section class="card">
+      <h2>球数の後付け取り込み</h2>
+      <div class="note">球数はあとから追加した項目なので、それ以前に記録した試合は空欄です。動画やスクショが残っている試合だけ、<strong>球数だけを読み取って書き足せます</strong>。他の項目には一切触れないので、確認済みの数字が書き換わることはありません。読み取った球数が打者数より少ない、投球回に対して極端、といった値は書き込まずに理由を出します。</div>
+      <div id="pitchCountList"></div>
     </section>
     <section class="card">
       <h2>OCR取り込み履歴</h2>
@@ -2207,16 +2217,21 @@ function aggPitching(games){
   for(const g of games) for(const p of (g.pitchers||[])){
     if(!p.name)continue;
     const key=nameKey(p.name);
-    if(!m.has(key))m.set(key,{name:String(p.name).trim(),outs:0,BF:0,H:0,K:0,BB:0,R:0,ER:0,WP:0,HR:0,W:0,G:0});
+    if(!m.has(key))m.set(key,{name:String(p.name).trim(),outs:0,P:0,outsWithP:0,GwithP:0,BF:0,H:0,K:0,BB:0,R:0,ER:0,WP:0,HR:0,W:0,G:0});
     const t=m.get(key);t.G++;
     t.outs+=ip2outs(p.IP);
-    for(const k of["BF","H","K","BB","R","ER","WP","HR"])t[k]+=n(p[k]);
+    for(const k of["P","BF","H","K","BB","R","ER","WP","HR"])t[k]+=n(p[k]);
+    /* 第145弾: 球/回の分母は「球数が入っている試合の投球回」だけにする。
+       球数は後から足した項目なので、埋まっている試合と空の試合が混ざる。
+       全投球回で割ると、3/20試合しか埋めていない投手の球/回が実際の1/7ほどに出てしまう。 */
+    if(n(p.P)>0){ t.outsWithP+=ip2outs(p.IP); t.GwithP++; }
     if(p.W)t.W++;
   }
   const rows=[...m.values()].map(t=>{
     const ip=t.outs/3;
     return {...t,IPstr:outs2ip(t.outs),
-      ERA:ip? t.ER*9/ip:0, WHIP:ip? (t.BB+t.H)/ip:0, K9:ip? t.K*9/ip:0, ipNum:ip};
+      ERA:ip? t.ER*9/ip:0, WHIP:ip? (t.BB+t.H)/ip:0, K9:ip? t.K*9/ip:0, ipNum:ip,
+      PPI:(t.outsWithP && t.P)? t.P/(t.outsWithP/3) : 0};   // 球/回（第142弾・分母は第145弾で是正）
   });
   rows.sort((a,b)=>b.outs-a.outs);
   if(__aggCache) __aggCache.pit.set(games,rows);
@@ -2405,8 +2420,8 @@ function renderErrLog(){
    入力フォーム側のBAT_LBLは元から「本塁」だったので、表記の統一にもなる。 */
 const BAT_COLS=[["G","試合"],["AB","打数"],["R","得点"],["H","安打"],["2B","二塁"],["3B","三塁"],["HR","本塁"],["RBI","打点"],["BB","四死"],["SO","三振"],["SH","犠打"],["SB","盗塁"],["E","失策"]];
 const CALC_COLS=[["AVG","打率"],["OBP","出塁率"],["SLG","長打率"],["OPS","OPS"]];
-const PC_COLS=[["G","登板"],["W","勝"],["IPstr","投球回"],["BF","打者"],["H","被安打"],["K","奪三振"],["BB","四死"],["R","失点"],["ER","自責"],["HR","被本"],["WP","暴投"]];
-const PC_CALC_COLS=[["ERA","防御率"],["WHIP","WHIP"],["K9","K/9"]];
+const PC_COLS=[["G","登板"],["W","勝"],["IPstr","投球回"],["P","球数"],["BF","打者"],["H","被安打"],["K","奪三振"],["BB","四死"],["R","失点"],["ER","自責"],["HR","被本"],["WP","暴投"]];
+const PC_CALC_COLS=[["ERA","防御率"],["WHIP","WHIP"],["K9","K/9"],["PPI","球/回"]];
 
 const SIMPLE_BAT_KEYS=["G","AB","H","HR","RBI","SB"];
 const SIMPLE_CALC_KEYS=["AVG","OPS"];
@@ -2563,11 +2578,15 @@ function pitchingTableHtml(prows,sort,detailed,teamG){
     pcols.map(c=>c[0]==='IPstr'? th_("ipNum",c[1],sort) : th_(c[0],c[1],sort)).join("")+
     pccols.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
   const pitRowHtml=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
-      pcols.map(c=>`<td class="num">${r[c[0]]??''}</td>`).join("")+
+      // 第142弾: 球数を取り込む前の試合は0になる。「0球投げた」と読めてしまうので「-」にする
+      pcols.map(c=>c[0]==='P'
+        ? `<td class="num">${n(r.P)? r.P : '-'}</td>`
+        : `<td class="num">${r[c[0]]??''}</td>`).join("")+
       pccols.map(c=>{
         if(c[0]==='ERA') return `<td class="num${r.ipNum&&r.ERA<1&&!dim?' hi2':''}">${r.ipNum?r.ERA.toFixed(2):'-'}</td>`;
         if(c[0]==='WHIP') return `<td class="num">${r.ipNum?r.WHIP.toFixed(2):'-'}</td>`;
         if(c[0]==='K9') return `<td class="num">${r.ipNum?r.K9.toFixed(1):'-'}</td>`;
+        if(c[0]==='PPI') return `<td class="num">${r.PPI? r.PPI.toFixed(1):'-'}</td>`;
         return `<td class="num">${r[c[0]]??''}</td>`;
       }).join("")+`</tr>`;
   for(const r of main) h+=pitRowHtml(r,false);
@@ -3077,7 +3096,8 @@ function render(){
   renderWinLossBand();
   renderTodayInHistory();
   renderHealthCheck();
-  renderAudit(); // データ検算（第127弾）。試合を保存・編集するたびに最新の状態で数え直す
+  renderAudit();       // データ検算（第127弾）。試合を保存・編集するたびに最新の状態で数え直す
+  renderPitchCount();  // 球数の後付け取り込み（第144弾）
   renderOcrLog();
   renderErrLog();
   fillNenkanScope();
@@ -4461,11 +4481,15 @@ function playerSeasonPitTableHtml(rows){
     PC_CALC_COLS.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
   for(const r of sorted){
     h+=`<tr><td class="name"><span class="slink" role="link" tabindex="0" data-season="${esc(r.season)}">${esc(r.season)}</span></td><td class="num">${esc(r._grade||'-')}</td>`+
-      PC_COLS.map(c=>`<td class="num">${r[c[0]]??''}</td>`).join("")+
+      // 球数は未取り込みの試合で0になるため「-」に落とす（第142弾。上の投手表と同じ扱い）
+      PC_COLS.map(c=>c[0]==='P'
+        ? `<td class="num">${n(r.P)? r.P : '-'}</td>`
+        : `<td class="num">${r[c[0]]??''}</td>`).join("")+
       PC_CALC_COLS.map(c=>{
         if(c[0]==='ERA') return `<td class="num${r.ipNum&&r.ERA<1?' hi2':''}">${r.ipNum?r.ERA.toFixed(2):'-'}</td>`;
         if(c[0]==='WHIP') return `<td class="num">${r.ipNum?r.WHIP.toFixed(2):'-'}</td>`;
         if(c[0]==='K9') return `<td class="num">${r.ipNum?r.K9.toFixed(1):'-'}</td>`;
+        if(c[0]==='PPI') return `<td class="num">${r.PPI? r.PPI.toFixed(1):'-'}</td>`;
         return `<td class="num">${r[c[0]]??''}</td>`;
       }).join("")+`</tr>`;
   }
@@ -5460,7 +5484,10 @@ function recordRankings(){
     H:  {label:"1試合 最多安打",   unit:"安打",   src:"bat"},
     HR: {label:"1試合 最多本塁打", unit:"本",     src:"bat"},
     RBI:{label:"1試合 最多打点",   unit:"打点",   src:"bat"},
-    K:  {label:"1試合 最多奪三振", unit:"奪三振", src:"pit"}
+    K:  {label:"1試合 最多奪三振", unit:"奪三振", src:"pit"},
+    /* 第145弾: 球数。1試合の記録なので、球数が入っている試合と空の試合が混ざっていても
+       ランキングとして成立する（通算だと「埋めた試合が多い人が上」になってしまう）。 */
+    P:  {label:"1試合 最多球数",   unit:"球",     src:"pit"}
   };
   const acc={}; for(const key in cats) acc[key]=[];
   for(const [,s] of Object.entries(DB.seasons||{})){
@@ -5474,15 +5501,17 @@ function recordRankings(){
       }
       for(const p of (g.pitchers||[])){
         if(!p.name) continue;
-        const v=n(p.K);
-        if(v>0) acc.K.push({key:nameKey(p.name),name:String(p.name).trim(),v,date:g.date||"",opp:g.opponent||"",gid:g.id});
+        for(const key of ["K","P"]){
+          const v=n(p[key]);
+          if(v>0) acc[key].push({key:nameKey(p.name),name:String(p.name).trim(),v,date:g.date||"",opp:g.opponent||"",gid:g.id});
+        }
       }
     }
   }
   const out=[];
   for(const key in cats){
     const rows=acc[key].sort((a,b)=>b.v-a.v || String(a.date).localeCompare(String(b.date))).slice(0,5);
-    out.push({...cats[key], rows});
+    out.push({...cats[key], key, rows});   // key は表示側で「球数だけの案内」を出し分けるのに使う
   }
   return out;
 }
@@ -5498,7 +5527,10 @@ function renderRecordRankings(){
         <span class="num" style="color:var(--amber);font-weight:700">${r.v}${esc(c.unit)}</span>
         <span class="glink num" role="link" tabindex="0" data-gid="${esc(String(r.gid))}" title="${esc(r.opp||"")}" style="font-size:11px;width:76px;text-align:right">${esc(r.date||"日付なし")}</span>
       </div>`).join("")
-      : `<div class="dim" style="font-size:12px;padding:4px 2px">記録なし</div>`;
+      // 球数は後から足した項目なので、空のときは「まだ取り込んでいない」ことが分かる文言にする（第145弾）
+      : `<div class="dim" style="font-size:12px;padding:4px 2px">${c.key==="P"
+          ? "球数が入っている試合がまだありません（データタブの「球数の後付け取り込み」で足せます）"
+          : "記録なし"}</div>`;
     return `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">${esc(c.label)}</div>${rows}</div>`;
   }).join("");
 }
@@ -6487,8 +6519,12 @@ function gameBatMini(g){
 let editId=null; // 編集中の試合id（indexやと他の試合の削除でズレるためidで持つ）
 const BAT_INPUT=["AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"];
 const BAT_LBL={AB:"打数",R:"得点",H:"安打","2B":"二塁","3B":"三塁",HR:"本塁",RBI:"打点",SO:"三振",BB:"四死",SH:"犠打",SB:"盗塁",GDP:"併殺",E:"失策"};
-const PIT_INPUT=["IP","BF","H","K","BB","R","ER","WP","HR"];
-const PIT_LBL={IP:"投球回",BF:"打者",H:"被安打",K:"奪三振",BB:"四死",R:"失点",ER:"自責",WP:"暴投",HR:"被本"};
+/* 第142弾: 球数(P)を追加。ゲームの投手記録には「投球回,球数,打者,…」と出ているのに取り込んでいなかった。
+   並びは画面の列順に合わせる（OCRも手入力も、目で追う順と一致していた方が間違えにくい）。
+   ※データ構造の変更なので3点同期（PIT_INPUT / normGame / OCRプロンプトのJSON）を必ず揃えること。
+   ※過去の試合には球数が無い。0を「0球」と見せないよう、表示側で「-」に落とす。 */
+const PIT_INPUT=["IP","P","BF","H","K","BB","R","ER","WP","HR"];
+const PIT_LBL={IP:"投球回",P:"球数",BF:"打者",H:"被安打",K:"奪三振",BB:"四死",R:"失点",ER:"自責",WP:"暴投",HR:"被本"};
 
 function batEntryHead(){return `<thead><tr><th>打順</th><th>途中出場</th><th class="name">選手</th>${BAT_INPUT.map(k=>`<th>${BAT_LBL[k]}</th>`).join("")}<th></th></tr></thead>`;}
 function pitEntryHead(){return `<thead><tr><th class="name">選手</th>${PIT_INPUT.map(k=>`<th>${PIT_LBL[k]}</th>`).join("")}<th>勝</th><th></th></tr></thead>`;}
@@ -8134,6 +8170,9 @@ const OCR_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』�
 - ただし例外: 投手記録にも載っている選手（＝その試合の投手）が野手記録欄にも出ていて、かつ全項目が0（打数0・得点0・安打0…すべて0）の場合は、batters配列には入れない（投手として登板しただけで実際は打席に立っていない扱い）。その投手が実際に打席に立った形跡（打数1以上、四死球・犠打・盗塁などいずれか非ゼロ）があるなら、二刀流の実出場として通常の打者と同様にbatters配列へ含める。
 
 【投手記録の列順】投球回,球数,打者,被安打,奪三振,四死球,失点,自責点,暴投,被本塁,防御率
+- **球数は投球回のすぐ右の列**。"P" として出力する（例: 完投なら120前後、1イニングなら15前後）。
+  球数と打者数は隣り合っていて紛らわしい。**球数の方が必ず大きい**ので、小さい方を打者(BF)に入れること。
+  球数の列が画面に無い場合だけ "P":0 とする。
 - 投球回は "8"(=8回) / "8.1"(=8回1/3、8⅓) / "0.2"(=0回2/3、0⅔) の形式で。左端に「勝」マークがある投手は "W":true。
 【投球回の分数の読み方（最重要・誤読が多い）】
 - 投球回の欄には「6⅓」「7⅔」のように、**整数の右に小さな分数**が付くことがある。分数は斜線(／)で区切られ、
@@ -8174,7 +8213,7 @@ const OCR_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』�
  "innings":{"top":[],"bottom":[]},
  "cold":false,
  "batters":[{"name":"","AB":0,"R":0,"H":0,"2B":0,"3B":0,"HR":0,"RBI":0,"SO":0,"BB":0,"SH":0,"SB":0,"GDP":0,"E":0}],
- "pitchers":[{"name":"","IP":"0","BF":0,"H":0,"K":0,"BB":0,"R":0,"ER":0,"WP":0,"HR":0,"W":false}],
+ "pitchers":[{"name":"","IP":"0","P":0,"BF":0,"H":0,"K":0,"BB":0,"R":0,"ER":0,"WP":0,"HR":0,"W":false}],
  "batTotals":{"AB":0,"R":0,"H":0,"2B":0,"3B":0,"HR":0,"RBI":0,"SO":0,"BB":0,"SH":0,"SB":0,"GDP":0,"E":0},
  "order":[{"pos":0,"name":"","sub":false,"fielding":""}]
 }
@@ -8433,6 +8472,60 @@ function vpCacheSummary(c){
 function vpServerBase(){
   const v=($("#vpServer")&&$("#vpServer").value.trim())||"";
   return (v||"http://localhost:8000").replace(/\/+$/,"");
+}
+/* ==================== 第143弾: OCRに使ったコマを受信サーバーへ残す ====================
+   目的: 動画(1本16MB)は消しても、読み取りに使ったコマ(数百KB)を残しておけば
+   「あとから項目を足したとき」や「数字を疑ったとき」に読み直せる。
+   実際、球数(第142弾)を足したときに過去分が埋められない、という形で必要性が出た。
+
+   置き場所は 学校名／シーズン／試合名 の3階層。
+     shared_files/ドスター高校/2034夏甲子園/甲子園3回戦 vs 白老/コマ1.jpg
+   サーバーには /upload?dir=... で渡す（multipartの解析がファイル部分しか見ないため、
+   フォルダはクエリで送る）。サーバー側は区切りごとに名前を安全化して SAVE_DIR の外に出さない。
+   受信箱の一覧(/list)はサブフォルダを見ないので、動画プールの表示は汚れない。 */
+function shotSchoolName(){
+  // 年鑑の表紙と同じ決め方（セーブデータ名 → DB.teamName → 既定）。
+  // ただし「学校1」はセーブデータの初期名で、フォルダ名としては意味が無いので teamName を先に見る。
+  const nm=((typeof nenkanSchoolName==="function") ? nenkanSchoolName() : "").trim();
+  if(!nm || /^学校\d+$/.test(nm)) return String(DB.teamName||"").trim() || nm || "わが校";
+  return nm;
+}
+function shotDirFor(game, season){
+  const sn = season || DB.current || "シーズン不明";
+  const g  = game || {};
+  // 試合名は「大会名 vs 相手」。opponent がその形で入っているのでそのまま使う。
+  // 日付だけの試合や相手未設定でも、必ず何かの名前になるようにする。
+  const label = String(g.opponent||"").trim() || String(g.date||"").trim() || "試合";
+  return [shotSchoolName(), sn, label].join("/");
+}
+/* 保存済みの試合に、OCRで使った画像を紐づけてサーバーへ送る。
+   サーバーが動いていないときは黙って何もしない（記録の保存を邪魔しない）。
+   戻り値: 送れた枚数（0なら未送信） */
+async function saveShotsToServer(game, files, season){
+  const imgs=(files||[]).filter(f=>f && f.type && f.type.startsWith("image/"));
+  if(!imgs.length) return 0;
+  if(!($("#vpSaveShots") && $("#vpSaveShots").checked)) return 0;
+  const base=vpServerBase();
+  try{
+    // サーバーが居るかを軽く確認（居なければ即あきらめる）
+    const ping=await fetch(base+"/ping",{cache:"no-store"});
+    if(!ping.ok) return 0;
+  }catch(e){ return 0; }
+  const dir=shotDirFor(game, season);
+  const fd=new FormData();
+  imgs.forEach((f,i)=>{
+    // 連番＋元の名前。frame_12345ms.jpg のままだと何番目のコマか分かりにくい
+    const ext=(f.name.match(/\.[a-z0-9]+$/i)||[".jpg"])[0];
+    fd.append("images", f, `${String(i+1).padStart(2,"0")}_${f.name.replace(/\.[a-z0-9]+$/i,"")}${ext}`);
+  });
+  try{
+    const r=await fetch(base+"/upload?dir="+encodeURIComponent(dir),{method:"POST",body:fd});
+    if(!r.ok) return 0;
+    return imgs.length;
+  }catch(e){
+    try{ errLogAdd("コマ保存失敗", (e&&e.message)||String(e)); }catch(_){}
+    return 0;
+  }
 }
 function vpIsVideo(name){
   const s=String(name||"").toLowerCase();
@@ -8792,14 +8885,161 @@ function updateFpCount(){
   el.textContent=`選択 ${fpSelected.size} 枚`+(vote&&fpSelected.size? `（多数決オンなので${fpSelected.size}リクエスト消費）` : "");
 }
 function closeFramePicker(){ const m=$("#framePickerModal"); if(m) m.style.display="none"; fpFrames=[]; fpSelected=new Set(); }
+/* 第144弾: コマ選択の完了時に別の処理へ渡すためのフック。
+   球数だけの後付け取り込みでも同じコマ選択画面を使いたいが、
+   そちらは「試合フォームへ流し込む」のではなく「球数だけ読む」ため、通常の流れに乗せられない。
+   フックが立っているときは setShotFiles / runOcr を通らず、選ばれたコマをそのまま渡す。 */
+let fpOnConfirm=null;
 async function fpConfirm(){
   if(!fpSelected.size){ toast("コマを選んでな",true); return; }
   const picked=[...fpSelected].sort((a,b)=>a-b).map(i=>{ const f=fpFrames[i]; return new File([f.blob], "frame_"+Math.round(f.t*1000)+"ms.jpg", {type:"image/jpeg"}); });
+  if(fpOnConfirm){
+    const cb=fpOnConfirm; fpOnConfirm=null;
+    closeFramePicker();
+    await cb(picked);
+    return;
+  }
   const existingImgs=[...$("#shotFiles").files].filter(f=>f.type.startsWith("image/")); // 動画と一緒に入れてた画像は残す
   closeFramePicker();
   fpFromPicker=true;
   setShotFiles([...picked, ...existingImgs]);
   await runOcr();
+}
+/* ==================== 第144弾: 球数だけの後付け取り込み ====================
+   球数(第142弾)を足したが、既存の試合は空欄のまま。動画が残っている試合だけでも埋めたい。
+   **フル再解析はしない。** ⅓/⅔の誤読を3箇所直した直後で、検証済みの数字を上書きするのは危険。
+   投手名と球数だけを読む小さいプロンプトを使い、**Pだけ**を書き込む。他の項目には一切触れない。 */
+const PITCH_COUNT_PROMPT=`あなたは野球ゲーム『パワプロ 栄冠ナイン』の投手記録のスクショを読み取るOCRです。
+**投手名と球数だけ**を抽出します。他の項目は読まなくてよい。
+
+【列の位置】投手記録の表は「投球回, 球数, 打者, 被安打, 奪三振, 四死球, 失点, 自責点, 暴投, 被本塁, 防御率」の順。
+- 球数は**投球回のすぐ右の列**。
+- 球数と打者数は隣り合っていて紛らわしい。**球数の方が必ず大きい**ので、大きい方が球数。
+- 目安: 完投なら100〜140程度、1イニングなら10〜20程度。
+- 投手は画面の上から下の順（登板順）に並べること。
+
+出力はJSONだけ（説明文なし）。読めない投手は P を 0 にする。
+{"pitchers":[{"name":"","P":0}]}`;
+
+// 球数がまだ入っていない試合（投手がいるのに全員0）
+function pitchCountTargets(){
+  const out=[];
+  for(const [sname,s] of seasonEntries()){
+    for(const g of ((s&&s.games)||[])){
+      const pit=(g.pitchers||[]).filter(p=>p&&String(p.name||"").trim()!=="");
+      if(!pit.length) continue;
+      if(pit.some(p=>n(p.P)>0)) continue;      // 1人でも入っていれば対象外
+      out.push({season:sname, game:g, pitchers:pit.map(p=>p.name)});
+    }
+  }
+  out.sort((a,b)=>String(b.game.date||"").localeCompare(String(a.game.date||"")));
+  return out;
+}
+/* 読み取った球数が妥当かを見る。おかしい値をそのまま書き込むと、
+   せっかく直した数字の隣に新しい嘘が増えるので、必ずここを通す。
+   戻り値: {ok, why} */
+function pitchCountPlausible(p, val){
+  const v=n(val);
+  if(v<=0) return {ok:false, why:"読めなかった"};
+  const bf=n(p.BF), outs=ip2outs(p.IP);
+  /* 一番危ないのは「隣の打者数の列を球数として読む」誤り。
+     打者1人あたりの球数は現実には3〜4球程度なので、**打者数の2倍を下回ったら疑う**。
+     単純に「球数≧打者数」だけだと、打者28人・球数30 のような取り違えを通してしまう。 */
+  if(bf){
+    if(v < bf*2)  return {ok:false, why:`打者${bf}人に対して球数${v}は少なすぎる（打者数の列を読んだ可能性）`};
+    if(v > bf*8)  return {ok:false, why:`打者${bf}人に対して球数${v}は多すぎる`};
+  }
+  if(outs){
+    const perOut=v/outs;                        // 1アウトあたりの球数。3〜10程度が現実的
+    if(perOut<2)  return {ok:false, why:`${outs2ip(outs)}回に対して球数${v}は少なすぎる`};
+    if(perOut>12) return {ok:false, why:`${outs2ip(outs)}回に対して球数${v}は多すぎる`};
+  }
+  if(v>250) return {ok:false, why:`球数${v}は多すぎる`};
+  return {ok:true, why:""};
+}
+/* 読み取り結果を既存の投手行に突き合わせる。名前が一致した行だけが対象。
+   戻り値: {apply:[{name,P}], skip:[{name,why}]} */
+function pitchCountMerge(gamePitchers, read){
+  const byKey=new Map((gamePitchers||[]).map(p=>[nameKey(p.name), p]));
+  const apply=[], skip=[];
+  for(const r of (read||[])){
+    const nm=String(r.name||"").trim();
+    if(!nm) continue;
+    const p=byKey.get(nameKey(nm));
+    if(!p){ skip.push({name:nm, why:"この試合の投手に居ない名前"}); continue; }
+    const chk=pitchCountPlausible(p, r.P);
+    if(!chk.ok){ skip.push({name:nm, why:chk.why}); continue; }
+    apply.push({name:p.name, key:nameKey(p.name), P:n(r.P)});
+  }
+  for(const p of (gamePitchers||[])){
+    if(!apply.some(a=>a.key===nameKey(p.name)) && !skip.some(s=>nameKey(s.name)===nameKey(p.name)))
+      skip.push({name:p.name, why:"読み取り結果に出てこなかった"});
+  }
+  return {apply, skip};
+}
+let pcBusy=false;
+/* 1試合ぶんの球数を読んで書き込む。files は画像（コマ）の配列。 */
+async function pitchCountRun(seasonName, gameId, files, statusEl){
+  const s=DB.seasons[seasonName]; if(!s) return;
+  const g=(s.games||[]).find(x=>String(x.id)===String(gameId));
+  if(!g){ toast("試合が見つかりません",true); return; }
+  const pit=(g.pitchers||[]).filter(p=>p&&String(p.name||"").trim()!=="");
+  if(statusEl) statusEl.innerHTML='<span class="spin"></span>球数を読み取り中…';
+  let read=[];
+  try{
+    const txt=await aiGenerate(PITCH_COUNT_PROMPT, files, statusEl);
+    const j=parseOcrJson(txt);
+    read=Array.isArray(j&&j.pitchers)? j.pitchers : [];
+  }catch(e){
+    try{ errLogAdd("球数OCR失敗",(e&&e.message)||String(e)); }catch(_){}
+    if(statusEl) statusEl.innerHTML='<span class="chip r">失敗</span> '+ocrErrorHelp(e);
+    return;
+  }
+  const {apply,skip}=pitchCountMerge(pit, read);
+  if(!apply.length){
+    if(statusEl) statusEl.innerHTML='<span class="chip r">書き込める球数がありませんでした</span> '+
+      esc(skip.map(x=>`${x.name}: ${x.why}`).join(" / "));
+    return;
+  }
+  const lines=apply.map(a=>`${a.name} ${a.P}球`).join("\n");
+  const skipTxt=skip.length? `\n\n書き込まない投手:\n`+skip.map(x=>`${x.name}（${x.why}）`).join("\n") : "";
+  if(!confirm(`この試合に球数を書き込みます。他の項目は変更しません。\n\n${lines}${skipTxt}`)) {
+    if(statusEl) statusEl.innerHTML='<span class="chip">取りやめました</span>';
+    return;
+  }
+  for(const a of apply){
+    const row=(g.pitchers||[]).find(p=>nameKey(p.name)===a.key);
+    if(row) row.P=a.P;                 // ★Pだけ。他のフィールドには触れない
+  }
+  await saveDB();
+  ocrLogAdd("球数の後付け", `${g.date||""} ${g.opponent||""} → ${apply.length}人ぶん`);
+  if(statusEl) statusEl.innerHTML=`<span class="chip g">${apply.length}人ぶん書き込みました</span>`;
+  render();
+}
+function renderPitchCount(){
+  const el=$("#pitchCountList"); if(!el) return;
+  const t=pitchCountTargets();
+  const total=[];
+  for(const [,s] of seasonEntries()) for(const g of ((s&&s.games)||[]))
+    if((g.pitchers||[]).some(p=>p&&String(p.name||"").trim()!=="")) total.push(g);
+  if(!t.length){
+    el.innerHTML=`<div class="empty">球数が未入力の試合はありません（投手のいる${total.length}試合すべてに球数が入っています）。</div>`;
+    return;
+  }
+  const rows=t.map(x=>`<div class="auditrow warn" style="border-left-color:var(--line2)">
+      <div class="audithead">
+        <div>${esc(x.game.date||"日付なし")} 対 ${esc(x.game.opponent||"(相手未設定)")}
+          <span class="dim" style="font-size:11.5px">${esc(x.season)}</span></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+          <button type="button" class="mini ghost pcPick" data-season="${esc(String(x.season))}" data-id="${esc(String(x.game.id))}">画像・動画を選ぶ</button>
+        </div>
+      </div>
+      <div class="auditmsg" style="color:var(--muted)">投手: ${esc(x.pitchers.join("、"))}</div>
+      <div class="hint pcStatus" data-id="${esc(String(x.game.id))}"></div>
+    </div>`).join("");
+  el.innerHTML=`<div class="kpis">
+      ${kpi("球数が未入力",`${t.length}試合`,"a",`投手のいる試合 ${total.length}`)}
+    </div><div style="margin-top:8px">${rows}</div>`;
 }
 /* ---------- OCR JSON解析＋複数コマ多数決 ---------- */
 function parseOcrJson(txt){
@@ -10288,6 +10528,9 @@ async function init(){
     const keptDate = keepCtx ? $("#gDate").value : null;
     const keptRound = keepCtx ? $("#gRoundSel").value : null;
     const keptRoundCustom = keepCtx ? $("#gRoundCustom").value : null;
+    // 第143弾: OCRに使った画像は resetForm() で消えるので、ここで先に確保しておく
+    const shotImgs=[...($("#shotFiles")?$("#shotFiles").files:[])].filter(f=>f.type&&f.type.startsWith("image/"));
+    const shotSeason=DB.current;
     const g=collectForm();
     if(!g.batters.length && !g.pitchers.length){toast("選手が入力されていません",true);return;}
     if(!confirmSeasonBeforeSave(g)) return; // 日付とシーズンの食い違いを確認（第108弾）
@@ -10325,7 +10568,13 @@ async function init(){
       toast(newMs.map(ms => `${ms.player}が通算${ms.label}を達成しました`).join("\n"));
     }
     
-    await saveDB(); editId=null; resetForm(); render();
+    await saveDB();
+    // 第143弾: 読み取りに使ったコマを 学校名/シーズン/試合名 のフォルダへ残す。
+    // 保存そのものは既に終わっているので、失敗しても記録には影響しない。
+    saveShotsToServer(ng, shotImgs, shotSeason).then(nSaved=>{
+      if(nSaved) toast(`コマ${nSaved}枚を「${shotDirFor(ng, shotSeason)}」に残しました`);
+    });
+    editId=null; resetForm(); render();
     if(keepCtx){ // 前回の日付・大会を引き継ぐ（相手名・成績は空のまま）
       if(keptDate!=null){ $("#gDate").value=keptDate; $("#gDate").dataset.auto=""; }
       if(keptRound!=null && keptRound!=="__moreSeasons__"){ $("#gRoundSel").value=keptRound; }
@@ -10515,6 +10764,32 @@ async function init(){
       editGame(b.dataset.season, b.dataset.id); // 該当試合を編集で開く（シーズンもそちらへ切り替わる）
     });
   }
+  /* 第144弾: 球数の後付け取り込み。画像ならそのまま、動画ならコマ選択画面を挟む。 */
+  { const el=$("#pitchCountList"); if(el) el.addEventListener("click",e=>{
+      const b=e.target.closest(".pcPick"); if(!b) return;
+      if(pcBusy){ toast("いま読み取り中です",true); return; }
+      const season=b.dataset.season, id=b.dataset.id;
+      const st=el.querySelector(`.pcStatus[data-id="${CSS.escape(id)}"]`);
+      const inp=document.createElement("input");
+      inp.type="file"; inp.accept="image/*,video/*";
+      inp.addEventListener("change", async ()=>{
+        const f=inp.files&&inp.files[0]; if(!f) return;
+        pcBusy=true;
+        try{
+          if(f.type.startsWith("video/")){
+            // コマ選択画面を借りる。選び終わったらフックでこちらへ戻ってくる（第144弾）
+            fpOnConfirm=async picked=>{
+              try{ await pitchCountRun(season,id,picked,st); } finally { pcBusy=false; }
+            };
+            await openFramePicker(f);
+          }else{
+            try{ await pitchCountRun(season,id,[f],st); } finally { pcBusy=false; }
+          }
+        }catch(err){ pcBusy=false; }
+      });
+      inp.click();
+    });
+  }
   /* 第129弾: 指摘の対象外（健康診断・データ検算で共通）。
      どちらのカードからでも同じ操作になるよう、親要素にまとめて委譲する。 */
   { const handler=async e=>{
@@ -10589,7 +10864,9 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第102弾: 投手セイバー・トロフィー棚
   saberPitchFrom, saberPitchRows, trophyShelf,
   // 第103弾: 動画プール / 第105弾: OCR結果キャッシュ
-  vpDoneName, vpIsVideo, vpIsDone,
+  vpDoneName, vpIsVideo, vpIsDone, shotDirFor, shotSchoolName,
+  // 第144弾: 球数の後付け取り込み
+  pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
