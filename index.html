@@ -6503,7 +6503,7 @@ function renderGames(){
   /* 第148弾: シーズンをさらに年度で束ねる。
      4年で18シーズンあり、続けるほど1列に並び続けて探しにくくなるため。
      公式戦と練習試合を分けて出す既存の作り（案B）は維持し、それぞれの中で年度にまとめる。
-     年度は新しい順（下へ行くほど過去）。年度の中のシーズンは今までどおりの並びのまま。
+     並び順は下の「完全に新しい順」を参照（DESIGN-PROPOSAL.md の恒久ルール）。
      最初に開くのは「今のシーズンがある年度」だけで、その中の現在シーズンも開く。 */
   const renderGroups=(list)=>{
     const withGames=list.filter(([,s])=>s.games.length);
@@ -6515,11 +6515,14 @@ function renderGames(){
       if(!byYear.has(key)) byYear.set(key,[]);
       byYear.get(key).push(e);
     }
-    /* 年度の並びは**従来どおり古い順**（上から下へ時系列）。
-       第148弾で一度「新しい順」にしたが、これは頼まれていない変更で、
-       試合ログの並びが逆転してしまった。年度でまとめるのと並び順を変えるのは別の話。 */
-    const years=[...byYear.keys()].filter(k=>k!=="年不明").sort((a,b)=>Number(a)-Number(b));
+    /* 並び順は第90弾で決めた「完全に新しい順」に揃える。
+       **年も年内も新しいものが上＝下へ行くほど過去。下から読むと時系列**。
+       （下から 夏予選 → 夏甲子園 → 秋大会 → 神宮 → 翌春の甲子園 と読める）
+       シーズン選択の fillSeasons と同じ規則なので、画面ごとに並びが食い違わない。
+       年内は登録順が春→夏→秋なので、反転して新しい順にする。 */
+    const years=[...byYear.keys()].filter(k=>k!=="年不明").sort((a,b)=>Number(b)-Number(a));
     if(byYear.has("年不明")) years.push("年不明");   // 年が読めないシーズンは末尾へ
+    for(const k of byYear.keys()) byYear.set(k, byYear.get(k).slice().reverse());
     return years.map(y=>{
       const arr=byYear.get(y);
       /* その年度にシーズンが1つしか無いなら、年度の箱を作らずシーズンをそのまま出す。
