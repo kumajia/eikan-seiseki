@@ -6508,9 +6508,15 @@ function renderGames(){
   const renderGroups=(list)=>{
     const withGames=list.filter(([,s])=>s.games.length);
     if(!withGames.length) return "";
+    /* 束ねる単位は**暦年ではなく年度**（nendoOf）。春甲子園は3月なので暦年では翌年だが、
+       チームとしてはその代の締めくくり。試合ログは「その代がどこまで行ったか」を振り返る場所なので、
+       夏予選→夏甲子園→秋→神宮→翌春の甲子園 が1つの束に入る方が実感に合う。
+       学年判定・卒業アルバム・年鑑も同じ nendoOf の区切りで動いている。
+       ※シーズン選択(fillSeasons)はあえて暦年のまま（表示名と数字を一致させるため）。
+         選ぶときは名前どおり、振り返るときは代ごと、という使い分け。 */
     const byYear=new Map();
     for(const e of withGames){
-      const y=getSeasonYear(e[0]);
+      const y=nendoOf(e[0]);
       const key=(y==null)? "年不明" : String(y);
       if(!byYear.has(key)) byYear.set(key,[]);
       byYear.get(key).push(e);
@@ -6532,7 +6538,22 @@ function renderGames(){
       const games=arr.flatMap(([,s])=>s.games);
       const T=teamTotals(games);
       const open=arr.some(([sname])=>sname===DB.current);
-      const label=(y==="年不明")? y : `${y}年度`;
+      /* 見出しは「2031年度（2031夏〜2032春）」。年度でまとめると中に翌年名のシーズン（春甲子園）が
+         入るので、期間を添えて理由がその場で分かるようにする。
+         arr は新しい順なので、末尾が最古・先頭が最新。 */
+      const tag=sn=>{
+        const yy=(String(sn).match(/^(\d{4})/)||[])[1]||"";
+        const kt=String(sn).match(/[春夏秋冬]/);
+        return yy+(kt? kt[0] : "");
+      };
+      const first=tag(arr[arr.length-1][0]), last=tag(arr[0][0]);
+      let span="";
+      if(first && last){
+        if(first===last) span=first;
+        else if(first.slice(0,4)===last.slice(0,4)) span=`${first}〜${last.slice(4)||last}`; // 同じ年なら年を省く
+        else span=`${first}〜${last}`;
+      }
+      const label=(y==="年不明")? y : `${y}年度${span?`（${span}）`:""}`;
       return `<div class="game yeargroup${open?' open':''}" data-year="${esc(y)}">
         <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
           <span class="chev">▸</span>
@@ -8990,21 +9011,44 @@ function pitchCountTargets(){
 /* 読み取った球数が妥当かを見る。おかしい値をそのまま書き込むと、
    せっかく直した数字の隣に新しい嘘が増えるので、必ずここを通す。
    戻り値: {ok, why} */
+/* 球数として現実的な範囲かを見る。読み取った値を書き込んでよいかの判定に使う。
+
+   ここは一度間違えている（第153弾で修正）。以前は「打者数の2倍を下回ったら疑う」
+   としていたため、**⅓回・打者1人・1球**の救援登板を弾いていた。
+   だが初球で打ち取れば1打者1球は普通に起きる。
+   平均球数の感覚（1打者3〜4球）を人数の少ない登板にそのまま当てはめたのが誤り。
+
+   物理的な下限は「全員を初球で打ち取った場合」＝打者数そのもの。
+   ただし人数が増えるほど全員初球は非現実的になるので、
+   最初の PC_ONE_PITCH_GRACE 人ぶんだけ1球で済んだとみなし、その先は1打者2球を下限とする。
+     打者1人  → 1球でよい（初球で打ち取った）
+     打者3人  → 3球でよい（3球三人斬り）
+     打者28人 → 53球を下回ったら「打者数の列を読んだ」と疑う */
+const PC_ONE_PITCH_GRACE = 3;
+const PC_MAX_PER_BATTER  = 8;    // 1打者あたりの上限。ファウルが続いてもそうは超えない
+const PC_MAX_PER_OUT     = 12;   // 打者数が無いときの代替。走者が溜まると1アウトが重くなる
+const PC_SMALL_SLACK     = 12;   // 人数が少ないときの上振れ余地（1人で15球台は普通にある）
+function pitchFloorFor(count){
+  return count + Math.max(0, count - PC_ONE_PITCH_GRACE);
+}
 function pitchCountPlausible(p, val){
   const v=n(val);
   if(v<=0) return {ok:false, why:"読めなかった"};
   const bf=n(p.BF), outs=ip2outs(p.IP);
-  /* 一番危ないのは「隣の打者数の列を球数として読む」誤り。
-     打者1人あたりの球数は現実には3〜4球程度なので、**打者数の2倍を下回ったら疑う**。
-     単純に「球数≧打者数」だけだと、打者28人・球数30 のような取り違えを通してしまう。 */
-  if(bf){
-    if(v < bf*2)  return {ok:false, why:`打者${bf}人に対して球数${v}は少なすぎる（打者数の列を読んだ可能性）`};
-    if(v > bf*8)  return {ok:false, why:`打者${bf}人に対して球数${v}は多すぎる`};
-  }
-  if(outs){
-    const perOut=v/outs;                        // 1アウトあたりの球数。3〜10程度が現実的
-    if(perOut<2)  return {ok:false, why:`${outs2ip(outs)}回に対して球数${v}は少なすぎる`};
-    if(perOut>12) return {ok:false, why:`${outs2ip(outs)}回に対して球数${v}は多すぎる`};
+  /* 物差しは打者数を優先する。アウト数は併殺や走者の有無で
+     1アウトあたりの球数が大きくぶれるので、打者数が無いときの代わりとしてだけ使う。
+     両方を同時にかけると、正しい値なのに片方で弾かれる取りこぼしが増える。 */
+  const base = bf || outs;
+  if(base){
+    const unit = bf ? `打者${bf}人` : `${outs2ip(outs)}回`;
+    const lo   = pitchFloorFor(base);
+    if(v < lo){
+      const why = bf ? `${unit}に対して球数${v}は少なすぎる（打者数の列を読んだ可能性）`
+                     : `${unit}に対して球数${v}は少なすぎる`;
+      return {ok:false, why};
+    }
+    const hi = base*(bf ? PC_MAX_PER_BATTER : PC_MAX_PER_OUT) + PC_SMALL_SLACK;
+    if(v > hi) return {ok:false, why:`${unit}に対して球数${v}は多すぎる`};
   }
   if(v>250) return {ok:false, why:`球数${v}は多すぎる`};
   return {ok:true, why:""};
@@ -9032,7 +9076,13 @@ function pitchCountMerge(gamePitchers, read){
     const p=byKey.get(nameKey(nm));
     if(!p){ skip.push({name:nm, why:"この試合の投手に居ない名前"}); continue; }
     const chk=pitchCountPlausible(p, r.P);
-    if(!chk.ok){ skip.push({name:nm, why:chk.why}); continue; }
+    if(!chk.ok){
+      /* 書き込み先の行も読んだ値も分かっているので持っておく。
+         判定は機械の推測でしかないので、最後はユーザーが書き込めるようにする（第154弾）。
+         key と P が揃っている見送りだけが「それでも書き込む」の対象になる。 */
+      skip.push({name:nm, key:nameKey(p.name), P:n(r.P), why:chk.why});
+      continue;
+    }
     apply.push({name:p.name, key:nameKey(p.name), P:n(r.P)});
   }
   for(const p of (gamePitchers||[])){
@@ -9042,6 +9092,64 @@ function pitchCountMerge(gamePitchers, read){
   return {apply, skip};
 }
 let pcBusy=false;
+/* 第154弾: 直近の読み取りで見送った投手を試合ごとに覚えておく。
+   1人書き込むたびに render() が一覧を組み直すので、覚えていないと
+   残りの投手のボタンまで消えてしまう。 */
+const pcSkips=new Map();
+/* 結果の表示は render() の後に入れる。render() が #pitchCountList を組み直すため、
+   先に書くと消えてしまう（第144弾からこの順番が逆で、成功の表示が出ていなかった）。 */
+function pcShowResult(gameId, html){
+  const el=document.querySelector(`#pitchCountList .pcStatus[data-id="${CSS.escape(String(gameId))}"]`);
+  if(el) el.innerHTML=html;
+  return !!el;
+}
+/* 見送った投手の一覧。書き込み先がはっきりしているものだけ、
+   読んだ値を入れた欄と「書き込む」ボタンを添える。
+   同名2行・この試合に居ない名前は、どの行に入れるべきか決められないのでボタンを出さない
+   （誤った行に入る方が、入らないより害が大きい）。 */
+function pcSkipHtml(seasonName, gameId, skip){
+  const list=(skip||[]);
+  if(!list.length) return "";
+  const rows=list.map(x=>{
+    const can=!!(x.key && n(x.P)>0);
+    const right=can
+      ? `<span class="pcForceBox" style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+           <input type="number" class="pcForceVal" min="1" max="999" value="${esc(String(n(x.P)))}"
+                  style="width:60px;text-align:right" aria-label="${esc(x.name)}の球数">
+           <span class="dim" style="font-size:12px">球</span>
+           <button type="button" class="mini ghost pcForce" data-season="${esc(String(seasonName))}"
+                   data-id="${esc(String(gameId))}" data-key="${esc(String(x.key))}"
+                   data-name="${esc(String(x.name))}">書き込む</button>
+         </span>`
+      : `<span class="dim" style="font-size:11.5px;flex-shrink:0">試合編集から直接入力してください</span>`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <span style="min-width:0"><b>${esc(x.name)}</b>
+          <span class="dim" style="font-size:11.5px">${esc(x.why)}</span></span>
+        ${right}
+      </div>`;
+  }).join("");
+  return `<div style="margin-top:10px"><div class="dim" style="font-size:12px">書き込まなかった投手</div>${rows}</div>`;
+}
+/* 判定で見送った球数を、ユーザーの判断でそのまま書き込む。
+   第153弾で「1球で1人を打ち取った救援」を正しい値なのに弾いていたため、
+   判定がどれだけ良くなっても取りこぼしは残るという前提で逃げ道を用意する。 */
+async function pitchCountForce(seasonName, gameId, key, val){
+  const v=n(val);
+  if(!(v>0)){ toast("球数を入れてください",true); return false; }
+  if(v>999){ toast("球数が大きすぎます",true); return false; }
+  const s=DB.seasons[seasonName];
+  if(!s){ toast("シーズンが見つかりません",true); return false; }
+  const g=(s.games||[]).find(x=>String(x.id)===String(gameId));
+  if(!g){ toast("試合が見つかりません",true); return false; }
+  const row=(g.pitchers||[]).find(p=>nameKey(p.name)===key);
+  if(!row){ toast("投手が見つかりません",true); return false; }
+  row.P=v;                              // ★Pだけ。他のフィールドには触れない
+  await saveDB();
+  ocrLogAdd("球数を手動で確定", `${g.date||""} ${g.opponent||""} ${row.name} → ${v}球`);
+  toast(`${row.name} に ${v}球 を書き込みました`);
+  render();
+  return true;
+}
 /* 1試合ぶんの球数を読んで書き込む。files は画像（コマ）の配列。 */
 async function pitchCountRun(seasonName, gameId, files, statusEl){
   const s=DB.seasons[seasonName]; if(!s) return;
@@ -9060,15 +9168,21 @@ async function pitchCountRun(seasonName, gameId, files, statusEl){
     return;
   }
   const {apply,skip}=pitchCountMerge(pit, read);
+  pcSkips.set(String(gameId), skip);   // 見送った分はボタンから書き込めるよう覚えておく（第154弾）
   if(!apply.length){
-    if(statusEl) statusEl.innerHTML='<span class="chip r">書き込める球数がありませんでした</span> '+
-      esc(skip.map(x=>`${x.name}: ${x.why}`).join(" / "));
+    if(statusEl) statusEl.innerHTML='<span class="chip r">そのまま書き込める球数はありませんでした</span>'+
+      pcSkipHtml(seasonName, gameId, skip);
     return;
   }
   const lines=apply.map(a=>`${a.name} ${a.P}球`).join("\n");
-  const skipTxt=skip.length? `\n\n書き込まない投手:\n`+skip.map(x=>`${x.name}（${x.why}）`).join("\n") : "";
+  const forceable=skip.filter(x=>x.key && n(x.P)>0).length;
+  const skipTxt=skip.length
+    ? `\n\n書き込まない投手:\n`+skip.map(x=>`${x.name}（${x.why}）`).join("\n")
+      +(forceable? `\n\n※ この後の一覧から、判断のうえで書き込めます` : "")
+    : "";
   if(!confirm(`この試合に球数を書き込みます。他の項目は変更しません。\n\n${lines}${skipTxt}`)) {
-    if(statusEl) statusEl.innerHTML='<span class="chip">取りやめました</span>';
+    if(statusEl) statusEl.innerHTML='<span class="chip">取りやめました</span>'+
+      pcSkipHtml(seasonName, gameId, skip);
     return;
   }
   for(const a of apply){
@@ -9077,8 +9191,9 @@ async function pitchCountRun(seasonName, gameId, files, statusEl){
   }
   await saveDB();
   ocrLogAdd("球数の後付け", `${g.date||""} ${g.opponent||""} → ${apply.length}人ぶん`);
-  if(statusEl) statusEl.innerHTML=`<span class="chip g">${apply.length}人ぶん書き込みました</span>`;
-  render();
+  render();                            // 一覧が組み直されるので、表示を入れるのはこの後
+  pcShowResult(gameId, `<span class="chip g">${apply.length}人ぶん書き込みました</span>`
+    + pcSkipHtml(seasonName, gameId, skip));
 }
 function renderPitchCount(){
   const el=$("#pitchCountList"); if(!el) return;
@@ -10856,6 +10971,25 @@ async function init(){
       inp.click();
     });
   }
+  /* 第154弾: 見送った球数を、ユーザーの判断で書き込む。
+     書き込むたびに render() で一覧が組み直されるので、覚えておいた見送り一覧から
+     いま書いた1人を外して出し直す（残りの投手のボタンが消えないように）。 */
+  { const el=$("#pitchCountList"); if(el) el.addEventListener("click", async e=>{
+      const b=e.target.closest(".pcForce"); if(!b) return;
+      if(pcBusy){ toast("いま読み取り中です",true); return; }
+      const box=b.closest(".pcForceBox");
+      const inp=box && box.querySelector(".pcForceVal");
+      const season=b.dataset.season, id=b.dataset.id, key=b.dataset.key;
+      b.disabled=true;
+      try{
+        if(!await pitchCountForce(season, id, key, inp? inp.value : 0)) return;
+        const rest=(pcSkips.get(String(id))||[]).filter(x=>x.key!==key);
+        pcSkips.set(String(id), rest);
+        pcShowResult(id, `<span class="chip g">${esc(String(b.dataset.name||""))}に書き込みました</span>`
+          + pcSkipHtml(season, id, rest));
+      } finally { b.disabled=false; }
+    });
+  }
   /* 第129弾: 指摘の対象外（健康診断・データ検算で共通）。
      どちらのカードからでも同じ操作になるよう、親要素にまとめて委譲する。 */
   { const handler=async e=>{
@@ -10933,6 +11067,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   vpDoneName, vpIsVideo, vpIsDone, shotDirFor, shotSchoolName,
   // 第144弾: 球数の後付け取り込み
   pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
+  pitchCountForce, pcSkipHtml,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
