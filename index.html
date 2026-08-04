@@ -4574,13 +4574,47 @@ function subBattingBreakdown(key,games){
 // 第120弾: QS・完投はどちらも先発投手の指標なので、**先発した試合だけ**を対象にし、分母も先発登板数(GS)にする。
 //   以前は救援登板も分母に入れていたため、抑えの選手ほど率が不当に低く出ていた。
 //   先発の判定は pitchers配列の先頭（OCRプロンプトで「先発投手を必ず配列の先頭」と規定済み。playerPitchStyleも同じ前提）。
+/* 第155弾: 「相手が outsDone ぶん打ち終えた時点」の自チームのリードを求める。
+   走者や打順は記録していないので、**登板順と投球回を積み上げて**
+   交代時点が何イニング目かを割り出し、イニング別得点から点差を出す。
+   後攻のときは、相手がkイニング打ち終えた時点で自分はk-1イニングしか打っていない。
+   イニング別得点が無い試合では判定できないので null を返す（推測で埋めない）。 */
+function leadAfterOuts(g, outsDone){
+  const inn=g.innings||{};
+  const top=inn.top||[], bot=inn.bottom||[];
+  if(!top.length && !bot.length) return null;
+  const side=resolveSide(g); if(!side) return null;
+  const weBottom = side==="bottom";
+  const ours = weBottom? bot : top, theirs = weBottom? top : bot;
+  const k=Math.floor(n(outsDone)/3);          // 相手が打ち終えたイニング数
+  const sum=(arr,c)=>arr.slice(0, Math.max(0,c)).reduce((s,v)=>s+n(v),0);
+  return sum(ours, weBottom? k-1 : k) - sum(theirs, k);
+}
+const SAVE_LEAD_MAX = 3;   // 「リードを守った」とみなす点差の上限（3点以内＝一発で追いつかれる範囲）
+const SAVE_LONG_OUTS = 9;  // 点差が開いていても3回以上投げて締めればセーブ
+/* 救援の記録（セーブ・ホールド）。ゲーム画面には出ないので**こちらで計算する**。
+   本来は「同点・逆転の走者を背負って登板」もセーブ機会だが、走者は記録していないので
+   点差と投球回だけで判定する簡略版。判定できない試合は数に入れない。 */
 function pitcherQualityStats(key,games){
-  let G=0, GS=0, QS=0, CG=0, SHO=0;
+  let G=0, GS=0, QS=0, CG=0, SHO=0, SV=0, HLD=0;
   for(const g of games){
     const pit=(g.pitchers||[]).filter(x=>x && x.name);
     const i=pit.findIndex(x=>nameKey(x.name)===key);
     if(i<0) continue;
     G++;                  // 総登板数（救援を含む・表示用）
+    if(i>0 && !pit[i].W && n(g.runsFor)>n(g.runsAgainst)){
+      // 救援で登板し、勝利投手ではなく、チームが勝った試合だけが対象
+      const before=pit.slice(0,i).reduce((s,x)=>s+ip2outs(x.IP),0);
+      const lead=leadAfterOuts(g, before), o=ip2outs(pit[i].IP);
+      if(lead!=null && lead>0){
+        if(i===pit.length-1){
+          if(lead<=SAVE_LEAD_MAX || o>=SAVE_LONG_OUTS) SV++;      // 試合を締めた
+        }else{
+          const lead2=leadAfterOuts(g, before+o);                  // 降板時もリードを保っていたか
+          if(lead<=SAVE_LEAD_MAX && lead2!=null && lead2>0) HLD++;
+        }
+      }
+    }
     if(i!==0) continue;   // 先発でない試合はQS・完投の対象外
     GS++;
     if(ip2outs(pit[0].IP)>=18 && n(pit[0].ER)<=3) QS++;
@@ -4590,7 +4624,8 @@ function pitcherQualityStats(key,games){
     }
   }
   if(!G) return null;
-  return {G,GS,QS,CG,SHO,qsRate:GS?QS/GS:0,cgRate:GS?CG/GS:0};
+  return {G,GS,QS,CG,SHO,SV,HLD,SVH:SV+HLD,startRate:G?GS/G:0,
+          qsRate:GS?QS/GS:0,cgRate:GS?CG/GS:0};
 }
 /* ---------- 成長曲線（#8・年度別ミニ折れ線） ---------- */
 function playerGrowthData(key){
@@ -4709,7 +4744,13 @@ function renderPlayerContent(){
   if(!careerBat && !careerPit) html+=`<div class="empty" style="padding:10px">まだ出場記録がありません（名簿登録のみ）。<div style="margin-top:8px"><button class="mini danger" id="removeRosterOnly" data-key="${esc(key)}">名簿から削除</button></div></div>`;
   html+=`</section>`;
   // 第94弾 #5 二つ名（通算・お遊び） / #2 引退試合 / #6 節目まであと
-  html+=nicknameCardHtml(careerBat, careerPit);
+  /* 第155弾: 二つ名に役割（先発か救援か）と救援成績を使うため、
+     通算成績に先発率・セーブ・ホールドを足してから渡す。 */
+  const careerQS=pitcherQualityStats(key,careerGames);
+  const pitForNick=(careerPit && careerQS)? Object.assign({}, careerPit, {
+    SV:careerQS.SV, HLD:careerQS.HLD, SVH:careerQS.SVH, GS:careerQS.GS, startRate:careerQS.startRate
+  }) : careerPit;
+  html+=nicknameCardHtml(careerBat, pitForNick);
   html+=retirementGameCardHtml(key, enrollYear);
   html+=nextMilestonesCardHtml(key);
   html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
@@ -4733,7 +4774,7 @@ function renderPlayerContent(){
   html+=playerGrowthHtml(key);
 
   // 投手QS率・完投率（#13）: 投手として登板がある選手だけ
-  const qs=pitcherQualityStats(key,careerGames);
+  const qs=careerQS;
   if(qs){
     // 第120弾: QS率・完投率は先発登板だけが対象。先発が無い投手には率を出さず、その旨を書く。
     html+=`<section class="card"><h2 style="font-size:15px"><span class="tag p">投</span> QS率・完投率</h2>
@@ -4747,6 +4788,20 @@ function renderPlayerContent(){
         ${kpi("完投",qs.CG)}
         ${kpi("完封",qs.SHO,"g")}
       </div></section>`;
+    /* 第155弾: 救援成績。ゲーム画面には出ないので、登板順と投球回とイニング別得点から計算する。 */
+    if(qs.G>qs.GS || qs.SV || qs.HLD){
+      html+=`<section class="card"><h2 style="font-size:15px"><span class="tag p">投</span> 救援成績</h2>
+        <div class="note">セーブ＝勝ち試合を締めた救援（リード${SAVE_LEAD_MAX}点以内、または${SAVE_LONG_OUTS/3}回以上投げて締めた場合）。
+          ホールド＝リード${SAVE_LEAD_MAX}点以内で登板し、リードを保ったまま次へつないだ救援。どちらも勝利投手を除きます。
+          <strong>ゲームには表示されない項目なので、登板順・投球回・イニング別得点から計算しています。</strong>
+          走者の状況は記録していないため、同点で登板して勝ち越しを防いだ場合などは数えられません。
+          イニング別得点が無い試合も対象外です。</div>
+        <div class="kpis">
+          ${kpi("セーブ",qs.SV,"a")}
+          ${kpi("ホールド",qs.HLD)}
+          ${kpi("救援登板",`${qs.G-qs.GS}試合`)}
+        </div></section>`;
+    }
   }
 
   const myMilestones = (DB.milestones || []).filter(ms => nameKey(ms.player) === key)
@@ -7474,7 +7529,14 @@ const NICKNAME_DEFS=[
   {id:"ace",    title:"勝利の立役者",   type:"pit", stat:"W",   dir:"min", th:15,    guard:null,              statLabel:"勝利", unit:"勝"},
   {id:"horse",  title:"大黒柱",         type:"pit", stat:"ipNum",dir:"min",th:150,   guard:null,              statLabel:"投球回", unit:"回"},
   {id:"kshow",  title:"奪三振ショー",   type:"pit", stat:"K9",  dir:"min", th:10.0,  guard:{k:"outs",min:90}, statLabel:"奪三振率"},
-  {id:"wall",   title:"鉄壁のエース",   type:"pit", stat:"ERA", dir:"max", th:2.00,  guard:{k:"outs",min:90}, statLabel:"防御率"},
+  /* 第155弾: 「エース」は役割の呼び名なので、防御率だけで付けると抑えにも付いてしまう
+     （実際に須川が「鉄壁のエース」になっていた）。先発が過半の投手に限る。 */
+  {id:"wall",   title:"鉄壁のエース",   type:"pit", stat:"ERA", dir:"max", th:2.00,
+   guard:[{k:"outs",min:90},{k:"startRate",min:0.5}], statLabel:"防御率"},
+  // ---- 投手: 救援（第155弾。セーブ・ホールドは記録に無いので計算で出す） ----
+  {id:"closer", title:"守護神",         type:"pit", stat:"SV",  dir:"min", th:10,    guard:null,              statLabel:"セーブ"},
+  {id:"fire",   title:"火消し",         type:"pit", stat:"HLD", dir:"min", th:8,     guard:null,              statLabel:"ホールド"},
+  {id:"bridge", title:"勝利の方程式",   type:"pit", stat:"SVH", dir:"min", th:15,    guard:null,              statLabel:"セーブ＋ホールド"},
   {id:"precise",title:"走者を許さない男", type:"pit", stat:"WHIP",dir:"max", th:1.00,  guard:{k:"outs",min:90}, statLabel:"WHIP"},
   {id:"noHR",   title:"被弾しない男",   type:"pit", stat:"HR",  dir:"max", th:3,     guard:{k:"outs",min:150},statLabel:"被本塁打", unit:"本"},
   {id:"ctrl",   title:"精密機械",       type:"pit", stat:"BB",  dir:"max", th:10,    guard:{k:"outs",min:150},statLabel:"与四死球", unit:"四死球"}
@@ -7486,7 +7548,10 @@ function assignNicknames(bat, pit, defs){
   for(const d of D){
     const src=d.type==="bat"?bat:pit;
     if(!src) continue;
-    if(d.guard && !((Number(src[d.guard.k])||0)>=d.guard.min)) continue;
+    /* guard は配列でも書ける（第155弾）。「防御率が良い」だけでなく
+       「先発が過半」のように条件を重ねたいときに使う。書いた条件はすべて満たす必要がある。 */
+    const guards=d.guard? (Array.isArray(d.guard)? d.guard : [d.guard]) : [];
+    if(guards.some(gd=>!((Number(src[gd.k])||0)>=gd.min))) continue;
     // 「少ない方が良い」指標は、項目自体が無い（未集計）ときに0扱いされると
     // 実力と関係なく最上位で付いてしまうので、値が存在する行だけを対象にする
     if(d.dir==="max" && src[d.stat]==null) continue;
@@ -11044,6 +11109,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   appearanceRates, errorTrend, gameOfTheYearList,
   // 第94弾: 記録・楽しみ系7機能の純粋関数
   computeFirstRecords, pickRetirementGame, historicalLineupOrder, assignNicknames, NICKNAME_DEFS, NICKNAME_MAX,
+  pitcherQualityStats, leadAfterOuts, SAVE_LEAD_MAX, SAVE_LONG_OUTS,
   nextMilestones, managerReportCard,
   // 第95弾: 年鑑・OCRゴールデン・エラーログの純粋関数/ヘルパー
   buildNenkanHtml, nenkanScopeSeasons, nenkanGenerations, ocrGoldenTemplate,
