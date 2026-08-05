@@ -1873,6 +1873,117 @@ async function hiClear(cat){
   await saveDB();
 }
 /* ---------- データ健康診断（#23） ---------- */
+/* 第156弾: 同姓の別人が1人にまとまってしまっている選手を見つける。
+
+   ゲームのスコアボードは名字しか出さないので、代が替わって同じ名字の子が入ると
+   取り込みで昔の子の記録に合流してしまう（実際に森と小島がそうなった）。
+
+   判定は推測を使わない。**1人の生徒が在籍できるのは3年度＝年度の幅は最大2**なので、
+   幅が3以上あれば同一人物ではありえない。よって誤検出が原理的に起きない。
+   （エイリアスによる統合とは別物。あちらは読み取り時の別名で、試合データ自体は分かれている） */
+const ENROLL_SPAN_MAX = 2;   // 同じ生徒が出場しうる年度の幅（1年→3年で最大2）
+function playerAppearanceYears(){
+  const m=new Map();          // key -> {name, years:Set, rows:[{nendo,season,g}]}
+  for(const [sname,s] of Object.entries(DB.seasons||{})){
+    const y=nendoOf(sname);
+    for(const g of (s.games||[])){
+      const seen=new Set();
+      for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+        const nm=String((p&&p.name)||"").trim(); if(!nm) continue;
+        const k=nameKey(nm); if(seen.has(k)) continue; seen.add(k);
+        if(!m.has(k)) m.set(k,{name:nm, years:new Set(), rows:[]});
+        const e=m.get(k);
+        if(y!=null) e.years.add(y);
+        e.rows.push({nendo:y, season:sname, g});
+      }
+    }
+  }
+  return m;
+}
+function sameNameConflicts(){
+  const out=[];
+  const meta=DB.playerMeta||{};
+  for(const [key,e] of playerAppearanceYears()){
+    const ys=[...e.years].sort((a,b)=>a-b);
+    if(ys.length<2 || ys[ys.length-1]-ys[0]<=ENROLL_SPAN_MAX) continue;
+    /* 世代の区切り。入学年度が分かっていればそれが一番確かで、
+       「入学年度＋3年度目」からは絶対に本人ではありえない。
+       例) 小島は2030入学なので2032年度まで。2033年度の出場は必ず別人。
+       年度のあきだけで見ると 2031・2033・2034 のように詰まっている場合に取り逃がす。 */
+    const ey=meta[key]?.enrollYear;
+    let cut=null;
+    if(ey!=null){
+      const first=ey+ENROLL_SPAN_MAX+1;
+      cut=ys.find(y=>y>=first) ?? null;
+    }
+    if(cut==null){                       // 入学年度が無ければ年度のあきで切る
+      for(let i=1;i<ys.length;i++) if(ys[i]-ys[i-1]>ENROLL_SPAN_MAX){ cut=ys[i]; break; }
+    }
+    if(cut==null) cut=ys[ys.length-1];
+    const later=e.rows.filter(r=>r.nendo!=null && r.nendo>=cut);
+    const earlier=e.rows.filter(r=>r.nendo!=null && r.nendo<cut);
+    /* 付け替え先の候補: 同じ名字で始まる別の名簿選手のうち、
+       後半の年度に在籍している人（入学年度 <= その年度 <= 入学年度+2）。 */
+    const laterMin=Math.min(...later.map(r=>r.nendo));
+    const suggest=Object.entries(meta).filter(([k,v])=>{
+      if(k===key || !v || v.enrollYear==null) return false;
+      if(!String(k).startsWith(String(key))) return false;
+      return v.enrollYear<=laterMin && laterMin<=v.enrollYear+ENROLL_SPAN_MAX;
+    }).map(([k,v])=>({key:k, name:(v.name||k), fullName:v.fullName||"", enrollYear:v.enrollYear, position:v.position||""}))[0]||null;
+    out.push({key, name:e.name, years:ys, cut, later, earlier, suggest,
+              earlierEnroll: meta[key]?.enrollYear ?? null});
+  }
+  return out.sort((a,b)=>String(a.key).localeCompare(String(b.key)));
+}
+/* 指定した年度以降の出場を、別の選手名に付け替える。
+   エイリアスと違い**試合データの選手名そのものを書き換える**ので、自動では戻せない。
+   呼び出し側で必ず対象を見せて確認を取ること。 */
+function splitPlayerByYear(key, cutNendo, toName){
+  const to=String(toName||"").trim();
+  if(!key || !to || cutNendo==null) return 0;
+  let changed=0;
+  for(const [sname,s] of Object.entries(DB.seasons||{})){
+    const y=nendoOf(sname); if(y==null || y<cutNendo) continue;
+    for(const g of (s.games||[])){
+      for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+        if(!p || !p.name) continue;
+        if(nameKey(p.name)!==key) continue;
+        p.name=to; changed++;
+      }
+    }
+  }
+  return changed;
+}
+/* 第156弾（予防側）: その年度に在籍している同姓の選手へ読み替える。
+   スコアボードは名字しか出さないので、放っておくと卒業した先輩の記録に合流する。
+   読み替えるのは次を**すべて**満たすときだけ。推測で書き先を決めない:
+     ・読んだ名前の選手が名簿にいて、入学年度が分かっていて、その年度には在籍していない（卒業済み）
+     ・同じ名字で始まる名簿選手のうち、その年度に在籍している人が**ちょうど1人**
+   候補が0人なら判断材料が無く、2人以上ならどちらか決められないので、どちらも触らない。 */
+function activeSameNameFor(rawName, nendo){
+  const meta=DB.playerMeta||{};
+  const k=nameKey(rawName); if(!k || nendo==null) return null;
+  const inSchool=v=>v && v.enrollYear!=null && v.enrollYear<=nendo && nendo<=v.enrollYear+ENROLL_SPAN_MAX;
+  const cur=meta[k];
+  if(!cur || cur.enrollYear==null || inSchool(cur)) return null;   // 現役なら読み替えない
+  const cand=Object.entries(meta).filter(([k2,v])=>k2!==k && String(k2).startsWith(String(k)) && inSchool(v));
+  if(cand.length!==1) return null;
+  return String(cand[0][1].name || cand[0][0]).trim() || null;
+}
+function applyGenerationNames(g, nendo){
+  if(nendo==null || !g) return g;
+  const changed=[];
+  const walk=arr=>(arr||[]).map(x=>{
+    if(!x || !x.name) return x;
+    const to=activeSameNameFor(x.name, nendo);
+    if(!to || to===String(x.name).trim()) return x;
+    changed.push(`${String(x.name).trim()}→${to}`);
+    return {...x, name:to};
+  });
+  const out={...g, batters:walk(g.batters), pitchers:walk(g.pitchers), order:walk(g.order)};
+  out.__genFixed=[...new Set(changed)];
+  return out;
+}
 function healthCheckData(){
   // 練習試合も含め全シーズンを走査（データ入力の取りこぼしチェックが目的）
   const allGames=[];
@@ -1890,9 +2001,11 @@ function healthCheckData(){
   // 第129弾: 「対象外」にした項目は一覧から外す（件数にも数えない）
   const keepG=(cat,arr)=>arr.filter(x=>!hiHas(cat, x.g.id));
   const keepP=(cat,arr)=>arr.filter(([k])=>!hiHas(cat, k));
+  const dupName=sameNameConflicts().filter(c=>!hiHas("dupName", c.key));
   return {total:allGames.length,
     noInnings:keepG("noInnings",noInnings), noOpp:keepG("noOpp",noOpp),
-    noEnroll:keepP("noEnroll",noEnroll),    noPos:keepP("noPos",noPos)};
+    noEnroll:keepP("noEnroll",noEnroll),    noPos:keepP("noPos",noPos),
+    dupName};
 }
 function renderHealthCheck(){
   const el=$("#healthContent"); if(!el) return;
@@ -1923,7 +2036,42 @@ function renderHealthCheck(){
       </div>
     </div>`;
   };
+  /* 第156弾: 同姓別人。ここだけは「消す」ではなく「直す」ボタンを出す。
+     年度の幅が3以上＝在籍しうる期間を超えているので、必ず別人が混ざっている。 */
+  const dupRow=()=>{
+    const arr=h.dupName||[];
+    const ign=hiList("dupName").length;
+    const body=arr.length? arr.map(c=>{
+      const yrs=c.years.join("・")+"年度";
+      const to=c.suggest;
+      const btn=to
+        ? `<button type="button" class="mini primary dupSplit" data-key="${esc(c.key)}" data-cut="${esc(String(c.cut))}" data-to="${esc(to.name)}">${esc(String(c.cut))}年度以降の${c.later.length}試合を ${esc(to.name)} に付け替える</button>`
+        : `<span class="dim" style="font-size:11.5px">付け替え先の候補が名簿にありません。先に名簿へ今の選手を追加してください</span>`;
+      return `<div style="border-left:3px solid var(--amber);background:var(--panel);border-radius:0 8px 8px 0;padding:9px 11px;margin:6px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span><b>${esc(c.name)}</b> <span class="dim" style="font-size:11.5px">${esc(yrs)}に出場</span></span>
+          ${xBtn("dupName",c.key)}
+        </div>
+        <div class="dim" style="font-size:11.5px;margin-top:3px">
+          高校は3年なので同一人物ではありえません。
+          ${to? `名簿に <b>${esc(to.name)}</b>（${esc(to.fullName||to.name)}・${esc(String(to.enrollYear))}年入学${to.position?"・"+esc(to.position):""}）があります。` : ""}
+          前半${c.earlier.length}試合 / 後半${c.later.length}試合。
+        </div>
+        <div style="margin-top:6px">${btn}</div>
+      </div>`;
+    }).join("") : `<span class="dim" style="font-size:12px;color:var(--green)">問題なし</span>`;
+    return `<div style="border-bottom:1px solid var(--line);padding:9px 2px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span style="font-weight:600;font-size:14px">同姓別人の疑い</span>
+        <span class="num" style="color:${arr.length?'var(--amber)':'var(--green)'};font-weight:700">${arr.length?arr.length+'件':'OK'}</span>
+      </div>
+      <div class="dim" style="font-size:11px;margin:2px 0 5px">同じ名前が在籍しうる年数を超えて出場している＝別人の記録が混ざっている。</div>
+      ${body}
+      ${ign?`<div style="margin-top:4px"><span class="dim" style="font-size:11px">対象外 ${ign}件</span> <button type="button" class="mini ghost hiUndo" data-cat="dupName">戻す</button></div>`:""}
+    </div>`;
+  };
   el.innerHTML=
+    dupRow()+
     row("イニング未入力の試合",h.noInnings,"noInnings",gameLink("noInnings"),"スコアボード（回別得点）が無い試合。イニング分析の対象外になる。")+
     row("相手名なしの試合",h.noOpp,"noOpp",gameLink("noOpp"),"対戦相手が未設定の試合。")+
     row("入学年未設定の選手",h.noEnroll,"noEnroll",playerLink("noEnroll"),"学年・引退/卒業判定に必要。選手ページで設定できる。")+
@@ -9540,6 +9688,12 @@ function rowHasData(tr){
 function fillFormFromOcr(g){
   // editIdはリセットしない：編集中に再OCRしても新規追加にならず、上書き保存の対象を維持する
   // 方針: 手入力済みの値は絶対に潰さない。OCRは空欄のセルだけを埋める
+  /* 第156弾: 名字だけの表記が、卒業した同姓の先輩に吸い込まれるのを防ぐ。
+     いま在籍している同姓の選手が名簿にちょうど1人いるときだけ読み替える。 */
+  g=applyGenerationNames(g, nendoOf(DB.current, gameYear({date:g&&g.date})));
+  if(g.__genFixed && g.__genFixed.length){
+    toast(`同姓の在籍者に読み替えました: ${g.__genFixed.slice(0,3).join("、")}${g.__genFixed.length>3?` 他${g.__genFixed.length-3}件`:""}`);
+  }
   if((!$("#gDate").value || $("#gDate").dataset.auto==="1") && g.date){ $("#gDate").value=g.date; delete $("#gDate").dataset.auto; }
   if($("#gRs").value.trim()==="" && (g.runsFor??"")!=="") $("#gRs").value=g.runsFor;
   if($("#gRa").value.trim()==="" && (g.runsAgainst??"")!=="") $("#gRa").value=g.runsAgainst;
@@ -11060,6 +11214,23 @@ async function init(){
   { const handler=async e=>{
       const x=e.target.closest(".hix");
       if(x){ e.stopPropagation(); await hiAdd(x.dataset.cat, x.dataset.key); renderHealthCheck(); renderAudit(); toast("この指摘を対象外にしました"); return; }
+      /* 第156弾: 同姓別人の付け替え。**試合データの選手名そのものを書き換える**ので、
+         エイリアスと違って自動では戻せない。必ず対象の試合を見せてから実行する。 */
+      const sp=e.target.closest(".dupSplit");
+      if(sp){
+        const key=sp.dataset.key, cut=n(sp.dataset.cut), to=sp.dataset.to;
+        const c=sameNameConflicts().find(v=>v.key===key);
+        if(!c){ renderHealthCheck(); return; }
+        const list=c.later.map(r=>`  ${r.g.date||"日付なし"} ${r.season} 対${r.g.opponent||"?"}`).join("\n");
+        if(!confirm(`${cut}年度以降の次の${c.later.length}試合について、「${c.name}」を「${to}」に付け替えます。\n`
+          +`${cut}年度より前の${c.earlier.length}試合はそのまま残ります。\n\n${list}\n\n`
+          +`※ 試合データの選手名を書き換えます。自動では戻せないので、心配なら先にバックアップを書き出してください。`)) return;
+        const cnt=splitPlayerByYear(key, cut, to);
+        await saveDB();
+        render();
+        toast(`${cnt}件の記録を ${to} に付け替えました`);
+        return;
+      }
       const undo=e.target.closest(".hiUndo");
       if(undo){ await hiClear(undo.dataset.cat); renderHealthCheck(); renderAudit(); toast("対象外の設定を戻しました"); return; }
       const all=e.target.closest(".hiAll");
@@ -11134,6 +11305,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第144弾: 球数の後付け取り込み
   pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
   pitchCountForce, pcSkipHtml,
+  sameNameConflicts, splitPlayerByYear, activeSameNameFor, applyGenerationNames, ENROLL_SPAN_MAX,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
