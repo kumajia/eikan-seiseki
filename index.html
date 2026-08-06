@@ -1723,6 +1723,7 @@ async function loadDB(){
   return {data:null, corrupted:false};
 }
 async function saveDB(){
+  __dupNameCache=null;          // 選手構成が変わりうるので同名判定を作り直す（第157弾-5）
   const k=curKey();
   const s=JSON.stringify(DB);
   let ok=false;
@@ -1890,8 +1891,8 @@ function playerAppearanceYears(){
       const seen=new Set();
       for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
         const nm=String((p&&p.name)||"").trim(); if(!nm) continue;
-        const k=nameKey(nm); if(seen.has(k)) continue; seen.add(k);
-        if(!m.has(k)) m.set(k,{name:nm, years:new Set(), rows:[]});
+        const k=pidOf(p); if(seen.has(k)) continue; seen.add(k);   // 第157弾: 分離済みは別人として数える
+        if(!m.has(k)) m.set(k,{name:playerDisplayName(k,nm), years:new Set(), rows:[]});
         const e=m.get(k);
         if(y!=null) e.years.add(y);
         e.rows.push({nendo:y, season:sname, g});
@@ -1938,50 +1939,224 @@ function sameNameConflicts(){
 /* 指定した年度以降の出場を、別の選手名に付け替える。
    エイリアスと違い**試合データの選手名そのものを書き換える**ので、自動では戻せない。
    呼び出し側で必ず対象を見せて確認を取ること。 */
-function splitPlayerByYear(key, cutNendo, toName){
-  const to=String(toName||"").trim();
-  if(!key || !to || cutNendo==null) return 0;
-  let changed=0;
+/* 第158弾: 同じ選手が2つのキーに割れているのを見つける（第157弾の逆向き）。
+
+   栄冠ナインは同姓が**在学中に重なったときだけ**名前を1文字足す。
+   2000年入学の川島雄大は、1人のうちは「川島」、2001年に川島優斗が入ってきた時点から「川島雄」。
+   アプリから見ると別人になり、通算成績が割れる。しかも第157弾の検出には引っかからない
+   （川島は2000年度だけ、川島雄は2001〜2002年度で、どれも在籍しうる範囲に収まっているため）。
+
+   見分け方: 短い名前の出場が途切れた**後から**、それを伸ばした名前が現れ、
+   かつ**年度が一度も重なっていない**こと。重なっていれば同時に在籍した別人なので対象外。 */
+function nameSplitConflicts(){
+  const app=playerAppearanceYears();
+  const meta=DB.playerMeta||{};
+  const out=[];
+  for(const [key,e] of app){
+    if(isPid(key)) continue;                       // 分離済みは対象外
+    const ys=[...e.years].sort((a,b)=>a-b);
+    if(!ys.length) continue;
+    const yset=new Set(ys), last=ys[ys.length-1];
+    const ext=[]; let overlap=false;
+    for(const [k2,e2] of app){
+      if(k2===key || isPid(k2) || !String(k2).startsWith(String(key))) continue;
+      const ys2=[...e2.years].sort((a,b)=>a-b);
+      if(!ys2.length) continue;
+      if(ys2.some(y=>yset.has(y))){ overlap=true; break; }   // 同じ年度に両方いる＝別人
+      if(ys2[0]>last) ext.push({key:k2, name:e2.name, years:ys2,
+                                enrollYear:meta[k2]?.enrollYear ?? null, games:e2.rows.length});
+    }
+    if(overlap || !ext.length) continue;
+    /* 本人はどれか。短い名前で出ていた年度に在籍していた人でなければならない。
+       入学年度が分かっていれば大抵は一意に決まる。 */
+    const fits=ext.filter(x=>x.enrollYear!=null && x.enrollYear<=last && last<=x.enrollYear+ENROLL_SPAN_MAX);
+    const allKnown=ext.every(x=>x.enrollYear!=null);
+    if(allKnown && !fits.length) continue;         // 全員の入学年度が分かっていて誰も当てはまらない＝別人
+    out.push({key, name:e.name, years:ys, rows:e.rows, games:e.rows.length,
+              candidates:ext, suggest: fits.length===1? fits[0] : null});
+  }
+  return out.sort((a,b)=>String(a.key).localeCompare(String(b.key)));
+}
+/* 割れている記録を1人にまとめる。**エイリアスではなく pid を振る**。
+   エイリアスは「この名前は永久にあの人」という意味になるので、
+   両方が卒業したあとに同じ名字の新入生が来ると、その子まで吸い込んでしまう。
+   pid なら行ごとなので、割れていた年度の出場だけを結びつけられて将来に影響しない。 */
+function mergePlayerGeneration(fromKey, toKey){
+  if(!fromKey || !toKey || fromKey===toKey) return {moved:0, milestones:0};
+  DB.playerMeta=DB.playerMeta||{};
+  let moved=0;
+  for(const [,s] of Object.entries(DB.seasons||{}))
+    for(const g of (s.games||[])) for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+      if(!p || !p.name || pidOf(p)!==fromKey) continue;
+      p.pid=toKey; moved++;                        // 名前は書き換えない（表記はゲームどおり）
+    }
+  if(!moved) return {moved:0, milestones:0};
+  let msCnt=0;
+  for(const ms of (DB.milestones||[])){
+    if(!ms || ms.pid || nameKey(ms.player)!==fromKey) continue;
+    ms.pid=toKey; msCnt++;
+  }
+  // 名簿は寄せ先に統合する（寄せ先に無い項目だけ埋める。既にある情報は上書きしない）
+  const from=DB.playerMeta[fromKey]||{}, to=Object.assign({}, DB.playerMeta[toKey]||{});
+  for(const k of ["enrollYear","position","subPosition","fullName","number"])
+    if(to[k]==null && from[k]!=null) to[k]=from[k];
+  /* 表示名を決めておく。ゲームは区別が始まってからずっと長い方の表記を出すので、
+     そちらを採用する（在籍のほとんどがその表記のため）。 */
+  if(!to.name) to.name=String(playerDisplayName(toKey, toKey)||toKey).trim();
+  /* 第159弾: 寄せ元の表記も覚えておく。同じ人が「川島」「川島雄」の両方で
+     記録されうるので、以降どちらで取り込んでも自動で当たるようにする。 */
+  const fromNames=new Set([...(from.names||[]), from.name||"", isPid(fromKey)? "" : fromKey].filter(Boolean));
+  to.names=[...new Set([...(to.names||[]), ...fromNames])].filter(nm=>nameKeyRaw(nm)!==nameKeyRaw(to.name));
+  if(!to.names.length) delete to.names;
+  DB.playerMeta[toKey]=to;
+  delete DB.playerMeta[fromKey];
+  return {moved, milestones:msCnt};
+}
+/* 日付から年度を出す（4月始まり）。マイルストーンなど日付しか持たないものに使う。 */
+function nendoOfDate(dateStr){
+  const m=String(dateStr||"").match(/^(\d{4})-(\d{2})/);
+  if(!m) return null;
+  const y=+m[1], mo=+m[2];
+  return mo>=4 ? y : y-1;
+}
+/* 第157弾-3: 同姓別人を「名前の書き換え」ではなく「pidを振る」ことで分ける。
+
+   pidを振るのは**卒業した側**。ゲームは現役の子を卒業まで名字だけで出し続けるので、
+   名字（＝pidなし）を現役の子に残しておけば、以降の取り込みは何もしなくても正しく入る。
+   逆にすると新しい試合を取り込むたびに直し続けることになる。
+   卒業した側はもう試合が増えないので、pidを振っても手間が増えない。
+
+   名前を書き換えないので**表示は両方とも名字のまま**（表記通り）。
+   同じ試合に両方いても潰れようがないので、書き換え方式にあった同居の心配も無くなる。
+
+   opts.fromKey … 現役の子として手で作った名簿エントリ（例「森幸」）。
+                  その情報を名字側へ移し、出場が無ければ名簿から取り除く。 */
+function splitPlayerGeneration(key, cutNendo, opts){
+  const o=opts||{};
+  if(!key || cutNendo==null) return {moved:0, pid:"", milestones:0};
+  DB.playerMeta=DB.playerMeta||{};
+  const oldMeta=Object.assign({}, DB.playerMeta[key]||{});
+  const disp=String(o.displayName || playerDisplayName(key, key) || key).trim();
+  const pid=makePid(key, oldMeta.enrollYear);
+
+  let moved=0;
   for(const [sname,s] of Object.entries(DB.seasons||{})){
-    const y=nendoOf(sname); if(y==null || y<cutNendo) continue;
-    for(const g of (s.games||[])){
-      for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
-        if(!p || !p.name) continue;
-        if(nameKey(p.name)!==key) continue;
-        p.name=to; changed++;
-      }
+    const y=nendoOf(sname);
+    if(y==null || y>=cutNendo) continue;          // 区切りより前＝卒業した側
+    for(const g of (s.games||[])) for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+      if(!p || !p.name || pidOf(p)!==key) continue;
+      p.pid=pid; moved++;
     }
   }
-  return changed;
+  if(!moved) return {moved:0, pid:"", milestones:0};
+
+  // 通算節目も同じ区切りで振り分ける（名前だけだと今の子の記録に見えてしまう）
+  let msCnt=0;
+  for(const ms of (DB.milestones||[])){
+    if(!ms || ms.pid || nameKey(ms.player)!==key) continue;
+    const y=nendoOfDate(ms.date);
+    if(y!=null && y<cutNendo){ ms.pid=pid; msCnt++; }
+  }
+
+  // 卒業した側の名簿を pid へ移し、名字側は現役の子のものにする
+  DB.playerMeta[pid]=Object.assign({}, oldMeta, {name:disp});
+  const src=(o.fromKey && DB.playerMeta[o.fromKey]) ? DB.playerMeta[o.fromKey] : null;
+  DB.playerMeta[key]=Object.assign({}, src||{}, {name:disp});
+  if(o.fromKey && src){
+    // 手で作った仮の名簿エントリは、出場が無ければ役目を終えたので片付ける
+    const used=Object.values(DB.seasons||{}).some(s=>(s.games||[]).some(g=>
+      [...(g.batters||[]),...(g.pitchers||[])].some(p=>p&&p.name&&pidOf(p)===o.fromKey)));
+    if(!used) delete DB.playerMeta[o.fromKey];
+  }
+  return {moved, pid, milestones:msCnt};
 }
-/* 第156弾（予防側）: その年度に在籍している同姓の選手へ読み替える。
-   スコアボードは名字しか出さないので、放っておくと卒業した先輩の記録に合流する。
-   読み替えるのは次を**すべて**満たすときだけ。推測で書き先を決めない:
-     ・読んだ名前の選手が名簿にいて、入学年度が分かっていて、その年度には在籍していない（卒業済み）
-     ・同じ名字で始まる名簿選手のうち、その年度に在籍している人が**ちょうど1人**
-   候補が0人なら判断材料が無く、2人以上ならどちらか決められないので、どちらも触らない。 */
-function activeSameNameFor(rawName, nendo){
-  const meta=DB.playerMeta||{};
-  const k=nameKey(rawName); if(!k || nendo==null) return null;
-  const inSchool=v=>v && v.enrollYear!=null && v.enrollYear<=nendo && nendo<=v.enrollYear+ENROLL_SPAN_MAX;
-  const cur=meta[k];
-  if(!cur || cur.enrollYear==null || inSchool(cur)) return null;   // 現役なら読み替えない
-  const cand=Object.entries(meta).filter(([k2,v])=>k2!==k && String(k2).startsWith(String(k)) && inSchool(v));
-  if(cand.length!==1) return null;
-  return String(cand[0][1].name || cand[0][0]).trim() || null;
+/* 第159弾: 選手が「これまで表示されてきた表記」を全部持てるようにする。
+
+   栄冠は同姓が在学中に重なった時点で表記に1文字足すので、同じ人が
+   「川島」と「川島雄」の両方で記録されうる。どちらで来ても同じ人に引けるよう覚えておく。
+   第158弾でまとめたときにここへ記録すれば、以降は自動で当たる。 */
+function playerNameSet(key){
+  const m=(DB.playerMeta||{})[key]||{};
+  const s=new Set();
+  if(m.name) s.add(nameKeyRaw(m.name));
+  for(const nm of (m.names||[])) if(nm) s.add(nameKeyRaw(nm));
+  s.add(isPid(key) ? String(key).split("#")[0] : String(key));   // キー自体も表記のひとつ
+  s.delete("");
+  return s;
 }
-function applyGenerationNames(g, nendo){
+function rememberPlayerName(key, rawName){
+  const nm=String(rawName||"").trim();
+  if(!key || !nm) return false;
+  if(playerNameSet(key).has(nameKeyRaw(nm))) return false;
+  DB.playerMeta=DB.playerMeta||{};
+  const m=DB.playerMeta[key]=DB.playerMeta[key]||{};
+  m.names=[...(m.names||[]), nm];
+  return true;
+}
+/* 名前と年度から選手を決める。第159弾の肝。
+
+   **その名前で在籍中の選手が1人もいなければ、それは新入生**。
+   今までは在籍していない卒業生のキーに素直に入れていたので合流していた
+   （森・小島がまさにこれ）。ここで新しい選手として切り出せば、最初から混ざらない。
+
+   戻り値の pid が空なら「名前そのままでよい」。created は新しく作った場合。
+   決められないときは触らない（推測で振らない）。 */
+function resolvePlayerPid(rawName, nendo){
+  const k=nameKeyRaw(rawName);
+  if(!k || nendo==null) return {pid:"", created:false};
+  DB.playerMeta=DB.playerMeta||{};
+  const meta=DB.playerMeta;
+  const keys=new Set([...Object.keys(meta), ...playerRoster().map(([kk])=>kk)]);
+  const cands=[...keys].filter(k2=>playerNameSet(k2).has(k));
+  if(!cands.length) return {pid:"", created:false};       // 前例が無い名前＝名前そのままでよい
+
+  const inSchool=k2=>{
+    const ey=meta[k2]?.enrollYear;
+    return ey!=null && ey<=nendo && nendo<=ey+ENROLL_SPAN_MAX;
+  };
+  const enrolled=cands.filter(inSchool);
+  if(enrolled.length===1) return {pid:enrolled[0], created:false};
+  if(enrolled.length>1)   return {pid:"", created:false};  // 在籍が重なっていて決められない
+
+  const unknown=cands.filter(k2=>meta[k2]?.enrollYear==null);
+  if(unknown.length===1) return {pid:unknown[0], created:false};
+  if(unknown.length>1)   return {pid:"", created:false};
+
+  /* 新しく作るのは「その名前の選手が**全員すでに卒業している**」ときだけ。
+     まだ入学していない候補がいる場合は、入学年度の入力ミスやシーズン名のずれの方が
+     ありそうなので、新入生と決めつけずに何もしない。 */
+  const allGraduated=cands.every(k2=>{
+    const ey=meta[k2]?.enrollYear;
+    return ey!=null && ey+ENROLL_SPAN_MAX<nendo;
+  });
+  if(!allGraduated) return {pid:"", created:false};
+  const pid=makePid(k, nendo);
+  meta[pid]={name:String(rawName).trim(), enrollYear:null, names:[String(rawName).trim()]};
+  return {pid, created:true};
+}
+/* 第157弾-4 → 第159弾で強化: 取り込んだ出場行に pid を割り当てる。
+
+   pid を付けるのは**名前そのままでは正しく引けない行だけ**。
+   ほとんどの選手は名前＝同一性のままなので、データは無駄に太らない。
+   新しい選手を作った場合はその旨を返して画面で知らせる（黙って増やさない）。 */
+function applyPidsByYear(g, nendo){
   if(nendo==null || !g) return g;
-  const changed=[];
+  const marked=[], created=[], learned=[];
   const walk=arr=>(arr||[]).map(x=>{
-    if(!x || !x.name) return x;
-    const to=activeSameNameFor(x.name, nendo);
-    if(!to || to===String(x.name).trim()) return x;
-    changed.push(`${String(x.name).trim()}→${to}`);
-    return {...x, name:to};
+    if(!x || !x.name || x.pid) return x;         // 既にpidがある行は触らない
+    const r=resolvePlayerPid(x.name, nendo);
+    if(!r.pid) return x;
+    // その選手の表記として覚える（同じ人が別表記で出てきても引けるように）
+    if(rememberPlayerName(r.pid, x.name)) learned.push(`${String(x.name).trim()}=${r.pid}`);
+    if(r.created) created.push(String(x.name).trim());
+    if(r.pid===nameKey(x.name)) return x;        // 名前そのままで引けるならpidは要らない
+    marked.push(`${String(x.name).trim()}(${r.pid})`);
+    return {...x, pid:r.pid};
   });
   const out={...g, batters:walk(g.batters), pitchers:walk(g.pitchers), order:walk(g.order)};
-  out.__genFixed=[...new Set(changed)];
+  out.__pidMarked=[...new Set(marked)];
+  out.__pidCreated=[...new Set(created)];
+  out.__pidLearned=[...new Set(learned)];
   return out;
 }
 function healthCheckData(){
@@ -2002,10 +2177,11 @@ function healthCheckData(){
   const keepG=(cat,arr)=>arr.filter(x=>!hiHas(cat, x.g.id));
   const keepP=(cat,arr)=>arr.filter(([k])=>!hiHas(cat, k));
   const dupName=sameNameConflicts().filter(c=>!hiHas("dupName", c.key));
+  const splitName=nameSplitConflicts().filter(c=>!hiHas("splitName", c.key));
   return {total:allGames.length,
     noInnings:keepG("noInnings",noInnings), noOpp:keepG("noOpp",noOpp),
     noEnroll:keepP("noEnroll",noEnroll),    noPos:keepP("noPos",noPos),
-    dupName};
+    dupName, splitName};
 }
 function renderHealthCheck(){
   const el=$("#healthContent"); if(!el) return;
@@ -2045,17 +2221,17 @@ function renderHealthCheck(){
       const yrs=c.years.join("・")+"年度";
       const to=c.suggest;
       const btn=to
-        ? `<button type="button" class="mini primary dupSplit" data-key="${esc(c.key)}" data-cut="${esc(String(c.cut))}" data-to="${esc(to.name)}">${esc(String(c.cut))}年度以降の${c.later.length}試合を ${esc(to.name)} に付け替える</button>`
-        : `<span class="dim" style="font-size:11.5px">付け替え先の候補が名簿にありません。先に名簿へ今の選手を追加してください</span>`;
+        ? `<button type="button" class="mini primary dupSplit" data-key="${esc(c.key)}" data-cut="${esc(String(c.cut))}">2人に分ける（${esc(String(c.cut))}年度より前の${c.earlier.length}試合を卒業した方へ）</button>`
+        : `<span class="dim" style="font-size:11.5px">名簿に今の選手の情報がありませんが、そのままでも分けられます。<button type="button" class="mini ghost dupSplit" data-key="${esc(c.key)}" data-cut="${esc(String(c.cut))}">2人に分ける</button></span>`;
       return `<div style="border-left:3px solid var(--amber);background:var(--panel);border-radius:0 8px 8px 0;padding:9px 11px;margin:6px 0">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <span><b>${esc(c.name)}</b> <span class="dim" style="font-size:11.5px">${esc(yrs)}に出場</span></span>
           ${xBtn("dupName",c.key)}
         </div>
         <div class="dim" style="font-size:11.5px;margin-top:3px">
-          高校は3年なので同一人物ではありえません。
-          ${to? `名簿に <b>${esc(to.name)}</b>（${esc(to.fullName||to.name)}・${esc(String(to.enrollYear))}年入学${to.position?"・"+esc(to.position):""}）があります。` : ""}
-          前半${c.earlier.length}試合 / 後半${c.later.length}試合。
+          高校は3年なので同一人物ではありえません。表示は分けたあとも両方「${esc(c.name)}」のままです。
+          ${to? `名簿の <b>${esc(to.key)}</b>（${esc(to.fullName||to.key)}・${esc(String(to.enrollYear))}年入学${to.position?"・"+esc(to.position):""}）を今の選手の情報として使います。` : ""}
+          卒業した方${c.earlier.length}試合 / 今の選手${c.later.length}試合。
         </div>
         <div style="margin-top:6px">${btn}</div>
       </div>`;
@@ -2070,8 +2246,41 @@ function renderHealthCheck(){
       ${ign?`<div style="margin-top:4px"><span class="dim" style="font-size:11px">対象外 ${ign}件</span> <button type="button" class="mini ghost hiUndo" data-cat="dupName">戻す</button></div>`:""}
     </div>`;
   };
+  /* 第158弾: 1人が2つに割れている疑い。栄冠は同姓が重なった時点で名前を1文字足すので、
+     その前後で別人になってしまう。まとめる先は「その年度に在籍していた方」。 */
+  const splitRow=()=>{
+    const arr=h.splitName||[];
+    const ign=hiList("splitName").length;
+    const body=arr.length? arr.map(c=>{
+      const to=c.suggest;
+      const cands=c.candidates.map(x=>`${esc(x.name)}（${x.enrollYear!=null?esc(String(x.enrollYear))+"年入学・":""}${x.years.join("・")}年度）`).join("、");
+      const btn=to
+        ? `<button type="button" class="mini primary splitMerge" data-from="${esc(c.key)}" data-to="${esc(to.key)}">${esc(c.name)}の${c.games}試合を ${esc(to.name)} にまとめる</button>`
+        : `<span class="dim" style="font-size:11.5px">どちらの選手か決められません。名簿で入学年度を入れると判別できます</span>`;
+      return `<div style="border-left:3px solid var(--amber);background:var(--panel);border-radius:0 8px 8px 0;padding:9px 11px;margin:6px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span><b>${esc(c.name)}</b> <span class="dim" style="font-size:11.5px">${c.years.join("・")}年度に${c.games}試合</span></span>
+          ${xBtn("splitName",c.key)}
+        </div>
+        <div class="dim" style="font-size:11.5px;margin-top:3px">
+          出場が途切れたあとに ${cands} が現れています。同姓が重なって表記が変わった可能性があります。
+        </div>
+        <div style="margin-top:6px">${btn}</div>
+      </div>`;
+    }).join("") : `<span class="dim" style="font-size:12px;color:var(--green)">問題なし</span>`;
+    return `<div style="border-bottom:1px solid var(--line);padding:9px 2px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span style="font-weight:600;font-size:14px">1人が2つに割れている疑い</span>
+        <span class="num" style="color:${arr.length?'var(--amber)':'var(--green)'};font-weight:700">${arr.length?arr.length+'件':'OK'}</span>
+      </div>
+      <div class="dim" style="font-size:11px;margin:2px 0 5px">同姓が在学中に重なると表記に1文字増えるため、その前後で別人として数えられてしまう。</div>
+      ${body}
+      ${ign?`<div style="margin-top:4px"><span class="dim" style="font-size:11px">対象外 ${ign}件</span> <button type="button" class="mini ghost hiUndo" data-cat="splitName">戻す</button></div>`:""}
+    </div>`;
+  };
   el.innerHTML=
     dupRow()+
+    splitRow()+
     row("イニング未入力の試合",h.noInnings,"noInnings",gameLink("noInnings"),"スコアボード（回別得点）が無い試合。イニング分析の対象外になる。")+
     row("相手名なしの試合",h.noOpp,"noOpp",gameLink("noOpp"),"対戦相手が未設定の試合。")+
     row("入学年未設定の選手",h.noEnroll,"noEnroll",playerLink("noEnroll"),"学年・引退/卒業判定に必要。選手ページで設定できる。")+
@@ -2230,6 +2439,40 @@ function unmergePlayerAlias(fromRaw){
   }
   return false;
 }
+/* ---------- 第157弾: 選手の同一性を「名前」から切り離す ----------
+
+   栄冠ナインは、同じ名字の選手が**在学中に重なっているときだけ**名前を1文字足して区別する
+   （石井七・中村舜など）。重ならなければ先輩も後輩も同じ「森」と表示される。
+   つまり名前を同一性にしている限り、代をまたいだ同姓は必ずぶつかる。表示名では区別できない。
+
+   そこで出場の行に pid（その選手の番号）を持たせ、**同一性は pid、表示は name** に分ける。
+   pid が無い行は今まで通り名前から作るので、既存データの集計結果は1件も変わらない。
+   （エイリアスは「表記ゆれを同じ人にまとめる」仕組みで、こちらは「同じ表記を別人に分ける」仕組み。
+     向きが逆なので併存させる。pid が振られている行にはエイリアスを適用しない） */
+function pidOf(row){
+  if(!row) return "";
+  const p=String(row.pid||"").trim();
+  return p || nameKey(row.name);
+}
+/* 表示名。表記通り（森は森のまま）にするため、名簿に持たせた name を優先し、
+   無ければ行に書かれている名前をそのまま使う。 */
+function playerDisplayName(pid, fallback){
+  const m=(DB.playerMeta||{})[pid];
+  const nm=(m && String(m.name||"").trim()) || String(fallback||"").trim();
+  return nm || String(pid||"");
+}
+/* 新しい pid を作る。追いかけやすさを優先して「名字#入学年度」の形にする。
+   '#' は選手名に現れないので、名前から作られるキーとぶつからない。 */
+function makePid(nameOrKey, enrollYear){
+  const base=nameKeyRaw(nameOrKey)||"選手";
+  const meta=DB.playerMeta||{};
+  const stem=`${base}#${enrollYear ?? "x"}`;
+  let cand=stem, i=2;
+  while(meta[cand]) cand=`${stem}-${i++}`;
+  return cand;
+}
+function isPid(key){ return String(key||"").includes("#"); }
+
 function rawPlayerRoster(){
   const map=new Map();
   for(const [,s] of Object.entries(DB.seasons)){
@@ -2338,8 +2581,8 @@ function aggBatting(games){
   const m=new Map();
   for(const g of games) for(const b of (g.batters||[])){
     if(!b.name)continue;
-    const key=nameKey(b.name);
-    if(!m.has(key))m.set(key,{name:String(b.name).trim(),AB:0,R:0,H:0,"2B":0,"3B":0,HR:0,RBI:0,SO:0,BB:0,SH:0,SB:0,GDP:0,E:0,G:0});
+    const key=pidOf(b);                       // 第157弾: 同一性はpid（pidが無ければ従来どおり名前）
+    if(!m.has(key))m.set(key,{pid:key,name:playerDisplayName(key,b.name),AB:0,R:0,H:0,"2B":0,"3B":0,HR:0,RBI:0,SO:0,BB:0,SH:0,SB:0,GDP:0,E:0,G:0});
     const t=m.get(key);t.G++;
     for(const k of["AB","R","H","2B","3B","HR","RBI","SO","BB","SH","SB","GDP","E"])t[k]+=n(b[k]);
   }
@@ -2364,8 +2607,8 @@ function aggPitching(games){
   const m=new Map();
   for(const g of games) for(const p of (g.pitchers||[])){
     if(!p.name)continue;
-    const key=nameKey(p.name);
-    if(!m.has(key))m.set(key,{name:String(p.name).trim(),outs:0,P:0,outsWithP:0,GwithP:0,BF:0,H:0,K:0,BB:0,R:0,ER:0,WP:0,HR:0,W:0,G:0});
+    const key=pidOf(p);                       // 第157弾: 同一性はpid
+    if(!m.has(key))m.set(key,{pid:key,name:playerDisplayName(key,p.name),outs:0,P:0,outsWithP:0,GwithP:0,BF:0,H:0,K:0,BB:0,R:0,ER:0,WP:0,HR:0,W:0,G:0});
     const t=m.get(key);t.G++;
     t.outs+=ip2outs(p.IP);
     for(const k of["P","BF","H","K","BB","R","ER","WP","HR"])t[k]+=n(p[k]);
@@ -2644,7 +2887,7 @@ function leaderKpisHtml(brows,gameCount){
   return LEADER_DEFS.map(([key,label,fmt])=>{
     const leader=[...c].sort((a,b)=>b[key]-a[key])[0];
     const val= fmt==="avg3"? avg3(leader[key]) : leader[key];
-    return kpi(label,val,"a",esc(fullNameOf(nameKey(leader.name),leader.name))+note);
+    return kpi(label,val,"a",esc(fullNameOf(pidOf(leader),leader.name))+note);
   }).join("");
 }
 
@@ -2691,7 +2934,7 @@ function battingTableHtml(brows,T,sort,detailed){
   let h=`<thead><tr><th class="name" data-key="name" title="選手名">選手${sortArrow(sort,"name")}</th>`+
     bcols.map(c=>th_(c[0],c[1],sort)).join("")+
     ccols.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
-  const batRow=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
+  const batRow=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(pidOf(r))}">${esc(r.name)}</span>${metaMarks(pidOf(r))}</td>`+
       bcols.map(c=>`<td class="num${c[0]==='HR'&&r.HR&&!dim?' hi':''}">${r[c[0]]||( r[c[0]]===0?'0':'')}</td>`).join("")+
       ccols.map(c=>{
         const v=r[c[0]];
@@ -2725,7 +2968,7 @@ function pitchingTableHtml(prows,sort,detailed,teamG){
   let h=`<thead><tr><th class="name" data-key="name" title="投手名">選手${sortArrow(sort,"name")}</th>`+
     pcols.map(c=>c[0]==='IPstr'? th_("ipNum",c[1],sort) : th_(c[0],c[1],sort)).join("")+
     pccols.map(c=>th_(c[0],c[1],sort)).join("")+`</tr></thead><tbody>`;
-  const pitRowHtml=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(r.name))}">${esc(r.name)}</span>${metaMarks(nameKey(r.name))}</td>`+
+  const pitRowHtml=(r,dim)=>`<tr${dim?' class="underqual"':''}><td class="name"><span class="plink" role="link" tabindex="0" data-key="${esc(pidOf(r))}">${esc(r.name)}</span>${metaMarks(pidOf(r))}</td>`+
       // 第142弾: 球数を取り込む前の試合は0になる。「0球投げた」と読めてしまうので「-」にする
       pcols.map(c=>c[0]==='P'
         ? `<td class="num">${n(r.P)? r.P : '-'}</td>`
@@ -3046,7 +3289,7 @@ function renderBestNine(){
   const meta = DB.playerMeta || {};
   
   allBat.forEach(b => {
-    const key = nameKey(b.name);
+    const key = pidOf(b);
     const pMeta = meta[key] || {};
     let pos = (pMeta.position || "").trim();
     if(pos === "左" || pos === "中" || pos === "右" || pos.includes("外")) pos = "外";
@@ -3070,7 +3313,7 @@ function renderBestNine(){
   });
   
   allPit.forEach(p => {
-    const key = nameKey(p.name);
+    const key = pidOf(p);
     const pMeta = meta[key] || {};
     let pos = (pMeta.position || "").trim();
     if(pos.includes("投")) pos = "投";
@@ -3152,7 +3395,7 @@ function renderBestNine(){
   const cardsHtml = cardsInfo.map(c => {
     const b = c.pos === "外" ? bestNine["外"][c.outIdx] : bestNine[c.pos];
     const isUnderReq = !b.isEmpty && !b.isReqMet;
-    const pKey = nameKey(b.name);
+    const pKey = pidOf(b);
     const nameStr = fullNameOf(pKey, b.name) + (isUnderReq ? " (規定未満)" : "");
     const styleAttr = isUnderReq ? `style="opacity: 0.65;"` : "";
     const extraClass = c.isPitcher ? " pitcher" : "";
@@ -3178,6 +3421,7 @@ function renderBestNine(){
 
 function render(){
   __aggCache={bat:new Map(),pit:new Map()}; // このrender()呼び出し中だけ集計結果を使い回す（詳細はaggBatting定義のコメント参照）
+  __dupNameCache=null;                      // 同名判定も同じ寿命で作り直す（第157弾）
   try{
   const games=curGames();
   // record header
@@ -3217,7 +3461,7 @@ function render(){
       msList.innerHTML = sortedMs.map(ms => {
         return `<div style="display:flex;justify-content:space-between;font-size:13px;border-bottom:1px solid var(--line);padding:6px 2px">
           <span>
-            <span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(ms.player))}">${esc(ms.player)}</span>
+            <span class="plink" role="link" tabindex="0" data-key="${esc(ms.pid || nameKey(ms.player))}">${esc(ms.player)}</span>
             <span style="margin-left:8px;font-weight:bold;color:var(--amber);">${esc(ms.label)}達成</span>
           </span>
           <span class="glink num" role="link" tabindex="0" data-gid="${esc(String(ms.gameId))}" style="font-size:12px">${esc(ms.date || "日付なし")}</span>
@@ -3682,7 +3926,7 @@ function relayAnalysis(){
         pairCount.set(k,(pairCount.get(k)||0)+1);
       }
       for(const p of ps){
-        const key=nameKey(p.name);
+        const key=pidOf(p);
         if(!appear.has(key)) appear.set(key,{name:String(p.name).trim(),dates:[]});
         if(g.date) appear.get(key).dates.push(g.date);
       }
@@ -3902,8 +4146,9 @@ function playerRoster(){
   //   ここまで絞ると「表には出るのに選手名鑑には遷移できない」選手ができてしまうバグになる）
   for(const [,s] of Object.entries(DB.seasons)){
     for(const g of (s.games||[])){
-      for(const b of (g.batters||[])) if(b.name) map.set(nameKey(b.name),String(b.name).trim());
-      for(const p of (g.pitchers||[])) if(p.name) map.set(nameKey(p.name),String(p.name).trim());
+      // 第157弾: 同一性はpid。表示名は名簿の name を優先する（表記通りに出すため）
+      for(const b of (g.batters||[])) if(b.name){ const k=pidOf(b); map.set(k,playerDisplayName(k,b.name)); }
+      for(const p of (g.pitchers||[])) if(p.name){ const k=pidOf(p); map.set(k,playerDisplayName(k,p.name)); }
     }
   }
   /* 試合記録が無くても、名簿登録済み（nameを持つplayerMeta）の選手は名簿に含める（新入生対応）。
@@ -4002,8 +4247,8 @@ function findPlayerBySearch(qraw){
 async function drawPlayerCard(key){
   try{
     const games=careerGamesForKey(key);
-    const b=aggBatting(games).find(r=>nameKey(r.name)===key)||null;
-    const p=aggPitching(games).find(r=>nameKey(r.name)===key)||null;
+    const b=aggBatting(games).find(r=>pidOf(r)===key)||null;
+    const p=aggPitching(games).find(r=>pidOf(r)===key)||null;
     const hit=playerRoster().find(([k])=>k===key);
     const nm=hit?hit[1]:""; const full=fullNameOf(key,nm);
     const meta=(DB.playerMeta||{})[key]||{};
@@ -4059,8 +4304,8 @@ async function drawGenerationCard(ey){
     if(!members.length){ toast("この代の選手がいません",true); return; }
     const cells=members.map(([key,nm])=>{
       const g=careerGamesForKey(key);
-      const b=aggBatting(g).find(r=>nameKey(r.name)===key)||null;
-      const p=aggPitching(g).find(r=>nameKey(r.name)===key)||null;
+      const b=aggBatting(g).find(r=>pidOf(r)===key)||null;
+      const p=aggPitching(g).find(r=>pidOf(r)===key)||null;
       return {key,nm,full:fullNameOf(key,nm),meta:DB.playerMeta[key]||{},b,p};
     });
     // 主将を先頭、その後は出場数の多い順
@@ -4128,8 +4373,8 @@ function comparePlayersHtml(keyA,keyB){
     const games=careerGamesForKey(k);
     return {
       k, nm:nmOf(k), full:fullNameOf(k,nmOf(k)),
-      b:aggBatting(games).find(r=>nameKey(r.name)===k)||null,
-      p:aggPitching(games).find(r=>nameKey(r.name)===k)||null
+      b:aggBatting(games).find(r=>pidOf(r)===k)||null,
+      p:aggPitching(games).find(r=>pidOf(r)===k)||null
     };
   });
   const [A,B]=data;
@@ -4178,7 +4423,7 @@ function careerGamesForKey(key){
   const out=[];
   for(const [,s] of seasonEntries()){
     for(const g of s.games){
-      if((g.batters||[]).some(b=>nameKey(b.name)===key) || (g.pitchers||[]).some(p=>nameKey(p.name)===key)) out.push(g);
+      if((g.batters||[]).some(b=>pidOf(b)===key) || (g.pitchers||[]).some(p=>pidOf(p)===key)) out.push(g);
     }
   }
   return out;
@@ -4270,8 +4515,8 @@ function renderEnrollYearTab(){
       const meta=DB.playerMeta[key]||{};
       const posStr=[meta.position, meta.subPosition].filter(Boolean).join("/"); // フルネームを守備位置に混ぜない（「森下 翔太/外野」が守備位置に見える問題）
       const cGames=careerGamesForKey(key);
-      const cb=aggBatting(cGames).find(r=>nameKey(r.name)===key);
-      const cp=aggPitching(cGames).find(r=>nameKey(r.name)===key);
+      const cb=aggBatting(cGames).find(r=>pidOf(r)===key);
+      const cp=aggPitching(cGames).find(r=>pidOf(r)===key);
       const parts=[];
       if(cb && cb.G) parts.push(`打率${avg3(cb.AVG)} / ${cb.G}試合`);
       if(cp && cp.G) parts.push(`防御率${cp.ipNum?cp.ERA.toFixed(2):'-'} / ${cp.G}登板`);
@@ -4676,7 +4921,7 @@ function playerLogTableHtml(rows,enrollYear){
 function battingOrderBreakdown(key,games){
   const counts=new Map(); let subCount=0;
   for(const g of games){
-    const b=(g.batters||[]).find(x=>nameKey(x.name)===key);
+    const b=(g.batters||[]).find(x=>pidOf(x)===key);
     if(!b || b.order==null || b.order==="") continue;
     if(b.sub) subCount++;
     else counts.set(b.order,(counts.get(b.order)||0)+1);
@@ -4705,7 +4950,7 @@ function subBattingBreakdown(key,games){
   const t={AB:0,H:0,"2B":0,"3B":0,HR:0,RBI:0,BB:0,SH:0,SB:0,SO:0,G:0};
   for(const g of games){
     for(const b of (g.batters||[])){
-      if(nameKey(b.name)!==key || !b.sub) continue;
+      if(pidOf(b)!==key || !b.sub) continue;
       t.G++;
       for(const k of ["AB","H","2B","3B","HR","RBI","BB","SH","SB","SO"]) t[k]+=n(b[k]);
     }
@@ -4747,7 +4992,7 @@ function pitcherQualityStats(key,games){
   let G=0, GS=0, QS=0, CG=0, SHO=0, SV=0, HLD=0;
   for(const g of games){
     const pit=(g.pitchers||[]).filter(x=>x && x.name);
-    const i=pit.findIndex(x=>nameKey(x.name)===key);
+    const i=pit.findIndex(x=>pidOf(x)===key);
     if(i<0) continue;
     G++;                  // 総登板数（救援を含む・表示用）
     if(i>0 && !pit[i].W && n(g.runsFor)>n(g.runsAgainst)){
@@ -4781,8 +5026,8 @@ function playerGrowthData(key){
   for(const [sname,s] of seasonEntries()){
     const y=getSeasonYear(sname); if(y==null) continue;
     for(const g of (s.games||[])){
-      const b=(g.batters||[]).find(x=>nameKey(x.name)===key);
-      const p=(g.pitchers||[]).find(x=>nameKey(x.name)===key);
+      const b=(g.batters||[]).find(x=>pidOf(x)===key);
+      const p=(g.pitchers||[]).find(x=>pidOf(x)===key);
       if(!b && !p) continue;
       if(!yearly[y]) yearly[y]={year:y,AB:0,H:0,outs:0,ER:0};
       if(b){ yearly[y].AB+=n(b.AB); yearly[y].H+=n(b.H); }
@@ -4848,23 +5093,23 @@ function renderPlayerContent(){
   const seasonBatRows=[], seasonPitRows=[], logRows=[], careerGames=[];
   for(const [sname,s] of seasonEntries()){
     const gamesWithPlayer = s.games.filter(g=>
-      (g.batters||[]).some(b=>nameKey(b.name)===key) || (g.pitchers||[]).some(p=>nameKey(p.name)===key));
+      (g.batters||[]).some(b=>pidOf(b)===key) || (g.pitchers||[]).some(p=>pidOf(p)===key));
     if(!gamesWithPlayer.length) continue;
     const sYear = seasonYearOf(sname, gamesWithPlayer);
     const sGrade = gradeInfo(enrollYear, sname, sYear).label;
-    if(gamesWithPlayer.some(g=>(g.batters||[]).some(b=>nameKey(b.name)===key))){
-      const brow=aggBatting(gamesWithPlayer).find(r=>nameKey(r.name)===key);
+    if(gamesWithPlayer.some(g=>(g.batters||[]).some(b=>pidOf(b)===key))){
+      const brow=aggBatting(gamesWithPlayer).find(r=>pidOf(r)===key);
       if(brow) seasonBatRows.push({...brow, season:sname, _year:sYear, _grade:sGrade});
     }
-    if(gamesWithPlayer.some(g=>(g.pitchers||[]).some(p=>nameKey(p.name)===key))){
-      const prow=aggPitching(gamesWithPlayer).find(r=>nameKey(r.name)===key);
+    if(gamesWithPlayer.some(g=>(g.pitchers||[]).some(p=>pidOf(p)===key))){
+      const prow=aggPitching(gamesWithPlayer).find(r=>pidOf(r)===key);
       if(prow) seasonPitRows.push({...prow, season:sname, _year:sYear, _grade:sGrade});
     }
     for(const g of gamesWithPlayer){
       logRows.push({
         date:g.date||"", season:sname, opponent:g.opponent||"", _gid:g.id,
-        b:(g.batters||[]).find(x=>nameKey(x.name)===key),
-        p:(g.pitchers||[]).find(x=>nameKey(x.name)===key)
+        b:(g.batters||[]).find(x=>pidOf(x)===key),
+        p:(g.pitchers||[]).find(x=>pidOf(x)===key)
       });
     }
     careerGames.push(...gamesWithPlayer);
@@ -4872,8 +5117,8 @@ function renderPlayerContent(){
   // 日付文字列(ISO形式)は素直に文字列比較すれば時系列順になる。春大会は翌年ラベルでも実際の試合日で正しく並ぶ
   logRows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const lastLog = logRows[logRows.length-1];
-  const careerBat=aggBatting(careerGames).find(r=>nameKey(r.name)===key);
-  const careerPit=aggPitching(careerGames).find(r=>nameKey(r.name)===key);
+  const careerBat=aggBatting(careerGames).find(r=>pidOf(r)===key);
+  const careerPit=aggPitching(careerGames).find(r=>pidOf(r)===key);
   const dispName = careerBat? careerBat.name : (careerPit? careerPit.name : ((playerRoster().find(([k])=>k===key)||[])[1]||""));
   // 学年/引退判定は「本人の最終出場」じゃなくて「DB全体で一番新しい試合」を基準にする
   // (退部・引退後は本人の記録が増えんから、本人基準やと引退・卒業に一生ならへん)
@@ -4952,7 +5197,7 @@ function renderPlayerContent(){
     }
   }
 
-  const myMilestones = (DB.milestones || []).filter(ms => nameKey(ms.player) === key)
+  const myMilestones = (DB.milestones || []).filter(ms => (ms.pid || nameKey(ms.player)) === key)
     .sort((a,b) => String(b.date).localeCompare(String(a.date)));
   if(myMilestones.length){
     let msList = myMilestones.map(ms => {
@@ -5031,12 +5276,12 @@ async function exportPlayerCard(key) {
 
   const careerGames = [];
   for (const [, s] of seasonEntries()) {
-    const g = s.games.filter(g => (g.batters||[]).some(b=>nameKey(b.name)===key) || (g.pitchers||[]).some(p=>nameKey(p.name)===key));
+    const g = s.games.filter(g => (g.batters||[]).some(b=>pidOf(b)===key) || (g.pitchers||[]).some(p=>pidOf(p)===key));
     careerGames.push(...g);
   }
 
-  const careerBat=aggBatting(careerGames).find(r=>nameKey(r.name)===key);
-  const careerPit=aggPitching(careerGames).find(r=>nameKey(r.name)===key);
+  const careerBat=aggBatting(careerGames).find(r=>pidOf(r)===key);
+  const careerPit=aggPitching(careerGames).find(r=>pidOf(r)===key);
   const dispName = careerBat? careerBat.name : (careerPit? careerPit.name : ((playerRoster().find(([k])=>k===key)||[])[1]||""));
   
   const latestOverall=latestGameGlobally();
@@ -5110,7 +5355,7 @@ async function exportPlayerCard(key) {
   html += `</div>`;
 
   // --- マイルストーン（達成記録）---
-  const myMilestones = (DB.milestones || []).filter(ms => nameKey(ms.player) === key)
+  const myMilestones = (DB.milestones || []).filter(ms => (ms.pid || nameKey(ms.player)) === key)
     .sort((a,b) => String(b.date).localeCompare(String(a.date)));
   if (myMilestones.length) {
     html += `<div style="padding:0 24px 16px;">`;
@@ -5292,7 +5537,7 @@ function renderArchive(){
   const title=latestYear?`${latestYear}年の栄冠ドラマ`:`最新シーズンの栄冠ドラマ`;
   const record=`${T.G}試合で${T.W}勝${T.L}敗${T.D?T.D+"分":""}`;
   const champText=champs.length?`決勝を${champs.length}勝して優勝をつかんだ。`:`次の大会で、新しい1ページを刻もう。`;
-  const leaderText=bat?`打線をけん引したのは${esc(fullNameOf(nameKey(bat.name),bat.name))}（${avg3(bat.AVG)} / OPS ${avg3(bat.OPS)}）。`:"選手の記録がそろうと、ここにシーズンの主役が現れる。";
+  const leaderText=bat?`打線をけん引したのは${esc(fullNameOf(pidOf(bat),bat.name))}（${avg3(bat.AVG)} / OPS ${avg3(bat.OPS)}）。`:"選手の記録がそろうと、ここにシーズンの主役が現れる。";
   const ranked=rows.map(r=>({...r,...archiveGameScore(r)})).sort((a,b)=>b.score-a.score||String(b.g.date||"").localeCompare(String(a.g.date||""))).slice(0,5);
   el.innerHTML=`
     <div class="archive-story">
@@ -5574,7 +5819,29 @@ function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 
 /* ---------- 表彰タブ（シーズン表彰式＋連続試合安打） ---------- */
 let awardSeasonPick=null; // 表彰式で見てるシーズン（未選択ならDB.current優先）
-function plinkHtml(key,name){ return `<span class="plink" role="link" tabindex="0" data-key="${esc(key)}">${esc(fullNameOf(key,name))}</span>`; }
+/* 第157弾-5: 同じ表示名の選手が2人以上いるときだけ入学年度を添えて見分けられるようにする。
+   ふだんは表記どおり「森」のまま出したいので、**重複しているときに限る**。
+   結果はrender()ごとに使い回す（名簿の走査を選手名の数だけ繰り返さないため）。 */
+let __dupNameCache=null;
+function dupDisplayNameSet(){
+  if(__dupNameCache) return __dupNameCache;
+  const cnt=new Map();
+  for(const [,nm] of playerRoster()) cnt.set(nm,(cnt.get(nm)||0)+1);
+  __dupNameCache=new Set([...cnt.entries()].filter(([,c])=>c>1).map(([nm])=>nm));
+  return __dupNameCache;
+}
+function invalidateDupNameCache(){ __dupNameCache=null; }
+function playerQualifier(key,name){
+  const nm=playerDisplayName(key,name);
+  if(!nm || !dupDisplayNameSet().has(nm)) return "";
+  const ey=(DB.playerMeta||{})[key]?.enrollYear;
+  return ey==null? "" : `（${ey}年入学）`;
+}
+function plinkHtml(key,name){
+  const q=playerQualifier(key,name);
+  return `<span class="plink" role="link" tabindex="0" data-key="${esc(key)}">${esc(fullNameOf(key,name))}`
+    +(q?`<span class="dim" style="font-size:.85em">${esc(q)}</span>`:"")+`</span>`;
+}
 // #12 背番号・主将マーク: 名簿・成績表・ベスト9などの選手名の脇に小さく表示する
 function metaMarks(key){
   const m=(DB.playerMeta||{})[key]||{};
@@ -5590,7 +5857,7 @@ function computeSeasonAwards(games){
   const paMin=teamG*2, ipMin=teamG;
   const pick=(rows,cmp)=>rows.length? [...rows].sort(cmp)[0] : null;
   const awards=[];
-  const add=(label,r,foot,ref)=>{ if(r) awards.push({label:label+(ref?"（参考）":""),key:nameKey(r.name),name:r.name,foot}); else awards.push({label,key:null,name:"該当なし",foot:""}); };
+  const add=(label,r,foot,ref)=>{ if(r) awards.push({label:label+(ref?"（参考）":""),key:pidOf(r),name:r.name,foot}); else awards.push({label,key:null,name:"該当なし",foot:""}); };
   // MVP: 規定の75%（打者）/50%（投手）以上に絞って総合スコア最大（暫定式）
   const batCand=bat.filter(r=>r.PA>=Math.ceil(paMin*0.75));
   const pitCand=pit.filter(r=>r.ipNum>=ipMin*0.5);
@@ -5623,7 +5890,7 @@ function hitStreaks(){
     for(const b of (g.batters||[])){
       if(!b.name) continue;
       if(!n(b.AB)) continue; // 打数0（四球のみ等）は継続も途切れもしない
-      const k=nameKey(b.name); if(!k) continue;
+      const k=pidOf(b); if(!k) continue;
       if(!map.has(k)) map.set(k,{key:k,name:String(b.name).trim(),best:0,bestStart:"",bestEnd:"",cur:0,curStart:"",lastDate:""});
       const t=map.get(k); t.lastDate=g.date||t.lastDate;
       if(n(b.H)>0){
@@ -5704,14 +5971,14 @@ function recordRankings(){
         if(!b.name) continue;
         for(const key of ["H","HR","RBI"]){
           const v=n(b[key]);
-          if(v>0) acc[key].push({key:nameKey(b.name),name:String(b.name).trim(),v,date:g.date||"",opp:g.opponent||"",gid:g.id});
+          if(v>0) acc[key].push({key:pidOf(b),name:String(b.name).trim(),v,date:g.date||"",opp:g.opponent||"",gid:g.id});
         }
       }
       for(const p of (g.pitchers||[])){
         if(!p.name) continue;
         for(const key of ["K","P"]){
           const v=n(p[key]);
-          if(v>0) acc[key].push({key:nameKey(p.name),name:String(p.name).trim(),v,date:g.date||"",opp:g.opponent||"",gid:g.id});
+          if(v>0) acc[key].push({key:pidOf(p),name:String(p.name).trim(),v,date:g.date||"",opp:g.opponent||"",gid:g.id});
         }
       }
     }
@@ -5961,7 +6228,7 @@ function buildNenkanHtml(scope){
     if(!gs.length) continue;
     const st=teamTotals(gs);
     const topBat=aggBatting(gs).filter(hasPA).sort((a,b)=>b.OPS-a.OPS||b.H-a.H)[0];
-    const topLine=topBat? `打線の中心：${esc(fullNameOf(nameKey(topBat.name),topBat.name))}（${avg3(topBat.AVG)} / OPS ${avg3(topBat.OPS)} / ${topBat.HR}本）` : "";
+    const topLine=topBat? `打線の中心：${esc(fullNameOf(pidOf(topBat),topBat.name))}（${avg3(topBat.AVG)} / OPS ${avg3(topBat.OPS)} / ${topBat.HR}本）` : "";
     seasonRows+=`<div style="margin-bottom:5mm">
       <h3 class="nk-h3">${esc(sname)}</h3>
       <div class="nk-row"><span>${gs.length}試合　<span class="nk-win">${st.W}勝</span> ${st.L}敗 ${st.D?st.D+"分":""}</span><span class="nk-dim">得点${st.RF} / 失点${st.RA}　打率${avg3(st.AVG)}</span></div>
@@ -5979,14 +6246,14 @@ function buildNenkanHtml(scope){
     if(bat.length){
       bt=`<h3 class="nk-h3">打撃（通算・打席の多い順）</h3><table>
         <thead><tr><th class="nk-name">選手</th><th>試合</th><th>打数</th><th>安打</th><th>本</th><th>打点</th><th>打率</th><th>OPS</th></tr></thead><tbody>`+
-        bat.map(r=>`<tr><td class="nk-name">${esc(fullNameOf(nameKey(r.name),r.name))}</td><td>${r.G}</td><td>${r.AB}</td><td>${r.H}</td><td>${r.HR}</td><td>${r.RBI}</td><td>${avg3(r.AVG)}</td><td>${avg3(r.OPS)}</td></tr>`).join("")+
+        bat.map(r=>`<tr><td class="nk-name">${esc(fullNameOf(pidOf(r),r.name))}</td><td>${r.G}</td><td>${r.AB}</td><td>${r.H}</td><td>${r.HR}</td><td>${r.RBI}</td><td>${avg3(r.AVG)}</td><td>${avg3(r.OPS)}</td></tr>`).join("")+
         `</tbody></table>`;
     }
     let pt="";
     if(pit.length){
       pt=`<h3 class="nk-h3">投球（通算・投球回の多い順）</h3><table>
         <thead><tr><th class="nk-name">選手</th><th>登板</th><th>勝</th><th>投球回</th><th>奪三振</th><th>防御率</th></tr></thead><tbody>`+
-        pit.map(r=>`<tr><td class="nk-name">${esc(fullNameOf(nameKey(r.name),r.name))}</td><td>${r.G}</td><td>${r.W}</td><td>${esc(r.IPstr)}</td><td>${r.K}</td><td>${r.ipNum?r.ERA.toFixed(2):"-"}</td></tr>`).join("")+
+        pit.map(r=>`<tr><td class="nk-name">${esc(fullNameOf(pidOf(r),r.name))}</td><td>${r.G}</td><td>${r.W}</td><td>${esc(r.IPstr)}</td><td>${r.K}</td><td>${r.ipNum?r.ERA.toFixed(2):"-"}</td></tr>`).join("")+
         `</tbody></table>`;
     }
     playerPage=`<div class="nk-page"><h2 class="nk-h">主要選手の通算成績</h2>${bt}${pt}</div>`;
@@ -6017,8 +6284,8 @@ function buildNenkanHtml(scope){
   let gradPage="";
   if(ey!=null){
     const members=Object.entries(DB.playerMeta||{}).filter(([,m])=>m&&Number(m.enrollYear)===ey);
-    const batByKey=new Map(aggBatting(games).map(r=>[nameKey(r.name),r]));
-    const pitByKey=new Map(aggPitching(games).map(r=>[nameKey(r.name),r]));
+    const batByKey=new Map(aggBatting(games).map(r=>[pidOf(r),r]));
+    const pitByKey=new Map(aggPitching(games).map(r=>[pidOf(r),r]));
     const rosterNames=new Map(playerRoster());
     let rows="";
     const keys=[...new Set([...members.map(([k])=>k)])].sort((a,b)=>String(rosterNames.get(a)||a).localeCompare(String(rosterNames.get(b)||b),"ja"));
@@ -6237,7 +6504,7 @@ function saberFrom(r){
 function saberRows(games){
   const teamG=(games||[]).length;
   const paMin=teamG*SABER_PA_PER_GAME;
-  const all=aggBatting(games||[]).filter(hasPA).map(r=>({...r, ...saberFrom(r), key:nameKey(r.name)}));
+  const all=aggBatting(games||[]).filter(hasPA).map(r=>({...r, ...saberFrom(r), key:pidOf(r)}));
   const q=all.filter(r=>r.PA>=paMin);
   return {rows:(q.length? q : all), paMin, qualified:q.length>0};
 }
@@ -6285,7 +6552,7 @@ const SABER_IP_PER_GAME=1; // 規定投球回＝チーム試合数×1
 function saberPitchRows(games){
   const teamG=(games||[]).length;
   const ipMin=teamG*SABER_IP_PER_GAME;
-  const all=aggPitching(games||[]).map(r=>({...r, ...saberPitchFrom(r), key:nameKey(r.name)}));
+  const all=aggPitching(games||[]).map(r=>({...r, ...saberPitchFrom(r), key:pidOf(r)}));
   const q=all.filter(r=>r.ip>=ipMin);
   return {rows:(q.length? q : all), ipMin, qualified:q.length>0};
 }
@@ -6394,10 +6661,10 @@ function contribRanking(games){
   const gs=games||[];
   const teamG=gs.length;
   const bat=aggBatting(gs).filter(hasPA).filter(r=>n(r.PA)>=CONTRIB_WEIGHTS.minPA)
-    .map(r=>({key:nameKey(r.name), name:r.name, score:contribBatScore(r,teamG), G:n(r.G), OPS:fnum(r.OPS), rate:teamG? Math.min(1,n(r.G)/teamG):0}))
+    .map(r=>({key:pidOf(r), name:r.name, score:contribBatScore(r,teamG), G:n(r.G), OPS:fnum(r.OPS), rate:teamG? Math.min(1,n(r.G)/teamG):0}))
     .sort((a,b)=>b.score-a.score);
   const pit=aggPitching(gs).filter(r=>n(r.outs)>=CONTRIB_WEIGHTS.minOuts)
-    .map(r=>({key:nameKey(r.name), name:r.name, score:contribPitScore(r,teamG), ERA:fnum(r.ERA), IPstr:r.IPstr, ipNum:fnum(r.ipNum)}))
+    .map(r=>({key:pidOf(r), name:r.name, score:contribPitScore(r,teamG), ERA:fnum(r.ERA), IPstr:r.IPstr, ipNum:fnum(r.ipNum)}))
     .sort((a,b)=>b.score-a.score);
   return {bat, pit, teamG};
 }
@@ -6484,17 +6751,17 @@ function lineupSuggestions(orderRows,batRows){
     const cur=(orderRows||[]).find(r=>r.order===def.slot) || null;
     let best=null;
     for(const r of cands){
-      const k=nameKey(r.name);
+      const k=pidOf(r);
       if(used.has(k)) continue;
       if(!best || fnum(r[def.stat])>fnum(best[def.stat])) best=r;
     }
     if(!best){ out.push({slot:def.slot, stat:def.stat, statLabel:def.label, cur, cand:null, curVal:0, delta:0, improve:false}); continue; }
-    used.add(nameKey(best.name));
+    used.add(pidOf(best));
     const curVal=cur? fnum(cur[def.stat]) : 0;
     const delta=fnum(best[def.stat])-curVal;
     out.push({
       slot:def.slot, stat:def.stat, statLabel:def.label, cur,
-      cand:{key:nameKey(best.name), name:best.name, val:fnum(best[def.stat]), PA:n(best.PA)},
+      cand:{key:pidOf(best), name:best.name, val:fnum(best[def.stat]), PA:n(best.PA)},
       curVal, delta, improve: !!cur && delta>=LINEUP_SUGGEST.gap
     });
   }
@@ -6607,8 +6874,8 @@ function appearanceEntriesFromDB(){
   for(const [sname,s] of seasonEntries()){
     for(const g of ((s&&s.games)||[])){
       const keys=[];
-      for(const b of (g.batters||[])) if(b.name) keys.push(nameKey(b.name));
-      for(const p of (g.pitchers||[])) if(p.name) keys.push(nameKey(p.name));
+      for(const b of (g.batters||[])) if(b.name) keys.push(pidOf(b));
+      for(const p of (g.pitchers||[])) if(p.name) keys.push(pidOf(p));
       out.push({nendo:nendoOf(sname, gameYear(g)), keys});
     }
   }
@@ -6923,11 +7190,11 @@ function resetForm(prefillNames=true){
   $("#gDate").value=defaultEntryDate(); $("#gDate").dataset.auto="1";
   $("#gOpp").value=""; $("#gRs").value=""; $("#gRa").value="";
   fillRoundSelForSeason(); $("#gRoundSel").value=""; $("#gRoundCustom").value=""; $("#gRoundCustom").style.display="none"; $("#gOppName").value=""; $("#gColdGame").checked=false; $("#gOppPreview").textContent="";
-  const rosterMap=new Map(); curGames().flatMap(g=>(g.batters||[])).forEach(b=>{if(b.name)rosterMap.set(nameKey(b.name),String(b.name).trim());});
+  const rosterMap=new Map(); curGames().flatMap(g=>(g.batters||[])).forEach(b=>{if(b.name)rosterMap.set(pidOf(b),String(b.name).trim());});
   const roster=[...rosterMap.values()];
   const prows = prefillNames && roster.length ? roster.map(nm=>batRow({name:nm})).join("") : batRow();
   $("#batEntry").innerHTML=batEntryHead()+`<tbody>${prows}</tbody>`;
-  const prosMap=new Map(); curGames().flatMap(g=>(g.pitchers||[])).forEach(p=>{if(p.name)prosMap.set(nameKey(p.name),String(p.name).trim());});
+  const prosMap=new Map(); curGames().flatMap(g=>(g.pitchers||[])).forEach(p=>{if(p.name)prosMap.set(pidOf(p),String(p.name).trim());});
   const pros=[...prosMap.values()];
   $("#pitEntry").innerHTML=pitEntryHead()+`<tbody>${pros.length?pros.map(nm=>pitRow({name:nm})).join(""):pitRow()}</tbody>`;
   $("#saveGame").textContent="この試合を保存";
@@ -7241,13 +7508,13 @@ function computeFirstRecords(flat){
     if(!team.firstChamp && isKoshienSeason(season) && isFinalWinGame(g)) team.firstChamp={label:"初の全国制覇",date,opp,gid,season};
     for(const b of (g.batters||[])){
       if(!b.name) continue;
-      const key=nameKey(b.name);
+      const key=pidOf(b);
       if(n(b.H)>0 && !seenHit.has(key)){ seenHit.add(key); hits.push({key,name:String(b.name).trim(),date,opp,gid}); }
       if(n(b.HR)>0 && !seenHR.has(key)){ seenHR.add(key); hrs.push({key,name:String(b.name).trim(),date,opp,gid}); }
     }
     for(const p of (g.pitchers||[])){
       if(!p.name) continue;
-      const key=nameKey(p.name);
+      const key=pidOf(p);
       if(p.W && !seenWin.has(key)){ seenWin.add(key); wins.push({key,name:String(p.name).trim(),date,opp,gid}); }
     }
   }
@@ -7294,8 +7561,8 @@ function retirementGameCardHtml(key, enrollYear){
   const apps=[];
   for(const [sname,s] of officialSeasonEntries()){
     for(const g of ((s&&s.games)||[])){
-      const b=(g.batters||[]).find(x=>nameKey(x.name)===key);
-      const p=(g.pitchers||[]).find(x=>nameKey(x.name)===key);
+      const b=(g.batters||[]).find(x=>pidOf(x)===key);
+      const p=(g.pitchers||[]).find(x=>pidOf(x)===key);
       if(!b && !p) continue;
       apps.push({date:g.date||"", season:sname, opp:g.opponent||"", gid:g.id,
         retired: gradeInfo(enrollYear, sname, gameYear(g)).retired, b, p});
@@ -7385,7 +7652,7 @@ function currentLineupRows(){
   const games=allGamesFlat();
   if(!games.length) return {rows:[], teamG:0, pool:0, under:0};
   const all=aggBatting(games).filter(hasPA).map(r=>{
-    const key=nameKey(r.name);
+    const key=pidOf(r);
     const meta=(DB.playerMeta&&DB.playerMeta[key])||{};
     return {key, name:r.name, pos:meta.position||"", PA:n(r.PA), G:n(r.G),
             OBP:fnum(r.OBP), OPS:fnum(r.OPS), SLG:fnum(r.SLG)};
@@ -7445,7 +7712,7 @@ function relayAppearances(games){
   for(const g of (games||[])){
     const pit=(g.pitchers||[]).filter(p=>p && String(p.name||"").trim()!=="");
     pit.forEach((p,i)=>{
-      const key=nameKey(p.name);
+      const key=pidOf(p);
       if(!m.has(key)) m.set(key,{GS:0, RP:0, startOuts:0});
       const t=m.get(key);
       if(i===0){ t.GS++; t.startOuts+=ip2outs(p.IP); } else t.RP++;
@@ -7525,7 +7792,7 @@ const RELAY_OUTS_MIN=27;   // 規定＝通算9回以上。これ未満は防御�
 function relayRowsFrom(games){
   const app=relayAppearances(games);
   return aggPitching(games).map(r=>{
-    const key=nameKey(r.name);
+    const key=pidOf(r);
     const a=app.get(key)||{GS:0,RP:0,startOuts:0};
     return {key, name:r.name, outs:n(r.outs), ER:n(r.ER), ERA:fnum(r.ERA), WHIP:fnum(r.WHIP),
             K9:fnum(r.K9), G:n(r.G), ipNum:fnum(r.ipNum), GS:a.GS, RP:a.RP, startOuts:a.startOuts};
@@ -7605,9 +7872,9 @@ function renderHistoricalRelay(){
 function renderHistoricalLineup(bestNine, allBat){
   const el=$("#historicalLineup"); if(!el) return;
   if(!bestNine){ el.innerHTML=""; return; }
-  const batByKey=new Map((allBat||[]).map(b=>[nameKey(b.name), b]));
+  const batByKey=new Map((allBat||[]).map(b=>[pidOf(b), b]));
   const starters=[];
-  const push=(cell,pos)=>{ if(cell && !cell.isEmpty){ const key=cell.key||nameKey(cell.name); if(!key) return; const b=batByKey.get(key)||{}; starters.push({key,name:cell.name,pos,OBP:b.OBP||0,OPS:b.OPS||0,SLG:b.SLG||0}); } };
+  const push=(cell,pos)=>{ if(cell && !cell.isEmpty){ const key=cell.key||pidOf(cell); if(!key) return; const b=batByKey.get(key)||{}; starters.push({key,name:cell.name,pos,OBP:b.OBP||0,OPS:b.OPS||0,SLG:b.SLG||0}); } };
   // 第117弾: DH制で組む（投手は打線に入れず、代わりにDHを9人目に据える）
   ["捕","一","二","三","遊"].forEach(pos=>push(bestNine[pos],pos));
   (bestNine["外"]||[]).forEach(o=>push(o,"外"));
@@ -7895,12 +8162,12 @@ function getPlayerStats(games){
     const win = g.runsFor > g.runsAgainst;
     const isShutoutGame = g.runsAgainst === 0 && win;
     const isSinglePitcher = g.pitchers && g.pitchers.length === 1;
-    const shutoutPitcherKey = (isShutoutGame && isSinglePitcher) ? nameKey(g.pitchers[0].name) : null;
+    const shutoutPitcherKey = (isShutoutGame && isSinglePitcher) ? pidOf(g.pitchers[0]) : null;
     
     if(g.batters){
       g.batters.forEach(b => {
         if(!b.name) return;
-        const key = nameKey(b.name);
+        const key = pidOf(b);
         if(!stats.has(key)) stats.set(key, { H: 0, HR: 0, RBI: 0, SB: 0, K: 0, W: 0, Shutouts: 0 });
         const s = stats.get(key);
         s.H += n(b.H);
@@ -7912,7 +8179,7 @@ function getPlayerStats(games){
     if(g.pitchers){
       g.pitchers.forEach(p => {
         if(!p.name) return;
-        const key = nameKey(p.name);
+        const key = pidOf(p);
         if(!stats.has(key)) stats.set(key, { H: 0, HR: 0, RBI: 0, SB: 0, K: 0, W: 0, Shutouts: 0 });
         const s = stats.get(key);
         s.K += n(p.K);
@@ -8619,7 +8886,7 @@ async function runInnOcr(fileList){
     if(cands.length>1 && Array.isArray(g.players) && g.players.length){
       const pset=new Set(g.players.map(x=>nameKey(x)).filter(Boolean));
       const scored=cands.map(c=>{
-        const names=new Set((c.gg.batters||[]).map(b=>nameKey(b.name)).filter(Boolean));
+        const names=new Set((c.gg.batters||[]).map(b=>pidOf(b)).filter(Boolean));
         let inter=0; for(const k of pset) if(names.has(k)) inter++;
         const jac=(pset.size&&names.size)? inter/(pset.size+names.size-inter) : 0;
         return {...c, jac};
@@ -9276,8 +9543,8 @@ function pitchCountMerge(gamePitchers, read){
      曖昧なまま書くと誤った行に球数が入るので、その名前は丸ごと見送る。 */
   const dupKeys=new Set();
   { const seen=new Set();
-    for(const p of list){ const k=nameKey(p.name); if(seen.has(k)) dupKeys.add(k); else seen.add(k); } }
-  const byKey=new Map(list.map(p=>[nameKey(p.name), p]));
+    for(const p of list){ const k=pidOf(p); if(seen.has(k)) dupKeys.add(k); else seen.add(k); } }
+  const byKey=new Map(list.map(p=>[pidOf(p), p]));
   const apply=[], skip=[];
   for(const r of (read||[])){
     const nm=String(r.name||"").trim();
@@ -9293,13 +9560,13 @@ function pitchCountMerge(gamePitchers, read){
       /* 書き込み先の行も読んだ値も分かっているので持っておく。
          判定は機械の推測でしかないので、最後はユーザーが書き込めるようにする（第154弾）。
          key と P が揃っている見送りだけが「それでも書き込む」の対象になる。 */
-      skip.push({name:nm, key:nameKey(p.name), P:n(r.P), why:chk.why});
+      skip.push({name:nm, key:pidOf(p), P:n(r.P), why:chk.why});
       continue;
     }
-    apply.push({name:p.name, key:nameKey(p.name), P:n(r.P)});
+    apply.push({name:p.name, key:pidOf(p), P:n(r.P)});
   }
   for(const p of (gamePitchers||[])){
-    if(!apply.some(a=>a.key===nameKey(p.name)) && !skip.some(s=>nameKey(s.name)===nameKey(p.name)))
+    if(!apply.some(a=>a.key===pidOf(p)) && !skip.some(s=>pidOf(s)===pidOf(p)))
       skip.push({name:p.name, why:"読み取り結果に出てこなかった"});
   }
   return {apply, skip};
@@ -9354,7 +9621,7 @@ async function pitchCountForce(seasonName, gameId, key, val){
   if(!s){ toast("シーズンが見つかりません",true); return false; }
   const g=(s.games||[]).find(x=>String(x.id)===String(gameId));
   if(!g){ toast("試合が見つかりません",true); return false; }
-  const row=(g.pitchers||[]).find(p=>nameKey(p.name)===key);
+  const row=(g.pitchers||[]).find(p=>pidOf(p)===key);
   if(!row){ toast("投手が見つかりません",true); return false; }
   row.P=v;                              // ★Pだけ。他のフィールドには触れない
   await saveDB();
@@ -9399,7 +9666,7 @@ async function pitchCountRun(seasonName, gameId, files, statusEl){
     return;
   }
   for(const a of apply){
-    const row=(g.pitchers||[]).find(p=>nameKey(p.name)===a.key);
+    const row=(g.pitchers||[]).find(p=>pidOf(p)===a.key);
     if(row) row.P=a.P;                 // ★Pだけ。他のフィールドには触れない
   }
   await saveDB();
@@ -9658,7 +9925,7 @@ function findMatchingGames(g){
   const out=[];
   const gTop=normInnStr(g.innings&&g.innings.top), gBot=normInnStr(g.innings&&g.innings.bottom);
   const hasInn=!!(gTop||gBot);
-  const gNames=new Set((g.batters||[]).map(b=>nameKey(b.name)).filter(Boolean));
+  const gNames=new Set((g.batters||[]).map(b=>pidOf(b)).filter(Boolean));
   for(const [sname,s] of Object.entries(DB.seasons)){
     for(const gg of (s.games||[])){
       if(hasInn && gg.innings && (normInnStr(gg.innings.top)||normInnStr(gg.innings.bottom))){
@@ -9668,7 +9935,7 @@ function findMatchingGames(g){
       }
       if(n(gg.runsFor)===n(g.runsFor) && n(gg.runsAgainst)===n(g.runsAgainst)){
         if(g.date && gg.date && g.date!==gg.date) continue;
-        const names=new Set((gg.batters||[]).map(b=>nameKey(b.name)).filter(Boolean));
+        const names=new Set((gg.batters||[]).map(b=>pidOf(b)).filter(Boolean));
         if(gNames.size && names.size){
           let inter=0; for(const k of gNames) if(names.has(k)) inter++;
           const jac=inter/(gNames.size+names.size-inter);
@@ -9688,11 +9955,14 @@ function rowHasData(tr){
 function fillFormFromOcr(g){
   // editIdはリセットしない：編集中に再OCRしても新規追加にならず、上書き保存の対象を維持する
   // 方針: 手入力済みの値は絶対に潰さない。OCRは空欄のセルだけを埋める
-  /* 第156弾: 名字だけの表記が、卒業した同姓の先輩に吸い込まれるのを防ぐ。
-     いま在籍している同姓の選手が名簿にちょうど1人いるときだけ読み替える。 */
-  g=applyGenerationNames(g, nendoOf(DB.current, gameYear({date:g&&g.date})));
-  if(g.__genFixed && g.__genFixed.length){
-    toast(`同姓の在籍者に読み替えました: ${g.__genFixed.slice(0,3).join("、")}${g.__genFixed.length>3?` 他${g.__genFixed.length-3}件`:""}`);
+  /* 第157弾-4: 分けてある同姓の選手について、その年度に在籍していた方のpidを振る。
+     名前は書き換えない（表記はゲームどおり）。決められないときは触らない。 */
+  g=applyPidsByYear(g, nendoOf(DB.current, gameYear({date:g&&g.date})));
+  if(g.__pidCreated && g.__pidCreated.length){
+    // その名前で在籍中の選手がいない＝新しく入ってきた選手。合流させずに切り出した
+    toast(`同姓の先輩が卒業済みのため、新しい選手として登録しました: ${g.__pidCreated.join("、")}（名簿で入学年度を入れてください）`);
+  }else if(g.__pidMarked && g.__pidMarked.length){
+    toast(`同姓の別人を年度で判別しました: ${g.__pidMarked.slice(0,3).join("、")}${g.__pidMarked.length>3?` 他${g.__pidMarked.length-3}件`:""}`);
   }
   if((!$("#gDate").value || $("#gDate").dataset.auto==="1") && g.date){ $("#gDate").value=g.date; delete $("#gDate").dataset.auto; }
   if($("#gRs").value.trim()==="" && (g.runsFor??"")!=="") $("#gRs").value=g.runsFor;
@@ -9708,7 +9978,7 @@ function fillFormFromOcr(g){
   // 「打席結果」画面から読めた打順/途中出場を、名前でマッチさせて野手記録に反映
   const orderMap=new Map();
   (g.order||[]).forEach(o=>{
-    const k=nameKey(o.name); if(!k) return;
+    const k=pidOf(o); if(!k) return;
     if(!orderMap.has(k)) orderMap.set(k,[]);
     orderMap.get(k).push(o);
   });
@@ -9718,7 +9988,7 @@ function fillFormFromOcr(g){
     const posFilled=[];
     (g.order||[]).forEach(o=>{
       const p=FPOS[String(o.fielding||"").trim()]; if(!p) return;
-      const k=nameKey(o.name); if(!k) return;
+      const k=pidOf(o); if(!k) return;
       DB.playerMeta[k]=DB.playerMeta[k]||{name:String(o.name).trim()};
       if(!DB.playerMeta[k].position){ DB.playerMeta[k].position=p; posFilled.push(`${o.name}=${p}`); }
     });
@@ -9726,12 +9996,12 @@ function fillFormFromOcr(g){
   }
   // OCRがプロンプトの除外ルールを守らんことがあるので、コード側でも弾く:
   // 全項目0 かつ 投手記録に載っている かつ 打席結果に打順が無い ＝ DH制で打席に立ってない投手
-  const pitcherKeys=new Set((g.pitchers||[]).map(p=>nameKey(p.name)));
+  const pitcherKeys=new Set((g.pitchers||[]).map(p=>pidOf(p)));
   const batters=(g.batters||[]).filter(b=>{
     const allZero=BAT_INPUT.every(k=>!n(b[k]));
-    return !(allZero && pitcherKeys.has(nameKey(b.name)) && !orderMap.has(nameKey(b.name)));
+    return !(allZero && pitcherKeys.has(pidOf(b)) && !orderMap.has(pidOf(b)));
   }).map(b=>{
-    const arr=orderMap.get(nameKey(b.name));
+    const arr=orderMap.get(pidOf(b));
     if(arr && arr.length){ const o=arr.shift(); b={...b,order:o.pos,sub:!!o.sub}; }
     return b;
   });
@@ -9742,12 +10012,12 @@ function fillFormFromOcr(g){
     const existing=new Map();
     $$("tr",btbody).forEach(tr=>{ const nm=$(".nm",tr); if(nm&&nm.value.trim()) existing.set(nameKey(nm.value),tr); });
     for(const b of batters){
-      const tr=existing.get(nameKey(b.name));
+      const tr=existing.get(pidOf(b));
       if(tr){
         $$("input[data-k]",tr).forEach(i=>{ if(i.value.trim()==="") i.value = b[i.dataset.k] ?? ""; });
         const ord=$(".ord",tr); if(ord && ord.value.trim()==="" && b.order!=null) ord.value=b.order;
         const sub=$(".sub",tr); if(sub && !sub.checked && b.sub) sub.checked=true;
-        existing.delete(nameKey(b.name));
+        existing.delete(pidOf(b));
       }else{
         btbody.insertAdjacentHTML("beforeend",batRow(b));
       }
@@ -9763,13 +10033,13 @@ function fillFormFromOcr(g){
     $$("tr",ptbody).forEach(tr=>{ const nm=$(".nm",tr); if(nm&&nm.value.trim()) existing.set(nameKey(nm.value),tr); });
     for(const p of (g.pitchers||[])){
       if(!p.name) continue;
-      const tr=existing.get(nameKey(p.name));
+      const tr=existing.get(pidOf(p));
       if(tr){
         $$("input[data-k]",tr).forEach(i=>{
           if(i.type==="checkbox"){ if(!i.checked && p.W) i.checked=true; }
           else if(i.value.trim()==="") i.value = p[i.dataset.k] ?? "";
         });
-        existing.delete(nameKey(p.name));
+        existing.delete(pidOf(p));
       }else{
         ptbody.insertAdjacentHTML("beforeend",pitRow(p));
       }
@@ -11214,21 +11484,47 @@ async function init(){
   { const handler=async e=>{
       const x=e.target.closest(".hix");
       if(x){ e.stopPropagation(); await hiAdd(x.dataset.cat, x.dataset.key); renderHealthCheck(); renderAudit(); toast("この指摘を対象外にしました"); return; }
-      /* 第156弾: 同姓別人の付け替え。**試合データの選手名そのものを書き換える**ので、
-         エイリアスと違って自動では戻せない。必ず対象の試合を見せてから実行する。 */
-      const sp=e.target.closest(".dupSplit");
-      if(sp){
-        const key=sp.dataset.key, cut=n(sp.dataset.cut), to=sp.dataset.to;
-        const c=sameNameConflicts().find(v=>v.key===key);
+      /* 第158弾: 1人が2つに割れているのをまとめる。エイリアスではなくpidを振るので、
+         将来この名字の新入生が来ても巻き込まない。 */
+      const mg=e.target.closest(".splitMerge");
+      if(mg){
+        const from=mg.dataset.from, to=mg.dataset.to;
+        const c=nameSplitConflicts().find(v=>v.key===from);
         if(!c){ renderHealthCheck(); return; }
-        const list=c.later.map(r=>`  ${r.g.date||"日付なし"} ${r.season} 対${r.g.opponent||"?"}`).join("\n");
-        if(!confirm(`${cut}年度以降の次の${c.later.length}試合について、「${c.name}」を「${to}」に付け替えます。\n`
-          +`${cut}年度より前の${c.earlier.length}試合はそのまま残ります。\n\n${list}\n\n`
-          +`※ 試合データの選手名を書き換えます。自動では戻せないので、心配なら先にバックアップを書き出してください。`)) return;
-        const cnt=splitPlayerByYear(key, cut, to);
+        const list=c.rows.map(r=>`  ${r.g.date||"日付なし"} ${r.season} 対${r.g.opponent||"?"}`).join("\n");
+        const toName=(c.suggest&&c.suggest.name)||to;
+        if(!confirm(`「${c.name}」の${c.games}試合を「${toName}」と同じ選手としてまとめます。\n\n${list}\n\n`
+          +`表示は試合ごとの表記のまま変わりません。通算成績だけが1人ぶんに合流します。\n`
+          +`※ 名前ではなくその出場だけを結び付けるので、将来この名字の新入生が来ても巻き込みません。`)) return;
+        const r=mergePlayerGeneration(from, to);
+        if(!r.moved){ toast("まとめられる記録が見つかりませんでした",true); return; }
         await saveDB();
         render();
-        toast(`${cnt}件の記録を ${to} に付け替えました`);
+        toast(`${r.moved}件を「${toName}」にまとめました`+(r.milestones?`（通算節目${r.milestones}件も移動）`:""));
+        return;
+      }
+      /* 第157弾-3: 同姓別人の分離。名前は書き換えず、**卒業した側にpidを振る**。
+         名字は現役の子に残るので、以降の取り込みは何もしなくても正しく入る。
+         表示はどちらも名字のまま（表記通り）。 */
+      const sp=e.target.closest(".dupSplit");
+      if(sp){
+        const key=sp.dataset.key, cut=n(sp.dataset.cut);
+        const c=sameNameConflicts().find(v=>v.key===key);
+        if(!c){ renderHealthCheck(); return; }
+        const list=c.earlier.map(r=>`  ${r.g.date||"日付なし"} ${r.season} 対${r.g.opponent||"?"}`).join("\n");
+        const src=c.suggest;
+        if(!confirm(`「${c.name}」を2人に分けます。表示はどちらも「${c.name}」のままです。\n\n`
+          +`・${cut}年度より前の${c.earlier.length}試合 … 卒業した方の記録として切り出します\n`
+          +`・${cut}年度以降の${c.later.length}試合 … 今の「${c.name}」の記録として残ります\n`
+          +(src? `・名簿の「${src.key}」（${src.fullName||src.key}）の情報は今の「${c.name}」へ移します\n` : "")
+          +`\n切り出す試合:\n${list}\n\n`
+          +`※ 以降の取り込みは今の子に入るので、直し続ける必要はありません。`)) return;
+        const r=splitPlayerGeneration(key, cut, {fromKey:src? src.key : "", displayName:c.name});
+        if(!r.moved){ toast("分けられる記録が見つかりませんでした",true); return; }
+        await saveDB();
+        render();
+        toast(`${r.moved}件を卒業した「${c.name}」の記録として分けました`
+          +(r.milestones? `（通算節目${r.milestones}件も移動）` : ""));
         return;
       }
       const undo=e.target.closest(".hiUndo");
@@ -11270,7 +11566,7 @@ async function init(){
   }
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
-window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
+window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
   // 第93弾: 分析カード群の純粋関数
   pythagExpected, pythagSummary, computeStreaks, gameResultSeq, monthlyStats, saberFrom, saberRows,
   // 第139弾: 率で並べたときの規定判定
@@ -11305,7 +11601,8 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v}, n, hasPA, OCR_PROMPT, DEF_MODEL, 
   // 第144弾: 球数の後付け取り込み
   pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
   pitchCountForce, pcSkipHtml,
-  sameNameConflicts, splitPlayerByYear, activeSameNameFor, applyGenerationNames, ENROLL_SPAN_MAX,
+  sameNameConflicts, splitPlayerGeneration, nameSplitConflicts, mergePlayerGeneration, nendoOfDate, resolvePlayerPid, playerNameSet, rememberPlayerName, applyPidsByYear, ENROLL_SPAN_MAX,
+  pidOf, playerDisplayName, makePid, isPid, playerQualifier, dupDisplayNameSet,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
