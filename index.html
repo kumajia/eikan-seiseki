@@ -188,6 +188,20 @@
     justify-content:center;z-index:50;padding:16px;}
   .modalCard{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:18px;
     max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+  /* 第166弾: シーズン選択。selectは中身を作り込めないので、成績つきの一覧に置き換えた */
+  .seasonpick{display:inline-flex;align-items:center;gap:8px;background:var(--panel);
+    border:1px solid var(--line2);border-radius:8px;padding:0 10px;height:36px;color:var(--ink);
+    font-size:13px;cursor:pointer;max-width:230px;}
+  .seasonpick:hover{border-color:var(--amber);}
+  .seasonpick>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .seasonpick .chev2{color:var(--muted);font-size:11px;flex:none;}
+  .spgroup{color:var(--amber);font-size:11.5px;border-bottom:1px solid var(--line);
+    padding:8px 2px 4px;margin-bottom:2px;display:flex;justify-content:space-between;gap:8px;}
+  .spgroup .dim{font-size:11px;}
+  .sprow{display:flex;justify-content:space-between;gap:8px;align-items:center;
+    padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;}
+  .sprow:hover{background:var(--panel2);}
+  .sprow.cur{background:var(--panel2);border-left:2px solid var(--amber);}
   .modalCard .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
   .modalCard label{font-size:12px;color:var(--muted);}
   .modalCard select,.modalCard input:not([type=checkbox]):not([type=radio]){width:100%;}
@@ -484,8 +498,8 @@
       <button class="mini ghost" id="renameProfile">名前変更</button>
     </div>
     <div class="season-pick">
-      <label class="inline" for="seasonSel">シーズン</label>
-      <select id="seasonSel"></select>
+      <label class="inline" for="seasonPickBtn">シーズン</label>
+      <button type="button" id="seasonPickBtn" class="seasonpick"><span id="seasonPickName">-</span><span class="chev2">▾</span></button>
       <button class="mini ghost" id="newSeason">＋新規</button>
       <button class="mini ghost" id="renameSeason">名前変更</button>
     </div>
@@ -1437,6 +1451,15 @@
       <div class="note">大会優勝・記録達成・引退を時系列で表示。</div>
       <div id="timelineContainer" class="timeline" style="margin-top:20px;"></div>
     </section>
+  </div>
+</div>
+
+<div class="modalOverlay" id="seasonPickModal" style="display:none">
+  <div class="modalCard" style="max-width:440px">
+    <h2 style="font-family:var(--mincho);font-size:17px;margin:0 0 12px">シーズンを選ぶ</h2>
+    <div class="field"><input type="text" id="seasonPickSearch" placeholder="シーズン名で絞り込み" autocomplete="off"></div>
+    <div id="seasonPickList" style="max-height:52vh;overflow:auto;margin:-4px 0 12px"></div>
+    <div class="modalBtns"><button type="button" class="ghost" id="seasonPickClose">閉じる</button></div>
   </div>
 </div>
 
@@ -3476,6 +3499,7 @@ function renderBestNine(){
 function render(){
   __aggCache={bat:new Map(),pit:new Map()}; // このrender()呼び出し中だけ集計結果を使い回す（詳細はaggBatting定義のコメント参照）
   __dupNameCache=null;                      // 同名判定も同じ寿命で作り直す（第157弾）
+  fillSeasons();                            // 第166弾: ヘッダーの表示が DB.current に必ず追いつくように
   try{
   const games=curGames();
   // record header
@@ -4177,7 +4201,7 @@ function seasonEntries(){
   return Object.entries(DB.seasons);
 }
 function officialSeasonEntries(){
-  return Object.entries(DB.seasons).filter(([name])=>!name.includes("練習"));
+  return Object.entries(DB.seasons).filter(([name])=>!isPracticeSeason(name));
 }
 function latestGameGlobally(){
   // そのプレイヤー自身の最終出場ではなく、DB全体で一番新しい試合日を基準にする
@@ -4818,6 +4842,8 @@ function seasonRank(sname){
   return null;
 }
 
+/* 第166弾: 練習試合かどうか。各所で includes("練習") を直書きしていたので1か所にまとめた。 */
+function isPracticeSeason(sname){ return String(sname||"").includes("練習"); }
 function nendoOf(sname,fallbackYear){
   // 年度＝4月始まり。春大会（センバツ）は暦年のラベルが翌年でも前の年度の締めくくりとして扱う
   // 判定はisSpringKoshien()で統一（ROUND_TEMPLATES/SEASON_RANK_TESTSの「春甲子園」判定と食い違わないように）
@@ -6107,7 +6133,7 @@ const CLASSIC_SCORE_WEIGHTS={
   hallThreshold:8 // これ以上を殿堂入りとする
 };
 function scoreClassic(g,sname){
-  if(String(sname).includes("練習")) return null; // 練習試合は殿堂対象外
+  if(isPracticeSeason(sname)) return null; // 練習試合は殿堂対象外
   const w=CLASSIC_SCORE_WEIGHTS;
   const rf=n(g.runsFor), ra=n(g.runsAgainst);
   const diff=Math.abs(rf-ra);
@@ -7004,8 +7030,8 @@ function renderGames(){
   const entries=Object.entries(DB.seasons);
   if(!entries.some(([,s])=>s.games.length)){el.innerHTML=`<div class="empty">試合ログはまだ空です。</div>`;return;}
   // 公式戦と練習試合を分けて表示（公式戦→区切り見出し→練習試合）
-  const official=entries.filter(([name])=>!name.includes("練習"));
-  const practice=entries.filter(([name])=>name.includes("練習"));
+  const official=entries.filter(([name])=>!isPracticeSeason(name));
+  const practice=entries.filter(([name])=>isPracticeSeason(name));
   const seasonBlock=([sname,s])=>{
     if(!s.games.length) return "";
     const T=teamTotals(s.games);
@@ -10652,31 +10678,121 @@ function switchTab(name,mode){
 
 /* ---------- seasons ---------- */
 let seasonSelExpanded=false; // 「過去のシーズンを表示…」を選ぶとtrue（セッション中のみ保持）
-function fillSeasons(){
-  const sel=$("#seasonSel");
-  // 名前の先頭4桁の年でグループ化（表示名と一致させるためnendoOfではなくラベルの年を使う）
-  const groups=new Map();
-  for(const s of Object.keys(DB.seasons)){
-    const y=(String(s).match(/^(\d{4})/)||[])[1]||"その他";
-    if(!groups.has(y)) groups.set(y,[]);
-    groups.get(y).push(s);
+/* 第166弾: シーズン選択を select から一覧パネルに置き換えた。
+
+   select は中身を作り込めないので名前しか出せず、せっかく持っている成績を使えていなかった。
+   また練習試合が「登録順の逆」で年内の任意の位置に入り、年ごとに場所が変わっていた
+   （練習試合は年間を通してやるものなので、そもそも春→夏→秋の列に入れようがない）。
+
+   まとめ方は**年度**（第151弾の試合ログと同じ）。1グループ＝1つの代になり、
+   3月の春甲子園も同じ代に収まる。練習試合は試合ログと同じく末尾の別グループへ。
+   （第151弾では「選ぶときは名前どおり」と暦年にしていたが、
+     「2035年に1件だけ」のような中途半端な塊ができるため、ここでユーザーと決め直した） */
+function seasonRecord(sname){
+  const gs=((DB.seasons[sname]||{}).games)||[];
+  let w=0,l=0,d=0;
+  for(const g of gs){ const rf=n(g.runsFor), ra=n(g.runsAgainst);
+    if(rf>ra)w++; else if(rf<ra)l++; else d++; }
+  return {G:gs.length, w, l, d};
+}
+function recTxt(r){ return r.G? `${r.w}勝${r.l}敗${r.d?r.d+"分":""}` : "試合なし"; }
+/* 選択パネルに出す並び。戻り値は [{label, sub, seasons:[名前...]}] */
+function seasonPickGroups(){
+  const all=Object.keys(DB.seasons||{});
+  const prac=all.filter(isPracticeSeason);
+  const off=all.filter(s=>!isPracticeSeason(s));
+  const byNendo=new Map();
+  for(const s of off){
+    const y=nendoOf(s); const k=(y==null? "年不明" : y);
+    if(!byNendo.has(k)) byNendo.set(k,[]);
+    byNendo.get(k).push(s);
   }
-  // 完全に新しい順（年も年内も新しいものが上＝下へ行くほど過去。下から読むと時系列）
-  const years=[...groups.keys()].filter(y=>y!=="その他").sort((a,b)=>Number(b)-Number(a));
-  const hasOther=groups.has("その他");
-  const curYear=(String(DB.current).match(/^(\d{4})/)||[])[1]||"その他";
-  let visible=seasonSelExpanded? years.slice() : years.slice(0,3); // 直近3年＝現役世代ぶん（先頭3件が新しい年）
-  if(curYear!=="その他" && groups.has(curYear) && !visible.includes(curYear)) visible.push(curYear); // 選択中シーズンの年は必ず出す（selectedが消えると誤選択になる）
-  visible.sort((a,b)=>Number(b)-Number(a));
-  const hidden=years.filter(y=>!visible.includes(y)).reduce((a,y)=>a+groups.get(y).length,0);
-  const optgrp=y=>`<optgroup label="${esc(y==="その他"?"その他":y+"年")}">`+
-    // 年内も新しい順にするため、登録順（春→夏→秋）を反転させる
-    groups.get(y).slice().reverse().map(s=>`<option value="${esc(s)}" ${s===DB.current?'selected':''}>${esc(s)}</option>`).join("")+
-    `</optgroup>`;
-  sel.innerHTML=
-    visible.map(optgrp).join("")
-    + (hasOther? optgrp("その他") : "")
-    + (hidden?`<option value="__moreSeasons__">＋ 過去のシーズンを表示（${hidden}件）…</option>`:""); // 古い年は下に足されるので選択肢も末尾
+  const keys=[...byNendo.keys()].filter(k=>k!=="年不明").sort((a,b)=>b-a);
+  if(byNendo.has("年不明")) keys.push("年不明");
+  const groups=keys.map(k=>{
+    // 年度の中も新しい順（下から読むと時系列。第90弾の恒久ルール）
+    const list=byNendo.get(k).slice().sort((a,b)=>{
+      const ra=seasonRank(a), rb=seasonRank(b);
+      if(ra!=null && rb!=null) return rb-ra;
+      return String(b).localeCompare(String(a),"ja");
+    });
+    let G=0,w=0,l=0,d=0;
+    for(const sn of list){ const r=seasonRecord(sn); G+=r.G; w+=r.w; l+=r.l; d+=r.d; }
+    return {key:String(k), label:(k==="年不明"? "年度不明" : `${k}年度`), sub:G? `${G}試合 ${recTxt({G,w,l,d})}` : "", seasons:list};
+  });
+  if(prac.length) groups.push({key:"practice", label:"練習試合", sub:"", seasons:prac.slice().sort((a,b)=>String(b).localeCompare(String(a),"ja"))});
+  return groups;
+}
+function renderSeasonPicker(){
+  const el=$("#seasonPickList"); if(!el) return;
+  const q=nameKeyRaw(($("#seasonPickSearch")&&$("#seasonPickSearch").value)||"");
+  const groups=seasonPickGroups();
+  const nendoKeys=groups.filter(g=>g.key!=="practice"&&g.key!=="年不明").map(g=>g.key);
+  const visible=new Set(seasonSelExpanded? nendoKeys : nendoKeys.slice(0,3));  // 直近3年度＝現役世代ぶん
+  const curNendo=String(nendoOf(DB.current) ?? "");
+  if(curNendo) visible.add(curNendo);
+  let hidden=0, html="";
+  for(const g of groups){
+    const isYear=(g.key!=="practice");
+    let list=g.seasons;
+    if(q) list=list.filter(sn=>nameKeyRaw(sn).includes(q));
+    else if(isYear && g.key!=="年不明" && !visible.has(g.key)){ hidden+=g.seasons.length; continue; }
+    if(!list.length) continue;
+    html+=`<div class="spgroup"><span>${esc(g.label)}</span>${g.sub?`<span class="dim">${esc(g.sub)}</span>`:""}</div>`;
+    html+=list.map(sn=>{
+      const r=seasonRecord(sn);
+      return `<div class="sprow${sn===DB.current?" cur":""}" data-season="${esc(sn)}" role="button" tabindex="0">
+        <span>${esc(sn)}</span><span class="dim" style="font-size:11.5px">${esc(recTxt(r))}</span></div>`;
+    }).join("");
+  }
+  if(!html) html=`<div class="empty">見つかりませんでした。</div>`;
+  else if(hidden) html+=`<div class="sprow" id="spMore" role="button" tabindex="0" style="color:var(--muted);font-size:12px">＋ 過去の年度も表示（${hidden}件）</div>`;
+  el.innerHTML=html;
+}
+/* 第166弾: シーズンの切り替え。select の change ハンドラを関数に出して、
+   新しい選択パネルから呼べるようにした。編集中の試合を移動するかの確認はそのまま活かす。 */
+function switchSeasonTo(to){
+    const from=DB.current;
+    if(!to || to===from) return;
+    // 編集中にシーズンを変えた場合（第116弾）:
+    // 以前は resetForm() でフォームを丸ごと捨てていたため、入力が消えるうえ試合も移動できなかった。
+    // 「その試合を移動する」か「編集をやめて切り替えるだけ」かを選べるようにする。
+    if(editId!=null && from!==to){
+      const loc=findGameById(editId);
+      const label=loc? `${loc.game.date||"日付なし"} ${loc.game.opponent||"(相手未設定)"}` : "編集中の試合";
+      if(confirm(`編集中の試合「${label}」を「${to}」へ移動しますか？\n\nOK: この試合を移動する（入力内容は保持されます）\nキャンセル: 移動せず、編集をやめてシーズンだけ切り替える`)){
+        DB.current=to;
+        if(moveGameToSeason(editId, to)){
+          fillRoundSelForSeason();
+          saveDB(); render();
+          toast(`試合を「${to}」へ移動しました`);
+          return;
+        }
+        // 移動できなかった（元の試合が見つからない等）＝新規扱いにせず編集は続ける
+        toast("移動できませんでした。編集内容はそのままです",true);
+        fillRoundSelForSeason(); saveDB(); render(); return;
+      }
+      editId=null; resetForm();
+    }
+    DB.current=to;
+    if(editId==null){ fillRoundSelForSeason(); $("#gRoundSel").value=""; }
+    saveDB();render();
+}
+function openSeasonPicker(){
+  const m=$("#seasonPickModal"); if(!m) return;
+  const q=$("#seasonPickSearch"); if(q) q.value="";
+  renderSeasonPicker();
+  m.style.display="flex";
+  if(q) q.focus();
+}
+function closeSeasonPicker(){ const m=$("#seasonPickModal"); if(m) m.style.display="none"; }
+/* ヘッダーのボタン表示。select時代の fillSeasons と同じ呼び名で置き換える */
+function fillSeasons(){
+  const b=$("#seasonPickName");
+  if(b) b.textContent=DB.current||"-";
+  const btn=$("#seasonPickBtn");
+  if(btn) btn.title=DB.current? `${DB.current}（${recTxt(seasonRecord(DB.current))}）` : "シーズンを選ぶ";
+  if($("#seasonPickModal") && $("#seasonPickModal").style.display!=="none") renderSeasonPicker();
 }
 
 /* ---------- シーズン作成モーダル ---------- */
@@ -10765,35 +10881,29 @@ async function wireProfiles(){
 }
 /* init から切り出し（第160弾）: シーズンと試合フォーム */
 async function wireSeasonForm(){
-  $("#seasonSel").addEventListener("change",e=>{
-    if(e.target.value==="__moreSeasons__"){ // シーズン切替ではなく「全部見せて」の合図
-      seasonSelExpanded=true; fillSeasons(); toast("全シーズンを表示しました（もう一度開いてください）"); return;
-    }
-    const from=DB.current, to=e.target.value;
-    // 編集中にシーズンを変えた場合（第116弾）:
-    // 以前は resetForm() でフォームを丸ごと捨てていたため、入力が消えるうえ試合も移動できなかった。
-    // 「その試合を移動する」か「編集をやめて切り替えるだけ」かを選べるようにする。
-    if(editId!=null && from!==to){
-      const loc=findGameById(editId);
-      const label=loc? `${loc.game.date||"日付なし"} ${loc.game.opponent||"(相手未設定)"}` : "編集中の試合";
-      if(confirm(`編集中の試合「${label}」を「${to}」へ移動しますか？\n\nOK: この試合を移動する（入力内容は保持されます）\nキャンセル: 移動せず、編集をやめてシーズンだけ切り替える`)){
-        DB.current=to;
-        if(moveGameToSeason(editId, to)){
-          fillRoundSelForSeason();
-          saveDB(); render();
-          toast(`試合を「${to}」へ移動しました`);
-          return;
-        }
-        // 移動できなかった（元の試合が見つからない等）＝新規扱いにせず編集は続ける
-        toast("移動できませんでした。編集内容はそのままです",true);
-        fillRoundSelForSeason(); saveDB(); render(); return;
-      }
-      editId=null; resetForm();
-    }
-    DB.current=to;
-    if(editId==null){ fillRoundSelForSeason(); $("#gRoundSel").value=""; }
-    saveDB();render();
-  });
+  
+
+  /* 第166弾: シーズン選択パネル。中央モーダルにしたのは、位置の計算が要らず
+     シーズン作成モーダルと同じ作りを流用できるため（PC用の位置指定は後から足せる）。 */
+  { const btn=$("#seasonPickBtn"); if(btn) btn.addEventListener("click",openSeasonPicker); }
+  { const c=$("#seasonPickClose"); if(c) c.addEventListener("click",closeSeasonPicker); }
+  { const m=$("#seasonPickModal"); if(m) m.addEventListener("click",e=>{ if(e.target===m) closeSeasonPicker(); }); }
+  { const q=$("#seasonPickSearch"); if(q) q.addEventListener("input",renderSeasonPicker); }
+  { const el=$("#seasonPickList"); if(el){
+      const pick=t=>{
+        if(t.id==="spMore"){ seasonSelExpanded=true; renderSeasonPicker(); return; }
+        const sn=t.dataset.season; if(!sn) return;
+        closeSeasonPicker();
+        switchSeasonTo(sn);
+        fillSeasons();
+      };
+      el.addEventListener("click",e=>{ const t=e.target.closest(".sprow"); if(t) pick(t); });
+      el.addEventListener("keydown",e=>{
+        if(e.key!=="Enter" && e.key!==" ") return;
+        const t=e.target.closest(".sprow"); if(!t) return;
+        e.preventDefault(); pick(t);
+      });
+    } }
   $("#awardSeasonSel").addEventListener("change",e=>{ awardSeasonPick=e.target.value; renderAwards(); });
   $("#btnGraphAvg").addEventListener("click", () => {
     currentGraphType = "AVG";
@@ -11023,7 +11133,7 @@ async function wireRosterTab(){
 function wireKeyboardNav(){
   document.addEventListener("keydown",e=>{
     if(e.key==="Escape"){
-      closeSeasonModal(); closeBulkEnrollModal(); closeBulkPositionModal(); closeBulkSubPositionModal(); closeFramePicker();
+      closeSeasonPicker(); closeSeasonModal(); closeBulkEnrollModal(); closeBulkPositionModal(); closeBulkSubPositionModal(); closeFramePicker();
       return;
     }
     if((e.key==="Enter"||e.key===" ") && e.target.classList && e.target.classList.contains("ghead")){
@@ -11777,7 +11887,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, O
   pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
   pitchCountForce, pcSkipHtml,
   sameNameConflicts, splitPlayerGeneration, nameSplitConflicts, mergePlayerGeneration, nendoOfDate, resolvePlayerPid, playerNameSet, rememberPlayerName, applyPidsByYear, ENROLL_SPAN_MAX,
-  pidOf, playerDisplayName, makePid, isPid, TAB_NAMES, playerQualifier, dupDisplayNameSet,
+  pidOf, playerDisplayName, makePid, isPid, TAB_NAMES, seasonPickGroups, seasonRecord, isPracticeSeason, playerQualifier, dupDisplayNameSet,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
