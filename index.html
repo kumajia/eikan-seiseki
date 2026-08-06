@@ -510,7 +510,7 @@
     <button data-tab="add">試合を追加</button>
     <button data-tab="guide">攻略メモ</button>
     <button data-tab="manager">監督室</button>
-    <button data-tab="bestnine">ベスト9</button>
+    <button data-tab="bestnine">ベストナイン</button>
     <button data-tab="awards">表彰</button>
     <button data-tab="videopool">動画プール</button>
     <button data-tab="data">データ</button>
@@ -2336,7 +2336,7 @@ function seed(){
    フィールドを追加/変更する時はDB_VERSIONを上げてここに処理を足すこと。
    （各所に残っている DB.playerMeta = DB.playerMeta||{} 等の即席防御は、
    万一migrate()を経由せず参照された場合の保険としてそのまま残している） */
-const DB_VERSION=1;
+const DB_VERSION=2;
 function migrate(db){
   db.seasons = (db.seasons && typeof db.seasons==="object") ? db.seasons : {};
   db.milestones = Array.isArray(db.milestones) ? db.milestones : [];
@@ -2348,10 +2348,41 @@ function migrate(db){
     if(m.captain===undefined) m.captain=false;
   }
   db.schoolYomi = (db.schoolYomi && typeof db.schoolYomi==="object") ? db.schoolYomi : {};
-  db.playerAliases = (db.playerAliases && typeof db.playerAliases==="object") ? db.playerAliases : {};
   db.dismissedDuplicateHints = Array.isArray(db.dismissedDuplicateHints) ? db.dismissedDuplicateHints : [];
-  db.playerAliases = (db.playerAliases && typeof db.playerAliases==="object") ? db.playerAliases : {};
-  db.dismissedDuplicateHints = Array.isArray(db.dismissedDuplicateHints) ? db.dismissedDuplicateHints : [];
+  /* 第161弾（DB_VERSION 2）: playerAliases を pid と names に移す。
+
+     エイリアスは「この名前は永久にあの人」という名前への無条件の規則なので、
+     将来その名字の新入生が来ると黙って先輩に合流してしまう。
+     しかも nameKey が先に名前を潰すため、同姓別人の検出にも引っかからない。
+     出場の行に pid を押し、照合用の表記を names に持たせる形へ一度だけ移す。
+     移行後の集計結果は変わらない（同じ人にまとまることは同じ）。 */
+  if(db.playerAliases && Object.keys(db.playerAliases).length){
+    const flat=k=>{ let v=db.playerAliases[k], seen=new Set([k]);
+      while(v!=null && db.playerAliases[v]!=null && !seen.has(v)){ seen.add(v); v=db.playerAliases[v]; }
+      return v; };
+    const pairs=Object.keys(db.playerAliases).map(k=>[k, flat(k)]).filter(([k,v])=>v && v!==k);
+    const to=new Map(pairs);
+    for(const ss of Object.values(db.seasons||{}))
+      for(const g of (ss.games||[])) for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+        if(!p || !p.name || p.pid) continue;
+        const t=to.get(String(p.name).normalize("NFKC").replace(/\s+/g,"").trim());
+        if(t) p.pid=t;
+      }
+    for(const ms of (db.milestones||[])){
+      if(!ms || ms.pid) continue;
+      const t=to.get(String(ms.player||"").normalize("NFKC").replace(/\s+/g,"").trim());
+      if(t) ms.pid=t;
+    }
+    db.playerMeta=db.playerMeta||{};
+    for(const [from,tgt] of pairs){
+      const m=db.playerMeta[tgt]=db.playerMeta[tgt]||{};
+      const nm=(db.playerMeta[from]&&db.playerMeta[from].name)||from;
+      const has=[...(m.names||[]),m.name||""].some(x=>String(x).normalize("NFKC").replace(/\s+/g,"").trim()===from);
+      if(!has) m.names=[...(m.names||[]), nm];
+    }
+    delete db.playerAliases;
+  }
+  if(db.playerAliases) delete db.playerAliases;
   // 第94弾 ライバル校: 学校名の配列（欠落補完のみ。試合データではないので3点同期のうち軽い追加）
   db.rivals = Array.isArray(db.rivals) ? db.rivals.filter(x=>typeof x==="string" && x.trim()!=="") : [];
   /* 第129弾 指摘の対象外リスト: "分類:対象キー" の文字列配列（例 "noInnings:1690000000123"）。
@@ -2405,20 +2436,25 @@ function curGames(){return DB.seasons[DB.current].games;}
 function nameKeyRaw(s){
   return String(s||"").normalize("NFKC").replace(/\s+/g,"").trim();
 }
-function nameKey(s){
-  const raw = nameKeyRaw(s);
-  return (DB && DB.playerAliases && DB.playerAliases[raw]) ? DB.playerAliases[raw] : raw;
-}
+/* 第161弾: 名前を整える処理だけを持つ。以前はここで playerAliases を引いて
+   「石井七は石井のこと」と読み替えていたが、**名前に対する無条件の規則**なので
+   将来「石井七」という新入生が来ると黙って先輩に合流してしまう。
+   同じ表記でも別人になりうる以上、名前だけで同一性を決めてはいけない。
+   統合は pid（行ごと）と playerMeta.names（照合用の表記）で表す。 */
+function nameKey(s){ return nameKeyRaw(s); }
+/* 表記ゆれの統合。行に pid を押し、その表記を寄せ先に覚えさせる（第161弾で方式変更）。
+   名前は書き換えないので画面の表記はそのまま。解除できるように playerMeta[統合元] は残す。 */
 function mergePlayerAlias(fromRaw, toRaw){
   if(!fromRaw || !toRaw || fromRaw === toRaw) return false;
-  DB.playerAliases = DB.playerAliases || {};
   DB.playerMeta = DB.playerMeta || {};
-  
-  // 多段エイリアスの平坦化：fromRaw を指していたエイリアスもすべて toRaw を指すように変更
-  for(const [k, v] of Object.entries(DB.playerAliases)){
-    if(v === fromRaw) DB.playerAliases[k] = toRaw;
-  }
-  DB.playerAliases[fromRaw] = toRaw;
+  let moved=0;
+  for(const [,ss] of Object.entries(DB.seasons||{}))
+    for(const g of (ss.games||[])) for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+      if(!p || !p.name || pidOf(p)!==fromRaw) continue;
+      p.pid=toRaw; moved++;
+    }
+  for(const ms of (DB.milestones||[])) if(ms && !ms.pid && nameKeyRaw(ms.player)===fromRaw) ms.pid=toRaw;
+  rememberPlayerName(toRaw, (DB.playerMeta[fromRaw]&&DB.playerMeta[fromRaw].name) || fromRaw);
   
   // toRaw側に欠けているメタデータがあれば補完
   const fromMeta = DB.playerMeta[fromRaw] || {};
@@ -2433,11 +2469,31 @@ function mergePlayerAlias(fromRaw, toRaw){
   return true;
 }
 function unmergePlayerAlias(fromRaw){
-  if(DB.playerAliases && DB.playerAliases[fromRaw]){
-    delete DB.playerAliases[fromRaw];
-    return true;
+  const to=mergedIntoOf(fromRaw);
+  if(!to) return false;
+  let back=0;
+  for(const [,ss] of Object.entries(DB.seasons||{}))
+    for(const g of (ss.games||[])) for(const arr of [g.batters,g.pitchers]) for(const p of (arr||[])){
+      if(!p || !p.name || p.pid!==to) continue;
+      if(nameKeyRaw(p.name)!==fromRaw) continue;      // その表記で記録された行だけ戻す
+      delete p.pid; back++;
+    }
+  for(const ms of (DB.milestones||[])) if(ms && ms.pid===to && nameKeyRaw(ms.player)===fromRaw) delete ms.pid;
+  const m=(DB.playerMeta||{})[to];
+  if(m && m.names){
+    m.names=m.names.filter(nm=>nameKeyRaw(nm)!==fromRaw);
+    if(!m.names.length) delete m.names;
   }
-  return false;
+  return back>0 || !!m;
+}
+/* その表記が誰に寄せられているか。統合の解除・名簿からの除外に使う。 */
+function mergedIntoOf(rawKey){
+  const k=nameKeyRaw(rawKey); if(!k) return "";
+  for(const [key,m] of Object.entries(DB.playerMeta||{})){
+    if(key===k) continue;
+    if((m&&m.names||[]).some(nm=>nameKeyRaw(nm)===k)) return key;
+  }
+  return "";
 }
 /* ---------- 第157弾: 選手の同一性を「名前」から切り離す ----------
 
@@ -4155,9 +4211,8 @@ function playerRoster(){
      ただし**選手の統合で他のキーへ寄せた元のキー**は除く（第147弾）。
      mergePlayerAlias は統合を解除できるように playerMeta[統合元] を消さずに残すので、
      ここで弾かないと「鈴木 健悟（出場なし）」と「鈴木 健悟（23試合）」のように名簿へ二重に出る。 */
-  const aliases=DB.playerAliases||{};
   for(const [key,meta] of Object.entries(DB.playerMeta||{})){
-    if(aliases[key] && aliases[key]!==key) continue;   // 統合されて別キーになっている
+    if(mergedIntoOf(key)) continue;                    // 他の選手へ統合済みの表記（第161弾）
     if(meta && meta.name && !map.has(key)) map.set(key, String(meta.name).trim());
   }
   return [...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],"ja"));
@@ -4252,7 +4307,7 @@ async function drawPlayerCard(key){
     const hit=playerRoster().find(([k])=>k===key);
     const nm=hit?hit[1]:""; const full=fullNameOf(key,nm);
     const meta=(DB.playerMeta||{})[key]||{};
-    const ms=(DB.milestones||[]).filter(m=>nameKey(m.player)===key);
+    const ms=(DB.milestones||[]).filter(m=>(m.pid || nameKey(m.player))===key);
     const c=document.createElement("canvas"); c.width=840; c.height=480;
     const x=c.getContext("2d");
     x.fillStyle="#0b1a2b"; x.fillRect(0,0,840,480);
@@ -5217,8 +5272,7 @@ function renderPlayerContent(){
     <div class="scroll" data-kind="playerLog"><table>${playerLogTableHtml(logRows,enrollYear)}</table></div></section>`;
 
   // --- 選手の統合（別名） ---
-  const aliasesNow = DB.playerAliases || {};
-  const mergedFrom = Object.keys(aliasesNow).filter(k=>aliasesNow[k]===key);
+  const mergedFrom = ((DB.playerMeta||{})[key]||{}).names || [];   // 第161弾: namesが統合の記録
   const rosterOthers = playerRoster().filter(([k])=>k!==key);
   let mergeInner = `<div class="note" style="margin-bottom:8px">同じ選手が違う表記に分かれてる場合、ここで1人にまとめられるで（成績も合流する）。ゲーム内で同姓が増えて「石井」→「石井七」のように表記が変わった時などに使う。</div>`;
   if(mergedFrom.length){
@@ -5588,7 +5642,8 @@ function renderTimeline(){
   // 2) マイルストーン（通算記録達成: ○○が50安打 等）
   for(const ms of (DB.milestones||[])){
     if(ms.date){
-      events.push({ type: "milestone", date: ms.date, label: ms.label, player: ms.player, gameId: ms.gameId });
+      // pid も持ち回る（第160弾。分離した選手の節目が今の選手のリンクにならないように）
+      events.push({ type: "milestone", date: ms.date, label: ms.label, player: ms.player, pid: ms.pid, gameId: ms.gameId });
     }
   }
   
@@ -5632,7 +5687,7 @@ function renderTimeline(){
       } else if(e.type === "milestone"){
         title = `記録達成 <span style="font-size:10px;margin-left:4px">${esc(e.date.substring(5))}</span>`;
         const linkStr = e.gameId ? `<span class="glink num" role="link" tabindex="0" data-gid="${esc(String(e.gameId))}">詳細</span>` : "";
-        desc = `<strong><span class="plink" role="link" tabindex="0" data-key="${esc(nameKey(e.player))}">${esc(e.player)}</span></strong> が ${esc(e.label)} を達成。 ${linkStr}`;
+        desc = `<strong><span class="plink" role="link" tabindex="0" data-key="${esc((e.pid || nameKey(e.player)))}">${esc(e.player)}</span></strong> が ${esc(e.label)} を達成。 ${linkStr}`;
       } else if(e.type === "retirement"){
         title = `引退 <span style="font-size:10px;margin-left:4px">${esc(e.date.substring(5))}</span>`;
         desc = `<strong>${esc(String(e.enrollYear))}年入学世代</strong> が引退。`;
@@ -5842,7 +5897,7 @@ function plinkHtml(key,name){
   return `<span class="plink" role="link" tabindex="0" data-key="${esc(key)}">${esc(fullNameOf(key,name))}`
     +(q?`<span class="dim" style="font-size:.85em">${esc(q)}</span>`:"")+`</span>`;
 }
-// #12 背番号・主将マーク: 名簿・成績表・ベスト9などの選手名の脇に小さく表示する
+// #12 背番号・主将マーク: 名簿・成績表・ベストナインなどの選手名の脇に小さく表示する
 function metaMarks(key){
   const m=(DB.playerMeta||{})[key]||{};
   let s="";
@@ -7150,7 +7205,8 @@ function checkNameDup(input){
     for(const g of s.games){
       if(editingGame && g===editingGame) continue;
       const y=gameYear(g); if(y==null) continue;
-      const hit=(g.batters||[]).some(b=>nameKey(b.name)===key)||(g.pitchers||[]).some(p=>nameKey(p.name)===key);
+      // 第160弾: 分離済みの選手を混ぜないよう、同一性は pid で見る
+      const hit=(g.batters||[]).some(b=>pidOf(b)===key)||(g.pitchers||[]).some(p=>pidOf(p)===key);
       if(hit && (lastY==null||y>lastY)) lastY=y;
     }
   }
@@ -8448,17 +8504,20 @@ function mergeDB(d){
     }
     if(msAdded) lines.push(`記録達成: ${msAdded}件を合流`);
   }
-  if(d.playerAliases){ // 選手統合（別名）も未設定分だけ合流。この端末の統合設定は上書きしない
-    DB.playerAliases=DB.playerAliases||{};
-    let aliasAdded=0;
-    for(const [k,v] of Object.entries(d.playerAliases)) if(!DB.playerAliases[k]&&v){ DB.playerAliases[k]=v; aliasAdded++; }
-    // 合流で多段（X→Y→Z）になりうるので平坦化する（nameKeyは1段しか辿らないため）
-    for(const k of Object.keys(DB.playerAliases)){
-      let v=DB.playerAliases[k]; const seen=new Set([k]);
-      while(v!=null && DB.playerAliases[v]!=null && !seen.has(v)){ seen.add(v); v=DB.playerAliases[v]; }
-      if(v!=null) DB.playerAliases[k]=v;
-    }
-    if(aliasAdded) lines.push(`選手統合: ${aliasAdded}件を合流`);
+  /* 第161弾: 選手統合は playerAliases（名前への規則）から names（照合用の表記）へ移った。
+     取り込むデータが古い形式なら、その場で names へ変換して合流する。
+     出場の行の pid は試合と一緒に入ってくるので、ここでは名簿側だけを見ればよい。 */
+  {
+    let mergeAdded=0;
+    const add=(to,nm)=>{ if(!to||!nm) return;
+      DB.playerMeta=DB.playerMeta||{};
+      const m=DB.playerMeta[to]=DB.playerMeta[to]||{};
+      const seen=[...(m.names||[]), m.name||"", to].map(x=>nameKeyRaw(x));
+      if(seen.includes(nameKeyRaw(nm))) return;
+      m.names=[...(m.names||[]), nm]; mergeAdded++; };
+    for(const [k,m] of Object.entries(d.playerMeta||{})) for(const nm of ((m&&m.names)||[])) add(k,nm);
+    if(d.playerAliases) for(const [from,to] of Object.entries(d.playerAliases)) if(to) add(to,from);
+    if(mergeAdded) lines.push(`選手統合: ${mergeAdded}件を合流`);
   }
   if(Array.isArray(d.dismissedDuplicateHints)){ // 「別人」判定の合流（和集合）
     DB.dismissedDuplicateHints=DB.dismissedDuplicateHints||[];
@@ -9541,10 +9600,14 @@ function pitchCountMerge(gamePitchers, read){
      どちらの行に書くべきかを名前だけでは決められない。
      以前は Map が後の行を、書き込み側は最初の行を選んでいて食い違っていた。
      曖昧なまま書くと誤った行に球数が入るので、その名前は丸ごと見送る。 */
+  /* 第160弾: **突き合わせは名前で行う**（OCRは名前しか読まないため）。
+     書き込み先の同一性だけを pid で持つ。ここを取り違えると、
+     pidを振った選手の行が永久に「この試合の投手に居ない名前」になって書き込めなくなる。 */
+  const nk=p=>nameKey(p.name);
   const dupKeys=new Set();
   { const seen=new Set();
-    for(const p of list){ const k=pidOf(p); if(seen.has(k)) dupKeys.add(k); else seen.add(k); } }
-  const byKey=new Map(list.map(p=>[pidOf(p), p]));
+    for(const p of list){ const k=nk(p); if(seen.has(k)) dupKeys.add(k); else seen.add(k); } }
+  const byKey=new Map(list.map(p=>[nk(p), p]));
   const apply=[], skip=[];
   for(const r of (read||[])){
     const nm=String(r.name||"").trim();
@@ -9566,7 +9629,8 @@ function pitchCountMerge(gamePitchers, read){
     apply.push({name:p.name, key:pidOf(p), P:n(r.P)});
   }
   for(const p of (gamePitchers||[])){
-    if(!apply.some(a=>a.key===pidOf(p)) && !skip.some(s=>pidOf(s)===pidOf(p)))
+    // apply は pid、skip は名前で持っているので、それぞれの持ち方で照合する
+    if(!apply.some(a=>a.key===pidOf(p)) && !skip.some(s=>nameKey(s.name)===nk(p)))
       skip.push({name:p.name, why:"読み取り結果に出てこなかった"});
   }
   return {apply, skip};
@@ -10602,7 +10666,8 @@ function updateSeasonModalUI(){
 }
 
 /* ---------- init ---------- */
-async function init(){
+/* init から切り出し（第160弾）: 起動と復旧 */
+async function bootAndRecover(){
   await initProfiles(); // #26 プロファイル索引を先に確定（loadDB/saveDBが現在プロファイルのキーを使うため）
   const loaded=await loadDB();
   if(loaded.corrupted){
@@ -10630,6 +10695,9 @@ async function init(){
   fillPositionSelects();
   {const v=$("#periodAnchorInput").value.trim(); periodAnchor=v?parseInt(v,10):null;}
   render();
+}
+/* init から切り出し（第160弾）: プロファイル操作 */
+async function wireProfiles(){
   showDraftBannerIfExist();
   // #26 プロファイル操作
   $("#profileSel").addEventListener("change",e=>{ switchProfile(e.target.value); });
@@ -10656,6 +10724,9 @@ async function init(){
     $$(".tl-year").forEach(y=>y.classList.add("closed"));
     $$(".tl-year-content").forEach(c=>c.classList.add("closed"));
   });
+}
+/* init から切り出し（第160弾）: シーズンと試合フォーム */
+async function wireSeasonForm(){
   $("#seasonSel").addEventListener("change",e=>{
     if(e.target.value==="__moreSeasons__"){ // シーズン切替ではなく「全部見せて」の合図
       seasonSelExpanded=true; fillSeasons(); toast("全シーズンを表示しました（もう一度開いてください）"); return;
@@ -10828,6 +10899,9 @@ async function init(){
   });
 
   // sorting
+}
+/* init から切り出し（第160弾）: 表の並び替え */
+function wireSorting(){
   $("#batTbl").addEventListener("click",e=>{
     const th=e.target.closest("th[data-key]"); if(!th)return;
     toggleSort(sortState.summaryBat,th.dataset.key); render();
@@ -10854,6 +10928,9 @@ async function init(){
     goToPlayer(el.dataset.key);
   });
   // 選手名簿タブ: 開閉・#21世代名鑑カードPNG・行のインライン編集
+}
+/* init から切り出し（第160弾）: 選手名簿タブ */
+async function wireRosterTab(){
   $("#enrollYearList").addEventListener("click",async e=>{
     const gc=e.target.closest("[data-gencard]");
     if(gc){ e.stopPropagation(); drawGenerationCard(gc.dataset.gencard); return; }
@@ -10881,7 +10958,7 @@ async function init(){
         number: box.querySelector(".re-num").value.trim(),
         captain: box.querySelector(".re-cap").checked
       });
-      await saveDB(); render(); toast("選手情報を保存しました"); // 名鑑・ベスト9・datalist等にも反映するので全体render
+      await saveDB(); render(); toast("選手情報を保存しました"); // 名鑑・ベストナイン・datalist等にも反映するので全体render
       return;
     }
     const gh=e.target.closest(".ghead");
@@ -10905,6 +10982,9 @@ async function init(){
     goToPlayer(b.dataset.pickplayer);
   });
   // Escで開いてるモーダルを閉じる / Enter・Spaceで開閉ヘッダをトグル
+}
+/* init から切り出し（第160弾）: キーボード操作と遷移リンク */
+function wireKeyboardNav(){
   document.addEventListener("keydown",e=>{
     if(e.key==="Escape"){
       closeSeasonModal(); closeBulkEnrollModal(); closeBulkPositionModal(); closeBulkSubPositionModal(); closeFramePicker();
@@ -10933,6 +11013,9 @@ async function init(){
     openGameById(el.dataset.gid);
   });
   $("#playerSel").addEventListener("input",()=>{ if(currentPlayerKey()) renderPlayerContent(); });
+}
+/* init から切り出し（第160弾）: 選手情報の編集 */
+async function wirePlayerMeta(){
   $("#playerSel").addEventListener("change",()=>{ if(currentPlayerKey()) renderPlayerContent(); });
   // 選手タブのメタ編集フォーム（畳んである「この選手の情報を編集」）。
   // 保存処理は updatePlayerMeta に集約（選手名簿タブのインライン編集と共通）
@@ -10955,13 +11038,13 @@ async function init(){
   $("#playerFullName").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
     updatePlayerMeta(key,{fullName:$("#playerFullName").value.trim()});
-    await saveDB(); render(); // 名鑑・ベスト9・datalist等の表示に反映するため全体render
+    await saveDB(); render(); // 名鑑・ベストナイン・datalist等の表示に反映するため全体render
   });
   // #12 背番号
   $("#playerNumber").addEventListener("change",async()=>{
     const key=currentPlayerKey(); if(!key) return;
     updatePlayerMeta(key,{number:$("#playerNumber").value.trim()});
-    await saveDB(); render(); // 名簿・成績表・ベスト9の表示に反映
+    await saveDB(); render(); // 名簿・成績表・ベストナインの表示に反映
   });
   // #12 主将
   $("#playerCaptain").addEventListener("change",async()=>{
@@ -11040,6 +11123,9 @@ async function init(){
     toggleSort(sortState.seasonCompare,th.dataset.key); renderSeasonCompare();
   });
   // simple/detailed toggle
+}
+/* init から切り出し（第160弾）: 表示切替とサブタブ */
+function wireToggles(){
   $("#detailToggle").addEventListener("change",e=>{detailedView=e.target.checked;render();});
   // period block selector
   $("#periodBlockSel").addEventListener("change",e=>{periodBlock=parseInt(e.target.value,10);renderPeriod();});
@@ -11101,6 +11187,9 @@ async function init(){
   resetForm();
 
   // OCR wiring
+}
+/* init から切り出し（第160弾）: OCRと画像の受け取り */
+function wireOcrInput(){
   loadGemCfg();
   $("#runOcr").addEventListener("click",runOcr);
   $("#fpGo").addEventListener("click",fpConfirm);
@@ -11175,6 +11264,9 @@ async function init(){
   });
 
   // 不一致なら確認する。保存を続けるなら true、やめるなら false。移動先が選ばれたら DB.current を切り替える
+}
+/* init から切り出し（第160弾）: 保存処理 */
+async function wireSave(){
   function confirmSeasonBeforeSave(g){
     if(editId!=null) return true;                  // 既存試合の編集は保存先が確定しているので触らない
     const mm=seasonMismatch(g.date, DB.current, Object.keys(DB.seasons));
@@ -11201,7 +11293,10 @@ async function init(){
     // 第143弾: OCRに使った画像は resetForm() で消えるので、ここで先に確保しておく
     const shotImgs=[...($("#shotFiles")?$("#shotFiles").files:[])].filter(f=>f.type&&f.type.startsWith("image/"));
     const shotSeason=DB.current;
-    const g=collectForm();
+    let g=collectForm();
+    /* 第161弾: 保存時にも pid を確定させる。エイリアスは名前への規則だったので
+       手入力にも自動で効いていたが、pid は行に押すのでここで押さないと手入力だけ割れる。 */
+    g=applyPidsByYear(g, nendoOf(DB.current, gameYear(g)));
     if(!g.batters.length && !g.pitchers.length){toast("選手が入力されていません",true);return;}
     if(!confirmSeasonBeforeSave(g)) return; // 日付とシーズンの食い違いを確認（第108弾）
     if(editId==null){ // 二重登録ガード: 新規保存時に同一試合らしきものがあれば確認
@@ -11265,6 +11360,9 @@ async function init(){
     if(!stay) switchTab("summary","replace");
   }
   $("#saveGame").addEventListener("click",()=>persistGame(false));
+}
+/* init から切り出し（第160弾）: 動画プール */
+async function wireVideoPool(){
   $("#saveGameCont").addEventListener("click",()=>persistGame(true)); // サマリへ飛ばず連続入力
   // 動画プール（第103弾）
   { const sv=$("#vpServer");
@@ -11318,6 +11416,9 @@ async function init(){
     DB.lastExport={at:Date.now(), games:countAllGames()}; saveDB(); renderBackupHint(); // バックアップ催促の基準を更新
     toast("書き出しました");
   });
+}
+/* init から切り出し（第160弾）: 検索・共有・比較・バックアップ */
+async function wireSearchShare(){
   $("#exportCsv").addEventListener("click",()=>{ try{ exportCsvAll(); }catch(e){ toast("CSV書き出しに失敗: "+e.message,true); } });
   // 選手検索（ヘッダ常設・#14）
   const doPlayerSearch=()=>{
@@ -11368,6 +11469,9 @@ async function init(){
     else if(e.target.closest("#backupLater")){ window.__backupHintDismissed=true; renderBackupHint(); }
   });
   // 自動スナップショットの一覧・復元
+}
+/* init から切り出し（第160弾）: 自動スナップショット */
+async function wireSnapshots(){
   async function fillSnapList(){
     const sel=$("#snapSel"); if(!sel) return;
     try{
@@ -11425,6 +11529,9 @@ async function init(){
   });
 
   { const b=$("#nenkanBtn"); if(b) b.addEventListener("click",openNenkan); }
+}
+/* init から切り出し（第160弾）: データ検算 */
+function wireAudit(){
   { const b=$("#errorLogClear"); if(b) b.addEventListener("click",()=>{ errLogClear(); toast("エラーログを消去しました"); }); }
   // データ検算（第127弾）
   { const c=$("#auditIncludeSum"); if(c) c.addEventListener("change",renderAudit); }
@@ -11435,6 +11542,9 @@ async function init(){
     });
   }
   /* 第144弾: 球数の後付け取り込み。画像ならそのまま、動画ならコマ選択画面を挟む。 */
+}
+/* init から切り出し（第160弾）: 球数の後付け取り込み */
+async function wirePitchCount(){
   { const el=$("#pitchCountList"); if(el) el.addEventListener("click",e=>{
       const b=e.target.closest(".pcPick"); if(!b) return;
       if(pcBusy){ toast("いま読み取り中です",true); return; }
@@ -11481,6 +11591,9 @@ async function init(){
   }
   /* 第129弾: 指摘の対象外（健康診断・データ検算で共通）。
      どちらのカードからでも同じ操作になるよう、親要素にまとめて委譲する。 */
+}
+/* init から切り出し（第160弾）: 指摘の対象外 */
+async function wireHealthIgnore(){
   { const handler=async e=>{
       const x=e.target.closest(".hix");
       if(x){ e.stopPropagation(); await hiAdd(x.dataset.cat, x.dataset.key); renderHealthCheck(); renderAudit(); toast("この指摘を対象外にしました"); return; }
@@ -11545,6 +11658,9 @@ async function init(){
     const ac=$("#auditContent");  if(ac) ac.addEventListener("click",handler);
   }
   // #37 オフライン案内バー（起動時＋切替時）
+}
+/* init から切り出し（第160弾）: オフライン案内 */
+function wireOfflineBar(){
   window.addEventListener("online",updateOfflineBar);
   window.addEventListener("offline",updateOfflineBar);
   updateOfflineBar();
@@ -11557,6 +11673,9 @@ async function init(){
     switchTab(name,"silent");
   });
   const gm=/^#games\/(.+)$/.exec(location.hash||"");
+}
+/* init から切り出し（第160弾）: テスト用フックの公開 */
+function exposeTestHooks(){
   if(gm){ openGameById(decodeURIComponent(gm[1]),"replace"); }
   else{
     const rawHash=location.hash.slice(1);
@@ -11564,6 +11683,26 @@ async function init(){
     switchTab(initialTab,"silent");
     if(rawHash!=="test") history.replaceState({tab:initialTab},"","#"+initialTab); // #testはtests.jsが使うので消さない
   }
+}
+async function init(){
+  await bootAndRecover();
+  await wireProfiles();
+  await wireSeasonForm();
+  wireSorting();
+  await wireRosterTab();
+  wireKeyboardNav();
+  await wirePlayerMeta();
+  wireToggles();
+  wireOcrInput();
+  await wireSave();
+  await wireVideoPool();
+  await wireSearchShare();
+  await wireSnapshots();
+  wireAudit();
+  await wirePitchCount();
+  await wireHealthIgnore();
+  wireOfflineBar();
+  exposeTestHooks();
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
 window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
