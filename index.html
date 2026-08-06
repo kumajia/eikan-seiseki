@@ -11672,10 +11672,10 @@ function wireOfflineBar(){
     const name=(e.state&&e.state.tab) || (location.hash? location.hash.slice(1):"summary");
     switchTab(name,"silent");
   });
-  const gm=/^#games\/(.+)$/.exec(location.hash||"");
 }
-/* init から切り出し（第160弾）: テスト用フックの公開 */
-function exposeTestHooks(){
+/* init から切り出し（第160弾）: 起動時に開く画面を決める（URLのハッシュから） */
+function openInitialView(){
+  const gm=/^#games\/(.+)$/.exec(location.hash||"");
   if(gm){ openGameById(decodeURIComponent(gm[1]),"replace"); }
   else{
     const rawHash=location.hash.slice(1);
@@ -11702,7 +11702,7 @@ async function init(){
   await wirePitchCount();
   await wireHealthIgnore();
   wireOfflineBar();
-  exposeTestHooks();
+  openInitialView();
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
 window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
