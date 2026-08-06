@@ -500,7 +500,6 @@
   <nav class="tabs" id="tabs">
     <button data-tab="summary" class="on">シーズン成績</button>
     <button data-tab="period">期間集計</button>
-    <button data-tab="player">選手</button>
     <button data-tab="tags">タグ管理</button>
     <button data-tab="timeline">栄冠アーカイブ</button>
     <button data-tab="enrollYear">選手名簿</button>
@@ -571,82 +570,6 @@
   </div>
 
   <!-- PLAYER -->
-  <div id="tab-player" style="display:none">
-    <section class="card">
-      <h2>選手個別</h2>
-      <div class="note">通算は練習試合も含む（マイルストーンは公式戦のみ）。選手の追加・一括設定は「選手名簿」タブにあります。</div>
-      <div class="row" style="margin-bottom:6px;align-items:flex-end">
-        <div class="field" style="max-width:52px"><label>&nbsp;</label>
-          <button type="button" class="mini ghost" id="playerPrevBtn" title="前の選手へ">◀</button>
-        </div>
-        <div class="field" style="flex:1;min-width:200px"><label>選手（入力すると絞り込めます）</label>
-          <input type="text" id="playerSel" list="playerListDL" placeholder="選手名を入力/選択" autocomplete="off">
-          <datalist id="playerListDL"></datalist>
-        </div>
-        <div class="field" style="max-width:52px"><label>&nbsp;</label>
-          <button type="button" class="mini ghost" id="playerNextBtn" title="次の選手へ">▶</button>
-        </div>
-      </div>
-      <div class="game" id="playerPickerBox">
-        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
-          <span class="chev">▸</span>
-          <span class="opp">名簿から選ぶ</span>
-          <span class="dim" style="font-size:12px;margin-left:auto">学年ごとに一覧</span>
-        </div>
-        <div class="gbody"><div id="playerPickerList"></div></div>
-      </div>
-      <div class="game" id="playerMetaBox">
-        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
-          <span class="chev">▸</span>
-          <span class="opp">この選手の情報を編集</span>
-          <span class="dim" style="font-size:12px;margin-left:auto">入学年・ポジション・背番号など</span>
-        </div>
-        <div class="gbody">
-          <div class="row" style="align-items:flex-end">
-            <div class="field" style="max-width:130px"><label>入学年</label>
-              <input type="number" id="playerEnrollYear" placeholder="例: 2030">
-            </div>
-            <div class="field" style="max-width:160px"><label>フルネーム（名鑑表示）</label>
-              <input type="text" id="playerFullName" placeholder="例: 石井 七海" autocomplete="off">
-            </div>
-            <div class="field" style="max-width:120px"><label>ポジション</label>
-              <select id="playerPosition"></select>
-            </div>
-            <div class="field" style="max-width:120px"><label>サブポジション</label>
-              <select id="playerSubPosition"></select>
-            </div>
-            <div class="field" style="max-width:90px"><label>背番号</label>
-              <input type="text" id="playerNumber" placeholder="例: 10" autocomplete="off" inputmode="numeric">
-            </div>
-            <div class="field" style="max-width:80px"><label>主将</label>
-              <label class="inline" style="display:inline-flex;align-items:center;gap:5px;height:36px;cursor:pointer"><input type="checkbox" id="playerCaptain"> 主将</label>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-    <div id="playerContent"></div>
-    <section class="card">
-      <div class="game" id="playerCompareBox">
-        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
-          <span class="chev">▸</span>
-          <span class="opp">選手比較</span>
-          <span class="dim" style="font-size:12px;margin-left:auto">歴代の2人を通算成績で比較</span>
-        </div>
-        <div class="gbody">
-          <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付きます。</div>
-          <div class="row" style="align-items:end">
-            <div class="field" style="flex:1;min-width:150px"><label>選手A</label>
-              <input type="text" id="cmpA" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
-            <div class="field" style="flex:1;min-width:150px"><label>選手B</label>
-              <input type="text" id="cmpB" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
-            <div class="field"><label>&nbsp;</label><button class="primary" id="cmpBtn">比較する</button></div>
-          </div>
-          <div id="cmpResult" style="margin-top:10px"></div>
-        </div>
-      </div>
-    </section>
-  </div>
 
   <!-- BEST NINE -->
   <div id="tab-bestnine" style="display:none">
@@ -718,6 +641,7 @@
 
   <!-- 選手名簿（tab idは互換のため enrollYear のまま） -->
   <div id="tab-enrollYear" style="display:none">
+   <div id="rosterListView">
     <section class="card">
       <h2>選手名簿</h2>
       <div class="note">入学年ごとの一覧。見出しタップで展開、選手名タップで個別ページへ。「編集」でその場で情報を変更できます。</div>
@@ -773,6 +697,79 @@
         </div>
       </div>
     </section>
+   </div>
+    <!-- 第164弾: 名簿と選手個別を1画面に統合。名簿が入口で、選ぶとここが出る -->
+    <div id="rosterDetailView" style="display:none">
+      <section class="card">
+      <div class="row" style="margin-bottom:6px;align-items:flex-end">
+        <div class="field" style="max-width:96px"><label>&nbsp;</label>
+          <button type="button" class="mini ghost" id="rosterBackBtn" title="名簿に戻る">← 名簿</button>
+        </div>
+        <div class="field" style="max-width:52px"><label>&nbsp;</label>
+          <button type="button" class="mini ghost" id="playerPrevBtn" title="前の選手へ">◀</button>
+        </div>
+        <div class="field" style="flex:1;min-width:200px"><label>選手（入力すると絞り込めます）</label>
+          <input type="text" id="playerSel" list="playerListDL" placeholder="選手名を入力/選択" autocomplete="off">
+          <datalist id="playerListDL"></datalist>
+        </div>
+        <div class="field" style="max-width:52px"><label>&nbsp;</label>
+          <button type="button" class="mini ghost" id="playerNextBtn" title="次の選手へ">▶</button>
+        </div>
+      </div>
+      <div class="game" id="playerMetaBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">この選手の情報を編集</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">入学年・ポジション・背番号など</span>
+        </div>
+        <div class="gbody">
+          <div class="row" style="align-items:flex-end">
+            <div class="field" style="max-width:130px"><label>入学年</label>
+              <input type="number" id="playerEnrollYear" placeholder="例: 2030">
+            </div>
+            <div class="field" style="max-width:160px"><label>フルネーム（名鑑表示）</label>
+              <input type="text" id="playerFullName" placeholder="例: 石井 七海" autocomplete="off">
+            </div>
+            <div class="field" style="max-width:120px"><label>ポジション</label>
+              <select id="playerPosition"></select>
+            </div>
+            <div class="field" style="max-width:120px"><label>サブポジション</label>
+              <select id="playerSubPosition"></select>
+            </div>
+            <div class="field" style="max-width:90px"><label>背番号</label>
+              <input type="text" id="playerNumber" placeholder="例: 10" autocomplete="off" inputmode="numeric">
+            </div>
+            <div class="field" style="max-width:80px"><label>主将</label>
+              <label class="inline" style="display:inline-flex;align-items:center;gap:5px;height:36px;cursor:pointer"><input type="checkbox" id="playerCaptain"> 主将</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+      </section>
+      <div id="playerContent"></div>
+    <section class="card">
+      <div class="game" id="playerCompareBox">
+        <div class="ghead" tabindex="0" role="button" onclick="this.parentElement.classList.toggle('open')">
+          <span class="chev">▸</span>
+          <span class="opp">選手比較</span>
+          <span class="dim" style="font-size:12px;margin-left:auto">歴代の2人を通算成績で比較</span>
+        </div>
+        <div class="gbody">
+          <div class="note">歴代の2人を並べて通算成績で比較。良い方の数字に色が付きます。</div>
+          <div class="row" style="align-items:end">
+            <div class="field" style="flex:1;min-width:150px"><label>選手A</label>
+              <input type="text" id="cmpA" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
+            <div class="field" style="flex:1;min-width:150px"><label>選手B</label>
+              <input type="text" id="cmpB" list="playerListDL" placeholder="選手名" autocomplete="off"></div>
+            <div class="field"><label>&nbsp;</label><button class="primary" id="cmpBtn">比較する</button></div>
+          </div>
+          <div id="cmpResult" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </section>
+    </div>
+
   </div>
 
   <!-- SEASON COMPARE -->
@@ -4229,12 +4226,29 @@ function currentPlayerKey(){
   }
   return hit? hit[0] : null;
 }
-function goToPlayer(key){
+/* 第164弾: 名簿と選手個別を1つのタブにまとめた。名簿が入口で、選ぶと詳細に切り替わる。
+   左右に並べる案もあったが、.wrap が max-width:1080px の中央寄せで
+   埋めるべき余白が無く、割ると名簿の2列も選手ページの図表も窮屈になるためやめた。 */
+function showRosterDetail(key){
   const hit=playerRoster().find(([k])=>k===key);
-  if(!hit) return;
+  if(!hit) return false;
   $("#playerSel").value=hit[1];
-  switchTab("player");
+  const list=$("#rosterListView"), det=$("#rosterDetailView");
+  if(list) list.style.display="none";
+  if(det) det.style.display="";
   renderPlayerContent();
+  window.scrollTo({top:0,behavior:"auto"});
+  return true;
+}
+function showRosterList(){
+  const list=$("#rosterListView"), det=$("#rosterDetailView");
+  if(det) det.style.display="none";
+  if(list) list.style.display="";
+  renderEnrollYearTab();
+}
+function goToPlayer(key){
+  switchTab("enrollYear");
+  if(!showRosterDetail(key)) showRosterList();
 }
 function goToSeasonInLog(sname){
   switchTab("games");
@@ -4503,7 +4517,7 @@ function rosterGroups(){
     gkey,
     label: gkey==="none"? "入学年未設定" : `${gkey}年入学`,
     gradeLabel: (gkey!=="none" && latestOverall)
-      ? gradeInfo(gkey, latestOverall.season, gameYear({date:latestOverall.date})).label : "",
+      ? gradeInfo(gkey, latestOverall.season, gameYear({date:latestOverall.date}), latestOverall.date).label : "",
     members: groups.get(gkey)
   }));
 }
@@ -4608,7 +4622,6 @@ function renderEnrollYearTab(){
   el.innerHTML = shown? html : `<div class="empty">条件に合う選手がいません。</div>`;
   if(cntEl) cntEl.textContent = shown===total? `${total}人` : `${shown}人 / 全${total}人`;
 }
-// 選手タブの「名簿から選ぶ」。並びは名簿タブと共通（rosterGroups）
 function renderPlayerPicker(){
   const el=$("#playerPickerList"); if(!el) return;
   const groups=rosterGroups();
@@ -4812,7 +4825,16 @@ function nendoOf(sname,fallbackYear){
   if(yr==null) return null;
   return isSpringKoshien(String(sname||"")) ? yr-1 : yr;
 }
-function gradeInfo(enrollYear,sname,fallbackYear){
+/* 第165弾: 3年生の引退判定に日付も使う。
+
+   以前は seasonRank（大会の順序）だけで見ていたが、**練習試合は rank が null** になるため、
+   最新の試合が練習試合だと3年生がいつまでも在校扱いになっていた。
+   実際に「今のおすすめ打線」へ卒業した選手が並んだ（ユーザー報告）。
+
+   3年生は夏の大会が終わると引退する。年度は4月始まりなので、
+   その年度の中で**9月以降（翌年3月まで）なら引退**、4〜8月ならまだ現役。
+   大会の順序で分かるならそちらを優先し、分からないときだけ日付に頼る。 */
+function gradeInfo(enrollYear,sname,fallbackYear,dateStr){
   if(enrollYear==null) return {label:"",retired:false};
   const nendo = nendoOf(sname,fallbackYear);
   if(nendo==null||isNaN(enrollYear)) return {label:"",retired:false};
@@ -4822,6 +4844,10 @@ function gradeInfo(enrollYear,sname,fallbackYear){
   if(g===3){
     const rank=seasonRank(sname);
     if(rank!=null && rank>1) return {label:"引退",retired:true}; // 夏甲子園より後（同一年度）は3年目でも引退扱い
+    if(rank==null){
+      const m=+((String(dateStr||"").match(/^\d{4}-(\d{2})/)||[])[1]||0);
+      if(m && (m>=9 || m<=3)) return {label:"引退",retired:true};  // 夏の大会が終わっている
+    }
   }
   return {label:g+"年",retired:false};
 }
@@ -4968,7 +4994,7 @@ function playerLogTableHtml(rows,enrollYear){
   for(const r of sorted){
     const bTxt = r._b? `${r.AB}打${r.H}安${r.HR?` ${r.HR}本`:''} ${r.RBI}点${r.SB?` ${r.SB}盗`:''}` : '-';
     const pTxt = r._p? `${r.IP}回 ${r.K}K ${r.ER}自責${r.W?' 勝':''}` : '-';
-    const grade=gradeInfo(enrollYear,r.season,r._year).label;
+    const grade=gradeInfo(enrollYear,r.season,r._year,r.date||(r.g&&r.g.date)).label;
     h+=`<tr><td class="name"><span class="glink" role="link" tabindex="0" data-gid="${esc(String(r._gid))}" title="この試合を試合ログで開く">${esc(r.date||'-')}</span></td><td style="text-align:left"><span class="slink" role="link" tabindex="0" data-season="${esc(r.season)}">${esc(r.season)}</span></td><td style="text-align:left">${esc(r.opponent||'-')}</td>`+
       `<td class="num">${esc(grade||'-')}</td><td style="text-align:left">${esc(bTxt)}</td><td style="text-align:left">${esc(pTxt)}</td></tr>`;
   }
@@ -5133,7 +5159,6 @@ function updatePlayerMeta(key,patch){
 }
 function renderPlayerContent(){
   const el=$("#playerContent"); if(!el) return;
-  renderPlayerPicker();
   const key=currentPlayerKey();
   if(!key){ el.innerHTML=`<div class="empty">選手データがまだありません（入力欄で選手名を選んでください）。</div>`; $("#playerEnrollYear").value=""; $("#playerPosition").value=""; $("#playerSubPosition").value=""; $("#playerFullName").value=""; if($("#playerNumber"))$("#playerNumber").value=""; if($("#playerCaptain"))$("#playerCaptain").checked=false; return; }
   DB.playerMeta = DB.playerMeta || {};
@@ -5180,7 +5205,7 @@ function renderPlayerContent(){
   // (退部・引退後は本人の記録が増えんから、本人基準やと引退・卒業に一生ならへん)
   const latestOverall=latestGameGlobally();
   const latestRef = (latestOverall && (!lastLog || latestOverall.date >= lastLog.date)) ? latestOverall : lastLog;
-  const curGrade = latestRef? gradeInfo(enrollYear, latestRef.season, gameYear({date:latestRef.date})).label : "";
+  const curGrade = latestRef? gradeInfo(enrollYear, latestRef.season, gameYear({date:latestRef.date}), latestRef.date).label : "";
   const posStr = position? (subPosition? `${position}(${subPosition})` : position) : "";
   const badgeBits=[(DB.playerMeta[key]?.fullName)||"",curGrade,posStr].filter(Boolean).join("・");
 
@@ -5961,7 +5986,7 @@ function hitStreaks(){
 function isPlayerRetired(key){
   const ey=DB.playerMeta[key]?.enrollYear; if(ey==null) return false; // 入学年不明は現役扱い
   const latest=latestGameGlobally(); if(!latest) return false;
-  return !!gradeInfo(ey, latest.season, gameYear({date:latest.date})).retired;
+  return !!gradeInfo(ey, latest.season, gameYear({date:latest.date}), latest.date).retired;
 }
 function renderAwards(){
   const sel=$("#awardSeasonSel"); if(!sel) return;
@@ -7631,7 +7656,7 @@ function retirementGameCardHtml(key, enrollYear){
       const p=(g.pitchers||[]).find(x=>pidOf(x)===key);
       if(!b && !p) continue;
       apps.push({date:g.date||"", season:sname, opp:g.opponent||"", gid:g.id,
-        retired: gradeInfo(enrollYear, sname, gameYear(g)).retired, b, p});
+        retired: gradeInfo(enrollYear, sname, gameYear(g), g&&g.date).retired, b, p});
     }
   }
   apps.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
@@ -10603,8 +10628,10 @@ async function runFreshOcr(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","player","tags","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
+const TAB_NAMES=["summary","period","tags","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
 function switchTab(name,mode){
+  // 第164弾: 廃止した「選手」タブのURLは名簿タブへ寄せる（古いブックマーク対策）
+  if(name==="player") name="enrollYear";
   if(!TAB_NAMES.includes(name)) name="summary";
   $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
   TAB_NAMES.forEach(t=>$("#tab-"+t).style.display=t===name?"":"none");
@@ -10988,10 +11015,8 @@ async function wireRosterTab(){
   });
   $("#playerPrevBtn").addEventListener("click",()=>stepPlayer(-1));
   $("#playerNextBtn").addEventListener("click",()=>stepPlayer(1));
-  $("#playerPickerList").addEventListener("click",e=>{
-    const b=e.target.closest("[data-pickplayer]"); if(!b) return;
-    goToPlayer(b.dataset.pickplayer);
-  });
+  // 第164弾: 詳細から名簿一覧へ戻る
+  { const b=$("#rosterBackBtn"); if(b) b.addEventListener("click",()=>showRosterList()); }
   // Escで開いてるモーダルを閉じる / Enter・Spaceで開閉ヘッダをトグル
 }
 /* init から切り出し（第160弾）: キーボード操作と遷移リンク */
@@ -11752,7 +11777,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, O
   pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
   pitchCountForce, pcSkipHtml,
   sameNameConflicts, splitPlayerGeneration, nameSplitConflicts, mergePlayerGeneration, nendoOfDate, resolvePlayerPid, playerNameSet, rememberPlayerName, applyPidsByYear, ENROLL_SPAN_MAX,
-  pidOf, playerDisplayName, makePid, isPid, playerQualifier, dupDisplayNameSet,
+  pidOf, playerDisplayName, makePid, isPid, TAB_NAMES, playerQualifier, dupDisplayNameSet,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
