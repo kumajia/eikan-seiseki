@@ -2225,7 +2225,7 @@ function renderHealthCheck(){
         : `<span class="dim" style="font-size:11.5px">名簿に今の選手の情報がありませんが、そのままでも分けられます。<button type="button" class="mini ghost dupSplit" data-key="${esc(c.key)}" data-cut="${esc(String(c.cut))}">2人に分ける</button></span>`;
       return `<div style="border-left:3px solid var(--amber);background:var(--panel);border-radius:0 8px 8px 0;padding:9px 11px;margin:6px 0">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span><b>${esc(c.name)}</b> <span class="dim" style="font-size:11.5px">${esc(yrs)}に出場</span></span>
+          <span><b>${plinkHtml(c.key,c.name)}</b> <span class="dim" style="font-size:11.5px">${esc(yrs)}に出場</span></span>
           ${xBtn("dupName",c.key)}
         </div>
         <div class="dim" style="font-size:11.5px;margin-top:3px">
@@ -2253,13 +2253,13 @@ function renderHealthCheck(){
     const ign=hiList("splitName").length;
     const body=arr.length? arr.map(c=>{
       const to=c.suggest;
-      const cands=c.candidates.map(x=>`${esc(x.name)}（${x.enrollYear!=null?esc(String(x.enrollYear))+"年入学・":""}${x.years.join("・")}年度）`).join("、");
+      const cands=c.candidates.map(x=>`${plinkHtml(x.key,x.name)}（${x.enrollYear!=null?esc(String(x.enrollYear))+"年入学・":""}${x.years.join("・")}年度）`).join("、");
       const btn=to
         ? `<button type="button" class="mini primary splitMerge" data-from="${esc(c.key)}" data-to="${esc(to.key)}">${esc(c.name)}の${c.games}試合を ${esc(to.name)} にまとめる</button>`
         : `<span class="dim" style="font-size:11.5px">どちらの選手か決められません。名簿で入学年度を入れると判別できます</span>`;
       return `<div style="border-left:3px solid var(--amber);background:var(--panel);border-radius:0 8px 8px 0;padding:9px 11px;margin:6px 0">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span><b>${esc(c.name)}</b> <span class="dim" style="font-size:11.5px">${c.years.join("・")}年度に${c.games}試合</span></span>
+          <span><b>${plinkHtml(c.key,c.name)}</b> <span class="dim" style="font-size:11.5px">${c.years.join("・")}年度に${c.games}試合</span></span>
           ${xBtn("splitName",c.key)}
         </div>
         <div class="dim" style="font-size:11.5px;margin-top:3px">
@@ -2943,7 +2943,8 @@ function leaderKpisHtml(brows,gameCount){
   return LEADER_DEFS.map(([key,label,fmt])=>{
     const leader=[...c].sort((a,b)=>b[key]-a[key])[0];
     const val= fmt==="avg3"? avg3(leader[key]) : leader[key];
-    return kpi(label,val,"a",esc(fullNameOf(pidOf(leader),leader.name))+note);
+    // 第163弾: 部門の首位から本人へ飛べるように（kpiのfootは生HTMLを通す）
+    return kpi(label,val,"a",plinkHtml(pidOf(leader),leader.name)+esc(note));
   }).join("");
 }
 
@@ -7101,11 +7102,20 @@ function gameBatMini(g){
     return (a.sub?1:0)-(b.sub?1:0);
   });
   let h=`<thead><tr><th>順</th><th class="name">選手</th>${cols.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`;
+  /* 第163弾: 選手名を選手ページへのリンクにする。
+     成績表・ベストナイン・表彰は前からリンクだったのに、試合ログだけ素の文字だった。
+     「試合を見ていて気になった選手をその場で開く」という一番自然な動きができていなかった。
+     リンクの体裁は plinkHtml に集約されているので、他の画面と同じ挙動（クリック・Enter）になる。 */
   for(const b of batters){
     const tag=b.sub? ` <span class="dim" style="font-size:10px;background:var(--panel2);border-radius:999px;padding:1px 6px">途中出場</span>` : "";
-    h+=`<tr><td class="num" style="color:var(--muted)">${b.order??''}</td><td class="name">${esc(b.name)}${tag}</td>${cols.map(c=>`<td class="num">${n(b[c[0]])||(n(b[c[0]])===0?'0':'')}</td>`).join("")}</tr>`;
+    const k=pidOf(b);
+    h+=`<tr><td class="num" style="color:var(--muted)">${b.order??''}</td><td class="name">${plinkHtml(k,b.name)}${metaMarks(k)}${tag}</td>${cols.map(c=>`<td class="num">${n(b[c[0]])||(n(b[c[0]])===0?'0':'')}</td>`).join("")}</tr>`;
   }
-  for(const p of (g.pitchers||[])) h+=`<tr><td></td><td class="name">🥎${esc(p.name)}</td><td colspan="${cols.length}" class="num" style="text-align:left">${p.IP}回 ${n(p.H)}安 ${n(p.K)}K ${n(p.ER)}自責</td></tr>`;
+  for(const p of (g.pitchers||[])){
+    const k=pidOf(p);
+    // 「投」は他の画面と同じタグ表記に揃える（絵文字は使わない・DESIGN-PROPOSALの恒久ルール）
+    h+=`<tr><td></td><td class="name"><span class="tag p">投</span> ${plinkHtml(k,p.name)}${metaMarks(k)}</td><td colspan="${cols.length}" class="num" style="text-align:left">${esc(String(p.IP??""))}回 ${n(p.H)}安 ${n(p.K)}K ${n(p.ER)}自責${n(p.P)?` ${n(p.P)}球`:""}${p.W?' <span class="chip g">勝</span>':''}</td></tr>`;
+  }
   return h+`</tbody>`;
 }
 
@@ -9541,7 +9551,8 @@ function pitchCountTargets(){
       const pit=(g.pitchers||[]).filter(p=>p&&String(p.name||"").trim()!=="");
       if(!pit.length) continue;
       if(pit.some(p=>n(p.P)>0)) continue;      // 1人でも入っていれば対象外
-      out.push({season:sname, game:g, pitchers:pit.map(p=>p.name)});
+      // 第163弾: 選手ページへ飛べるよう、表示名と一緒に同一性(pid)も返す
+      out.push({season:sname, game:g, pitchers:pit.map(p=>p.name), pitcherKeys:pit.map(p=>pidOf(p))});
     }
   }
   out.sort((a,b)=>String(b.game.date||"").localeCompare(String(a.game.date||"")));
@@ -9667,7 +9678,7 @@ function pcSkipHtml(seasonName, gameId, skip){
          </span>`
       : `<span class="dim" style="font-size:11.5px;flex-shrink:0">試合編集から直接入力してください</span>`;
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
-        <span style="min-width:0"><b>${esc(x.name)}</b>
+        <span style="min-width:0"><b>${x.key? plinkHtml(x.key,x.name) : esc(x.name)}</b>
           <span class="dim" style="font-size:11.5px">${esc(x.why)}</span></span>
         ${right}
       </div>`;
@@ -9757,7 +9768,7 @@ function renderPitchCount(){
           <button type="button" class="mini ghost pcPick" data-season="${esc(String(x.season))}" data-id="${esc(String(x.game.id))}">画像・動画を選ぶ</button>
         </div>
       </div>
-      <div class="auditmsg" style="color:var(--muted)">投手: ${esc(x.pitchers.join("、"))}</div>
+      <div class="auditmsg" style="color:var(--muted)">投手: ${x.pitcherKeys? x.pitcherKeys.map((k,i)=>plinkHtml(k,x.pitchers[i])).join("、") : esc(x.pitchers.join("、"))}</div>
       <div class="hint pcStatus" data-id="${esc(String(x.game.id))}"></div>
     </div>`).join("");
   el.innerHTML=`<div class="kpis">
