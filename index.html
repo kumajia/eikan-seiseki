@@ -10948,7 +10948,15 @@ async function wireProfiles(){
     toast("名前を変更しました");
   });
 
-  $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){switchTab(b.dataset.tab);if(b.dataset.tab==="add"&&editId==null&&formIsEmpty())resetForm();}});
+  $("#tabs").addEventListener("click",e=>{
+    const b=e.target.closest("button"); if(!b) return;
+    /* 第170弾: ナビの「選手名簿」を押したら必ず一覧に戻す。
+       選手ページを開いたまま押しても詳細のままで、一覧に戻る手段がボタンだけだった。
+       goToPlayer() は switchTab の後に詳細を開くので、ここで戻しても邪魔にならない。 */
+    if(b.dataset.tab==="enrollYear") showRosterList();
+    switchTab(b.dataset.tab);
+    if(b.dataset.tab==="add"&&editId==null&&formIsEmpty())resetForm();
+  });
   $("#tlExpandAll").addEventListener("click",()=>{
     $$(".tl-year").forEach(y=>y.classList.remove("closed"));
     $$(".tl-year-content").forEach(c=>c.classList.remove("closed"));
