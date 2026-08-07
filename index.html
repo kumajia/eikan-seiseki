@@ -514,7 +514,6 @@
   <nav class="tabs" id="tabs">
     <button data-tab="summary" class="on">シーズン成績</button>
     <button data-tab="period">期間集計</button>
-    <button data-tab="tags">タグ管理</button>
     <button data-tab="timeline">栄冠アーカイブ</button>
     <button data-tab="report">通知表</button>
     <button data-tab="enrollYear">選手名簿</button>
@@ -1437,13 +1436,7 @@
   </div>
   
   <!-- TAGS -->
-<div id="tab-tags" style="display:none">
-    <section class="card">
-      <h2>選手タグ管理</h2>
-      <div class="note">チーム全員の性格・特能を一括管理。クリックでON/OFFを切り替えます。</div>
-      <div id="tagsContainer" style="margin-top:10px;"></div>
-    </section>
-  </div>
+
 
 
   
@@ -3587,7 +3580,6 @@ function render(){
   renderErrLog();
   fillNenkanScope();
   renderManager();
-  renderTags();
   renderArchive();
   renderTimeline();
   }finally{ __aggCache=null; } // 途中で例外が出てもキャッシュを無効化し、以後は必ず再集計させる
@@ -5569,7 +5561,6 @@ async function exportPlayerCard(key) {
   const enrollYear = DB.playerMeta[key]?.enrollYear ?? null;
   const position = DB.playerMeta[key]?.position ?? "";
   const subPosition = DB.playerMeta[key]?.subPosition ?? "";
-  const tags = DB.playerMeta[key]?.tags || [];
 
   const careerGames = [];
   for (const [, s] of seasonEntries()) {
@@ -5598,21 +5589,6 @@ async function exportPlayerCard(key) {
     <div style="font-size:13px;color:${C.muted};margin-top:4px;letter-spacing:0.5px;">${esc(badgeBits)}</div>
   </div>`;
 
-  // --- タグ ---
-  if (tags.length) {
-    html += `<div style="padding:12px 24px 0;display:flex;flex-wrap:wrap;gap:5px;">`;
-    // 殿堂級タグの判定
-    const hallOfFame = ["完全試合","ノーヒットノーラン"];
-    tags.forEach(t => {
-      const isHoF = hallOfFame.some(h => t.includes(h));
-      if(isHoF){
-        html += `<span style="border:2px solid ${C.amber};background:rgba(245,179,1,.08);padding:2px 9px;border-radius:4px;font-size:11px;color:${C.amber};font-weight:600;">${esc(t)}</span>`;
-      } else {
-        html += `<span style="border:1px solid ${C.line};padding:2px 8px;border-radius:4px;font-size:11px;color:${C.muted};">${esc(t)}</span>`;
-      }
-    });
-    html += `</div>`;
-  }
 
   // --- 通算成績 KPI グリッド ---
   html += `<div style="padding:16px 24px;">`;
@@ -5699,94 +5675,6 @@ const FIXED_TAGS = [
   "転生", "キャプテン", "★"
 ];
 
-function renderTags(){
-  const container = $("#tagsContainer");
-  if(!container) return;
-  const roster = playerRoster();
-  
-  if(!roster.length){
-    container.innerHTML = `<div class="empty">選手データがありません。試合を追加してください。</div>`;
-    return;
-  }
-  
-  DB.playerMeta = DB.playerMeta || {};
-  roster.sort((a,b) => {
-    const ya = DB.playerMeta[a[0]]?.enrollYear || 0;
-    const yb = DB.playerMeta[b[0]]?.enrollYear || 0;
-    if(yb !== ya) return yb - ya;
-    return a[1].localeCompare(b[1]);
-  });
-  
-  let html = `<table style="width:100%; border-collapse: collapse; font-size: 14px;">
-    <tr style="border-bottom: 1px solid var(--line); background: var(--panel2);">
-      <th style="padding: 12px; text-align: left; width: 130px; color: var(--muted); font-weight: 600;">選手名</th>
-      <th style="padding: 12px; text-align: left; color: var(--muted); font-weight: 600;">タグ（クリックでON/OFF）</th>
-    </tr>`;
-    
-  roster.forEach(p => {
-    const meta = DB.playerMeta[p[0]] || {};
-    const pTags = meta.tags || [];
-    const enroll = meta.enrollYear ? `<span style="font-size:11px; color:var(--muted); font-weight:normal; margin-left:4px;">(${meta.enrollYear})</span>` : "";
-    
-    const allTags = new Set([...FIXED_TAGS, ...pTags]);
-    let chipsHtml = Array.from(allTags).map(t => {
-      const active = pTags.includes(t) ? "active" : "";
-      return `<div class="chip ${active}" data-player="${esc(p[0])}" data-tag="${esc(t)}">${esc(t)}</div>`;
-    }).join("");
-    
-    chipsHtml += `<div class="chip add-tag-btn" data-player="${esc(p[0])}" style="border: 1px dashed var(--line2); background:transparent; padding: 4px 10px; font-size:12px;">+ カスタム追加</div>`;
-    
-    html += `<tr style="border-bottom: 1px solid var(--line);">
-      <td style="padding: 12px; font-weight: bold;"><span class="plink" role="link" tabindex="0" data-key="${esc(p[0])}">${esc(p[1])}</span> ${enroll}</td>
-      <td style="padding: 12px;">
-        <div class="tag-group" style="margin-top:0;">
-          ${chipsHtml}
-        </div>
-      </td>
-    </tr>`;
-  });
-  
-  html += `</table>`;
-  container.innerHTML = html;
-  
-  $$("#tagsContainer .chip").forEach(el => {
-    if(el.classList.contains("add-tag-btn")){
-      el.addEventListener("click", async () => {
-        const t = prompt("追加するカスタムタグ名を入力してください:");
-        if(t && t.trim()){
-          const tag = t.trim();
-          const pKey = el.dataset.player;
-          DB.playerMeta[pKey] = DB.playerMeta[pKey] || {};
-          DB.playerMeta[pKey].tags = DB.playerMeta[pKey].tags || [];
-          if(!DB.playerMeta[pKey].tags.includes(tag)){
-            DB.playerMeta[pKey].tags.push(tag);
-            await saveDB();
-            renderTags();
-            if($("#playerContent") && currentPlayerKey()===pKey) renderPlayerContent();
-          }
-        }
-      });
-    } else {
-      el.addEventListener("click", async () => {
-        const pKey = el.dataset.player;
-        const tag = el.dataset.tag;
-        DB.playerMeta[pKey] = DB.playerMeta[pKey] || {};
-        DB.playerMeta[pKey].tags = DB.playerMeta[pKey].tags || [];
-        
-        if(DB.playerMeta[pKey].tags.includes(tag)){
-          DB.playerMeta[pKey].tags = DB.playerMeta[pKey].tags.filter(t => t !== tag);
-        } else {
-          DB.playerMeta[pKey].tags.push(tag);
-        }
-        await saveDB();
-        renderTags();
-        if($("#playerContent") && currentPlayerKey()===pKey) renderPlayerContent();
-      });
-    }
-  });
-}
-
-/* ---------- 栄冠アーカイブ ---------- */
 function archiveGames(){
   const rows=[];
   for(const [season,s] of seasonEntries()) for(const g of (s.games||[])) rows.push({season,g});
@@ -10845,7 +10733,7 @@ async function runFreshOcr(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","report","tags","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
+const TAB_NAMES=["summary","period","report","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
 function switchTab(name,mode){
   // 第164弾: 廃止した「選手」タブのURLは名簿タブへ寄せる（古いブックマーク対策）
   if(name==="player") name="enrollYear";
