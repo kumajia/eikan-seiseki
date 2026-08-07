@@ -516,6 +516,7 @@
     <button data-tab="period">期間集計</button>
     <button data-tab="tags">タグ管理</button>
     <button data-tab="timeline">栄冠アーカイブ</button>
+    <button data-tab="report">通知表</button>
     <button data-tab="enrollYear">選手名簿</button>
     <button data-tab="seasonCompare">シーズン比較</button>
     <button data-tab="vs">対戦成績</button>
@@ -654,6 +655,19 @@
   </div>
 
   <!-- 選手名簿（tab idは互換のため enrollYear のまま） -->
+  <div id="tab-report" style="display:none">
+    <section class="card">
+      <h2>年度末の通知表</h2>
+      <div class="note"><strong>総合は勝率</strong>から、<strong>4項目は歴代の代と比べて</strong>A〜Eで付けています。栄冠ナインは数字の水準が現実の高校野球と違うため、4項目には固定の基準ではなく自分の歴史を物差しにしています（打率.380が良いのか悪いのかは、この学校の他の代と比べないと分かりません）。公式戦のみ（練習試合は含みません）。</div>
+      <div class="row" style="align-items:flex-end;margin-bottom:8px">
+        <div class="field" style="max-width:220px"><label>年度</label>
+          <select id="reportNendoSel"></select>
+        </div>
+      </div>
+      <div id="reportCard"></div>
+    </section>
+  </div>
+
   <div id="tab-enrollYear" style="display:none">
    <div id="rosterListView">
     <section class="card">
@@ -3558,6 +3572,7 @@ function render(){
   renderDuplicateHints();
   renderBestNine();
   renderAwards();
+  renderReportTab();
   renderEnrollYearTab();
   renderSeasonCompare();
   renderVs();
@@ -4522,6 +4537,182 @@ function careerGamesForKey(key){
   }
   return out;
 }
+/* ==================== 第168弾: 年度末の通知表 ====================
+
+   採点は**歴代の代同士の相対評価**にした。栄冠ナインの強豪校は
+   打率.371〜.409、19勝0敗という水準で、現実の高校野球と数字の桁が違う。
+   「打率.300以上でA」のような固定の基準を置くと**全部Aになって意味をなさない**
+   （実データで確認済み）。自分の歴史と比べれば、代ごとの違いがちゃんと出る。
+
+   比べ方は「全期間の平均に対する比」。順位で付けると、年度が少ないうちは
+   最下位が必ずEになってしまい、良い代でも不当に低く見える。 */
+/* 総合だけ A〜E。勝率そのものから決める（唯一の絶対評価で、見出しの役割）。 */
+const GRADE_PT={A:5,B:4,C:3,D:2,E:1};
+
+/* 年度ごとのチーム成績。公式戦のみ（練習試合は含めない）。 */
+function nendoTeamStats(){
+  const byY=new Map();
+  for(const [sname,s] of Object.entries(DB.seasons||{})){
+    if(isPracticeSeason(sname)) continue;
+    const y=nendoOf(sname); if(y==null) continue;
+    if(!byY.has(y)) byY.set(y,[]);
+    for(const g of (s.games||[])) byY.get(y).push(g);
+  }
+  const out=[];
+  for(const y of [...byY.keys()].sort((a,b)=>b-a)){
+    const games=byY.get(y);
+    let W=0,L=0,D=0,RF=0,RA=0,E=0,closeG=0,closeW=0;
+    for(const g of games){
+      const rf=n(g.runsFor), ra=n(g.runsAgainst);
+      RF+=rf; RA+=ra;
+      if(rf>ra)W++; else if(rf<ra)L++; else D++;
+      if(Math.abs(rf-ra)<=2){ closeG++; if(rf>ra) closeW++; }   // 接戦は2点差以内（1点差だけだと標本が少なすぎる）
+      for(const b of (g.batters||[])) E+=n(b.E);
+    }
+    const B=aggBatting(games).reduce((a,r)=>({AB:a.AB+n(r.AB),H:a.H+n(r.H),PA:a.PA+n(r.PA),SB:a.SB+n(r.SB)}),{AB:0,H:0,PA:0,SB:0});
+    const P=aggPitching(games).reduce((a,r)=>({outs:a.outs+n(r.outs),ER:a.ER+n(r.ER)}),{outs:0,ER:0});
+    out.push({nendo:y, G:games.length, W, L, D, RF, RA, E, closeG, closeW,
+      AVG: B.AB? B.H/B.AB : 0,
+      rpg: games.length? RF/games.length : 0,
+      ERA: P.outs? P.ER*27/P.outs : 0,
+      epg: games.length? E/games.length : 0,
+      SB: B.SB, sbpg: games.length? B.SB/games.length : 0,
+      winPct: (W+L)? W/(W+L) : 0,
+      closePct: closeG? closeW/closeG : 0});
+  }
+  return out;
+}
+/* 年度の通知表。
+
+   A〜Eの採点をやめて、**歴代の最小〜最大を1本の帯にして、その代がどこにいるか**を示す形にした。
+
+   理由: 実データで攻撃指標を全部測ったところ、打率1.10倍・長打率1.09倍・出塁率1.10倍と
+   **どの代もほぼ同じ強さ**だった（防御率は3.11倍、失策は3.29倍ひらく）。
+   散らばりが違うのに同じバンドを当てると攻撃が全代Cになり、見ても何も分からない。
+   かといって順位で付けると、実際には差がないものを差があるように見せてしまう（ユーザーも順位は不可）。
+   帯なら「差がない」ことを **帯が短い＝ほぼ横ばい** としてそのまま出せる。
+
+   pos は「良さ」を 0〜1 で表す。防御率や失策のように少ない方が良い指標は向きを反転させ、
+   **帯の左端が常に歴代最悪、右端が常に歴代最良**になるよう揃える。 */
+const REPORT_BARS=[
+  {key:"bat",    label:"攻撃",   lower:false, get:x=>x.rpg,  fmt:v=>v.toFixed(1)+"点/試合", good:"多い", bad:"少ない",
+   detail:x=>`打率${avg3(x.AVG)}`},
+  {key:"pit",    label:"投手",   lower:true,  get:x=>x.ERA,  fmt:v=>"防御率 "+v.toFixed(2),  good:"良い", bad:"悪い", detail:()=>""},
+  {key:"def",    label:"守備",   lower:true,  get:x=>x.epg,  fmt:v=>"失策 "+v.toFixed(2)+"/試合", good:"少ない", bad:"多い",
+   detail:x=>`通算${x.E}`},
+  {key:"speed",  label:"機動力", lower:false, get:x=>x.sbpg, fmt:v=>"盗塁 "+v.toFixed(1)+"/試合", good:"多い", bad:"少ない",
+   detail:x=>`通算${x.SB}`},
+  {key:"clutch", label:"勝負強さ",lower:false,get:x=>x.closePct, fmt:v=>"接戦 "+Math.round(v*100)+"%", good:"強い", bad:"弱い",
+   detail:x=>x.closeG? `2点差以内 ${x.closeW}勝${x.closeG-x.closeW}敗` : "接戦なし"}
+];
+const FLAT_RATIO=1.15;   // 最大÷最小がこれ未満なら「ほぼ横ばい」とみなす
+function reportCardFor(nendo){
+  const all=nendoTeamStats();
+  const me=all.find(x=>String(x.nendo)===String(nendo));
+  if(!me) return null;
+  const bars=REPORT_BARS.map(d=>{
+    const vals=all.map(d.get).filter(v=>isFinite(v));
+    const min=Math.min(...vals), max=Math.max(...vals), v=d.get(me);
+    const span=max-min;
+    const pos = span>0 ? (d.lower ? (max-v)/span : (v-min)/span) : 0.5;
+    const ratio = (min>0 && max>0) ? max/min : (max>0? Infinity : 1);
+    const flat = all.length<2 || ratio<FLAT_RATIO;
+    let note, tone="mid";
+    if(all.length<2) note="比べる代がまだありません";
+    else if(flat) note="ほぼ横ばい";
+    else if(pos>=0.999){ note=`歴代でいちばん${d.good}`; tone="good"; }
+    else if(pos<=0.001){ note=`歴代でいちばん${d.bad}`;  tone="bad"; }
+    else if(pos>=0.66){ note=`歴代でも${d.good}方`; tone="good"; }
+    else if(pos<=0.34){ note=`歴代では${d.bad}方`;  tone="bad"; }
+    else note="平均的";
+    return {key:d.key, label:d.label, value:v, valueText:d.fmt(v), detail:d.detail(me),
+            min, max, worst:d.lower?max:min, best:d.lower?min:max, pos, flat, note, tone,
+            fmtRaw:d.fmt};
+  });
+  const wp=me.winPct;
+  const overall = (me.W+me.L)===0? "-"
+    : wp>=0.95? "A" : wp>=0.80? "B" : wp>=0.65? "C" : wp>=0.50? "D" : "E";
+  return {nendo:me.nendo, stats:me, bars, overall, all};
+}
+let reportNendoPick=null;   // 通知表で見ている年度（未選択なら最新）
+function renderReportTab(){
+  const sel=$("#reportNendoSel"), card=$("#reportCard");
+  if(!sel||!card) return;
+  const all=nendoTeamStats();
+  if(!all.length){
+    sel.innerHTML=""; card.innerHTML=`<div class="empty">公式戦の記録が入ると通知表が出ます。</div>`; return;
+  }
+  if(reportNendoPick==null || !all.some(x=>String(x.nendo)===String(reportNendoPick))) reportNendoPick=all[0].nendo;
+  sel.innerHTML=all.map(x=>`<option value="${esc(String(x.nendo))}"${String(x.nendo)===String(reportNendoPick)?" selected":""}>${esc(String(x.nendo))}年度（${x.G}試合 ${x.W}勝${x.L}敗${x.D?x.D+"分":""}）</option>`).join("");
+
+  const c=reportCardFor(reportNendoPick);
+  if(!c){ card.innerHTML=`<div class="empty">この年度の記録がありません。</div>`; return; }
+  const s2=c.stats;
+  const toneCol=t=>t==="good"?"var(--green)":t==="bad"?"var(--danger)":"var(--muted)";
+  const markCol=t=>t==="mid"?"var(--ink)":toneCol(t);
+  const bar=b=>{
+    const pct=Math.max(0,Math.min(1,b.pos))*100;
+    return `<div style="margin-bottom:13px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px">
+        <span>${esc(b.label)} <span class="dim" style="font-size:11px">${esc(b.valueText)}${b.detail?"・"+esc(b.detail):""}</span></span>
+        <span style="color:${markCol(b.tone)};font-size:11.5px;flex:none">${esc(b.note)}</span>
+      </div>
+      <div style="position:relative;height:6px;background:var(--panel2);border-radius:3px;margin-top:5px">
+        <div style="position:absolute;left:${pct}%;top:-3px;width:3px;height:12px;background:${markCol(b.tone)};border-radius:2px;transform:translateX(-1px)"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted);font-size:10px;margin-top:3px">
+        <span>${esc(b.fmtRaw(b.worst))}</span><span>${esc(b.fmtRaw(b.best))}</span>
+      </div>
+    </div>`;
+  };
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="kpi" style="text-align:center;min-width:96px">
+        <div class="lbl">総合</div>
+        <div class="val" style="color:var(--amber);font-size:30px">${esc(c.overall)}</div>
+        <div class="foot">${s2.W}勝${s2.L}敗${s2.D?s2.D+"分":""}</div>
+      </div>
+      <div class="dim" style="font-size:12px;line-height:1.7">総合は勝率から付けています。<br>下の項目は歴代${c.all.length}年度の中での位置です（左端が歴代で最も悪い、右端が最も良い）。</div>
+    </div>
+    ${c.bars.map(bar).join("")}
+    <div class="card" style="margin-top:6px;padding:11px 13px">
+      <div style="color:var(--amber);font-size:13px;margin-bottom:4px">${esc(reportHeadline(c))}</div>
+      <div class="hint">${esc(reportNote(c))}</div>
+    </div>`;
+}
+/* その代の性格を一言で。歴代で突出している項目を実際に拾って書く（当てはめではなく事実から）。 */
+const HEADLINE_WORDS={bat:["打ち勝った代","打線が湿った代"], pit:["投手が支えた代","投手陣が苦しんだ代"],
+  def:["堅い守りの代","守りに泣いた代"], speed:["走って点を取った代","足を使わなかった代"],
+  clutch:["接戦に強い代","接戦を落とした代"]};
+function reportHeadline(card){
+  if(!card) return "";
+  const moving=card.bars.filter(b=>!b.flat);
+  if(!moving.length) return card.stats.L===0 && card.stats.G>0 ? "無敗で駆け抜けた代" : "どの項目も歴代並みの代";
+  /* 端に近いものほど「その代らしさ」が出る。
+     同じくらい端なら**良い方**を採る（見出しとして読み味が良く、順序で結果が変わらない）。 */
+  const top=moving.slice().sort((a,b)=>{
+    const d=Math.abs(b.pos-0.5)-Math.abs(a.pos-0.5);
+    if(Math.abs(d)>1e-9) return d;
+    return (b.pos>=0.5?1:0)-(a.pos>=0.5?1:0);
+  })[0];
+  const w=HEADLINE_WORDS[top.key];
+  if(!w) return "";
+  return top.pos>=0.5 ? w[0] : w[1];
+}
+/* 評価の理由を一文で。数字の裏づけを添える。 */
+function reportNote(c){
+  const parts=[];
+  const flat=c.bars.filter(b=>b.flat).map(b=>b.label);
+  if(flat.length) parts.push(`${flat.join("・")}はどの代も同じくらい`);
+  for(const b of c.bars){
+    if(b.flat) continue;
+    if(b.pos>=0.999) parts.push(`${b.label}は歴代最高（${b.valueText}）`);
+    else if(b.pos<=0.001) parts.push(`${b.label}は歴代最低（${b.valueText}）`);
+  }
+  if(c.stats.L===0 && c.stats.G>0) parts.push(`${c.stats.G}戦全勝`);
+  return parts.join("、")+"。";
+}
+
 /* ---------- 選手名簿（tab idは互換のため enrollYear のまま） ---------- */
 // 名簿の並び順（入学年の新しい順→未設定は末尾、年内は playerRoster() のかな順）はここに一元化する。
 // 「選手名簿」タブ・選手タブの「名簿から選ぶ」・前後の選手ボタンは全部これを使うので並びがズレない。
@@ -10654,7 +10845,7 @@ async function runFreshOcr(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","tags","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
+const TAB_NAMES=["summary","period","report","tags","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
 function switchTab(name,mode){
   // 第164弾: 廃止した「選手」タブのURLは名簿タブへ寄せる（古いブックマーク対策）
   if(name==="player") name="enrollYear";
@@ -10904,6 +11095,7 @@ async function wireSeasonForm(){
         e.preventDefault(); pick(t);
       });
     } }
+  { const r=$("#reportNendoSel"); if(r) r.addEventListener("change",e=>{ reportNendoPick=e.target.value; renderReportTab(); }); }
   $("#awardSeasonSel").addEventListener("change",e=>{ awardSeasonPick=e.target.value; renderAwards(); });
   $("#btnGraphAvg").addEventListener("click", () => {
     currentGraphType = "AVG";
@@ -11887,7 +12079,8 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, O
   pitchCountTargets, pitchCountPlausible, pitchCountMerge, PITCH_COUNT_PROMPT,
   pitchCountForce, pcSkipHtml,
   sameNameConflicts, splitPlayerGeneration, nameSplitConflicts, mergePlayerGeneration, nendoOfDate, resolvePlayerPid, playerNameSet, rememberPlayerName, applyPidsByYear, ENROLL_SPAN_MAX,
-  pidOf, playerDisplayName, makePid, isPid, TAB_NAMES, seasonPickGroups, seasonRecord, isPracticeSeason, playerQualifier, dupDisplayNameSet,
+  pidOf, playerDisplayName, makePid, isPid, TAB_NAMES, seasonPickGroups, seasonRecord, isPracticeSeason,
+  nendoTeamStats, reportCardFor, reportHeadline, playerQualifier, dupDisplayNameSet,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
