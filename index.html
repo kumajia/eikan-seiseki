@@ -6678,7 +6678,12 @@ function renderMonthly(){
 }
 
 /* ---------- 5. セイバー指標 ---------- */
-const SABER_PA_PER_GAME=2; // 規定打席＝チーム試合数×2（computeSeasonAwardsのpaMinと同じ考え方）
+/* 第172弾: 規定は qualPaMin/qualOutsMin（第139・140弾）に寄せる。
+
+   ここだけ「試合数×2」を直に使っていたため、全期間74試合で**規定148打席**になり、
+   35人中4人しか残らなかった（白井147・村田147・井坪146 があと1〜2打席で落ちていた）。
+   第140弾で成績表には上限を入れたのに、セイバーだけ取り残されていた。
+   **1人の在籍は3年で頭打ちなのに、4代ぶんの試合数を分母にしていた**のが誤り。 */
 // 通算打撃行（aggBattingの1行）からセイバー指標を算出する純粋関数
 function saberFrom(r){
   const AB=n(r.AB), BB=n(r.BB), SH=n(r.SH), H=n(r.H), SO=n(r.SO);
@@ -6691,7 +6696,7 @@ function saberFrom(r){
 // games -> {rows, paMin, qualified}（規定到達者がいなければ全員を「参考」として返す）
 function saberRows(games){
   const teamG=(games||[]).length;
-  const paMin=teamG*SABER_PA_PER_GAME;
+  const paMin=qualPaMin(teamG);
   const all=aggBatting(games||[]).filter(hasPA).map(r=>({...r, ...saberFrom(r), key:pidOf(r)}));
   const q=all.filter(r=>r.PA>=paMin);
   return {rows:(q.length? q : all), paMin, qualified:q.length>0};
@@ -6736,10 +6741,9 @@ function saberPitchFrom(r){
     KBB:  BB? K/BB : null   // 四死球0はダッシュ表記（null）
   };
 }
-const SABER_IP_PER_GAME=1; // 規定投球回＝チーム試合数×1
 function saberPitchRows(games){
   const teamG=(games||[]).length;
-  const ipMin=teamG*SABER_IP_PER_GAME;
+  const ipMin=qualOutsMin(teamG)/3;   // qualOutsMin はアウト数なので投球回に直す
   const all=aggPitching(games||[]).map(r=>({...r, ...saberPitchFrom(r), key:pidOf(r)}));
   const q=all.filter(r=>r.ip>=ipMin);
   return {rows:(q.length? q : all), ipMin, qualified:q.length>0};
@@ -11978,7 +11982,7 @@ window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, O
   pitchCountForce, pcSkipHtml,
   sameNameConflicts, splitPlayerGeneration, nameSplitConflicts, mergePlayerGeneration, nendoOfDate, resolvePlayerPid, playerNameSet, rememberPlayerName, applyPidsByYear, ENROLL_SPAN_MAX,
   pidOf, playerDisplayName, makePid, isPid, TAB_NAMES, seasonPickGroups, seasonRecord, isPracticeSeason,
-  nendoTeamStats, reportCardFor, reportHeadline, playerQualifier, dupDisplayNameSet,
+  nendoTeamStats, reportCardFor, reportHeadline, saberRows, saberPitchRows, qualPaMin, qualOutsMin, playerQualifier, dupDisplayNameSet,
   vpCacheFind, vpCachePut, vpCacheDrop, vpCacheAll, vpCacheSummary, VP_CACHE_MAX,
   // 第108弾: 日付とシーズンの食い違い検出 / 第109弾: 動画の重複検出
   seasonMismatch, vpDupGroups,
