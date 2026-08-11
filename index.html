@@ -517,6 +517,7 @@
     <button data-tab="timeline">栄冠アーカイブ</button>
     <button data-tab="report">通知表</button>
     <button data-tab="enrollYear">選手名簿</button>
+    <button data-tab="playerLab">選手分析</button>
     <button data-tab="seasonCompare">シーズン比較</button>
     <button data-tab="vs">対戦成績</button>
     <button data-tab="games">試合ログ</button>
@@ -799,6 +800,93 @@
     </section>
     </div>
 
+  </div>
+
+  <!-- 選手分析（第174弾） -->
+  <div id="tab-playerLab" style="display:none">
+    <section class="card">
+      <h2>選手分析</h2>
+      <div class="note">選手を<strong>横断で並べて</strong>見るところです。1人ぶんの詳しい成績は選手名をタップして選手ページへ。
+        断りがない限り<strong>練習試合も含めた通算</strong>で、規定はシーズン成績表と同じものを使っています。
+        どれも母数が小さいので、順位は目安として見てください。</div>
+    </section>
+
+    <section class="card"><h2><span class="tag">打</span> 学年別ランキング</h2>
+      <div class="note">その試合の時点の学年で分けて集計します（在籍は年度をまたぐため、選手単位ではなく試合単位で判定）。
+        規定はその学年が戦った試合数を基準にするので、3年生（夏で引退）でも届きます。入学年度が未設定の選手は学年が出ません。</div>
+      <div class="row" style="align-items:flex-end;margin-bottom:6px">
+        <div class="field" style="max-width:240px"><label>学年</label>
+          <div id="labGradeBtns" style="display:flex;gap:6px;height:36px;align-items:center">
+            <button type="button" class="mini ghost" data-labgrade="1年">1年</button>
+            <button type="button" class="mini ghost" data-labgrade="2年">2年</button>
+            <button type="button" class="mini" data-labgrade="3年">3年</button>
+          </div>
+        </div>
+      </div>
+      <div id="labGradeRank"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag">打</span> 調子の波</h2>
+      <div class="note">直近の出場5試合のOPSと通算OPSの差です。「直近」はチームの最新試合ではなく<strong>本人が出た試合</strong>から数えます（控えは間隔が空くため）。
+        現役の選手だけを出します。5試合ぶんなので大きく振れます。</div>
+      <div id="labForm"></div>
+    </section>
+
+    <section class="card"><h2>皆勤賞</h2>
+      <div class="note">在籍中（入学年度から3年度）にチームが戦った試合の<strong>全部</strong>に出た選手です。出場率は監督室の「出場率」と同じ数え方です。</div>
+      <div id="labAttendance"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag">打</span> 打者のタイプ</h2>
+      <div class="note">縦がISO（長打率−打率＝長打力）、横が四球÷三振（選球眼）。規定打席に届いた打者が対象です。</div>
+      <div id="labBatQuadrant"></div>
+    </section>
+
+    <section class="card"><h2>ポジション別の失策</h2>
+      <div class="note">失策は打者の記録として入っているので、<strong>名簿に登録されたポジション</strong>で束ねています。
+        その試合で実際に守った位置ではないため、兼任の多い選手がいると偏ります。</div>
+      <div id="labErrorPos"></div>
+    </section>
+
+    <section class="card"><h2>主将の代</h2>
+      <div class="note">主将に設定された選手の3年時（入学年度＋2）のチーム成績です。主将は手で設定する項目なので、設定した代だけが出ます。</div>
+      <div id="labCaptain"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag">打</span> 未完の大器</h2>
+      <div class="note">規定打席には届かないが、規定に届いた選手の<strong>中央値OPSを超えている</strong>選手です。出番が足りなかっただけの選手を拾います。母数が小さいので断定はできません。</div>
+      <div id="labGem"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag p">投</span> 投手のタイプ</h2>
+      <div class="note">縦が奪三振率(K/9)、横が与四球率(BB/9)。規定投球回に届いた投手が対象です。</div>
+      <div id="labPitQuadrant"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag p">投</span> 球数効率</h2>
+      <div class="note">1回あたり・1打者あたりの球数です。球数は後付けで取り込む項目なので、<strong>球数が入っている登板だけ</strong>が対象になります。</div>
+      <div id="labPitchEff"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag p">投</span> 連投耐性</h2>
+      <div class="note">前回登板からの間隔ごとの成績です。日付のある試合が対象で、同じ日の2登板は中0日として数えます。</div>
+      <div id="labRest"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag p">投</span> 立ち上がり</h2>
+      <div class="note">先発投手が初回にいくつ失点したか。相手の1回の得点を使うので、<strong>イニング別得点が入っていて、先発が1回を投げ切った試合</strong>だけが対象です。</div>
+      <div id="labFirstInning"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag p">投</span> 被本塁打</h2>
+      <div class="note">本塁打を浴びた試合とそうでない試合の勝敗を比べます。下の一覧は規定投球回に届いた投手のHR/9です。</div>
+      <div id="labHR"></div>
+    </section>
+
+    <section class="card"><h2><span class="tag p">投</span> 与四球で崩れた試合</h2>
+      <div class="note">チームの与四球が4以上だった試合と、それ未満の試合の勝敗・失点を比べます。</div>
+      <div id="labWalk"></div>
+    </section>
   </div>
 
   <!-- SEASON COMPARE -->
@@ -1606,7 +1694,7 @@
 
    ・開発の作法・変更履歴 …… CHANGES-2026-07-09.md（第N弾として全変更を記録）
    ・デザインの恒久ルール …… DESIGN-PROPOSAL.md
-   ・未実装のアイデア …………… やることリスト.md / FEATURE-BACKLOG.md
+   ・やらないこと・作法 ……… やることリスト.md（機能案は貯めない方針・2026-08-05）
    ・テスト …………………………… index.html#test を開くと自動テストが走ります（tests.js）
 
    目次: 探したい機能の見出しをこのファイル内で検索してください（行番号は編集でずれるので載せていません）
@@ -1657,7 +1745,6 @@
        ・サブポジションまとめて設定
        ・投手QS率・完投率（#13）
        ・成長曲線（#8・年度別ミニ折れ線）
-       ・選手タグ（性格・特能）
 
    ■ アーカイブ・シーズン比較・対戦成績
        ・栄冠アーカイブ
@@ -3569,6 +3656,7 @@ function render(){
   renderAwards();
   renderReportTab();
   renderEnrollYearTab();
+  renderPlayerLab();
   renderSeasonCompare();
   renderVs();
   fillOppDL();
@@ -3586,6 +3674,710 @@ function render(){
   renderTimeline();
   }finally{ __aggCache=null; } // 途中で例外が出てもキャッシュを無効化し、以後は必ず再集計させる
 }
+
+
+/* ================= 第174弾: 選手分析 =================
+   ここに置くのは「選手を**横断で並べて**見る」もの。1人ぶんの詳細は選手ページ側。
+   集計スコープは通算系にそろえて練習試合も含める（seasonEntries）。
+   イニングが要るもの（立ち上がり）だけは innings のある試合に限る。
+   規定は qualPaMin/qualOutsMin をそのまま使う（アプリ内で規定を2種類に増やさない・第140弾の方針）。 */
+
+// 全シーズンの試合を、シーズン名つきで平らに並べる
+function labGameEntries(){
+  const out=[];
+  for(const [sname,s] of seasonEntries()){
+    for(const g of ((s&&s.games)||[])) out.push({g, season:sname, nendo:nendoOf(sname, gameYear(g))});
+  }
+  return out;
+}
+// その選手がその試合の時点で何年生だったか（"1年"/"2年"/"3年"/"引退"/"卒業"/""）
+function labGradeAt(key, season, g){
+  const ey=((DB.playerMeta||{})[key]||{}).enrollYear;
+  if(ey==null) return "";
+  return gradeInfo(ey, season, gameYear(g), g&&g.date).label;
+}
+const LAB_GRADES=["1年","2年","3年"];
+function isLabGrade(x){ return LAB_GRADES.includes(x); }
+
+/* 学年ごとに「誰がどの試合に出たか」を1回のなめでまとめる。
+   学年は選手単位ではなく**試合単位**で判定する（在籍は年度をまたぐため）。 */
+function gradeBuckets(){
+  const m=new Map(); // grade -> Map(pid -> games[])
+  for(const {g,season} of labGameEntries()){
+    const seen=new Set();
+    for(const arr of [g.batters||[], g.pitchers||[]]) for(const x of arr){
+      if(!x || !x.name) continue;
+      const key=pidOf(x);
+      if(seen.has(key)) continue; seen.add(key);
+      const gr=labGradeAt(key, season, g);
+      if(!isLabGrade(gr)) continue;
+      if(!m.has(gr)) m.set(gr,new Map());
+      const pm=m.get(gr);
+      if(!pm.has(key)) pm.set(key,[]);
+      pm.get(key).push(g);
+    }
+  }
+  return m;
+}
+/* 学年別ランキング（#2）。規定は「その学年でチームが戦った試合数」を基準にする。
+   3年生は夏で引退するので分母が小さい。全期間の試合数で規定を課すと3年生が全員消える。 */
+function gradeLeaderRows(grade){
+  const buckets=gradeBuckets();
+  const pm=buckets.get(grade);
+  if(!pm || !pm.size) return {bat:[], pit:[], teamG:0};
+  const teamGames=new Set();
+  for(const gs of pm.values()) for(const g of gs) teamGames.add(g);
+  const teamG=teamGames.size;
+  const bat=[], pit=[];
+  for(const [key,games] of pm){
+    const b=aggBatting(games).find(r=>r.pid===key);
+    const p=aggPitching(games).find(r=>r.pid===key);
+    if(b && (b.AB+b.BB+b.SH)>0) bat.push({...b, qualified:(b.AB+b.BB+b.SH)>=qualPaMin(teamG)});
+    if(p && p.outs>0) pit.push({...p, qualified:p.outs>=qualOutsMin(teamG)});
+  }
+  bat.sort((a,b)=>(b.qualified-a.qualified)||(b.OPS-a.OPS));
+  pit.sort((a,b)=>(b.qualified-a.qualified)||(a.ERA-b.ERA));
+  return {bat, pit, teamG};
+}
+
+/* 調子の波（#3）。直近N試合のOPSと通算OPSの差。
+   「直近」はチームの最新試合ではなく**本人の出場試合**から数える（控えは間隔が空くため）。 */
+const FORM_RECENT_GAMES=5;
+function formTrendRows(recentN){
+  const N=Math.max(1, n(recentN)||FORM_RECENT_GAMES);
+  const per=new Map();
+  for(const {g} of labGameEntries()){
+    for(const b of (g.batters||[])){
+      if(!b || !b.name) continue;
+      const k=pidOf(b);
+      if(!per.has(k)) per.set(k,[]);
+      per.get(k).push({date:g.date||"", g});
+    }
+  }
+  const rows=[];
+  for(const [key,list] of per){
+    if(list.length < N*2) continue;   // 直近ぶんが通算の半分以上を占める人は「波」にならないので出さない
+    list.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const all=aggBatting(list.map(x=>x.g)).find(r=>r.pid===key);
+    const rec=aggBatting(list.slice(-N).map(x=>x.g)).find(r=>r.pid===key);
+    if(!all || !rec || !all.AB || !rec.AB) continue;
+    rows.push({pid:key, name:all.name, G:list.length, recentG:N,
+      careerOPS:all.OPS, recentOPS:rec.OPS, diff:rec.OPS-all.OPS,
+      retired:isPlayerRetired(key)});
+  }
+  rows.sort((a,b)=>b.diff-a.diff);
+  return rows;
+}
+
+/* 皆勤賞（#6）。出場率は監督室の appearanceRowsFromDB をそのまま使う。
+   ここで分母を作り直すと、同じアプリの中に出場率が2種類できてしまう。 */
+function perfectAttendanceRows(){
+  return appearanceRowsFromDB().filter(r=>r.enrollYear!=null && r.denom>0 && r.G>=r.denom);
+}
+// 皆勤に一番近い選手（皆勤が0人のときに出す）
+function nearAttendanceRows(limit){
+  return appearanceRowsFromDB().filter(r=>r.enrollYear!=null && r.denom>0 && r.G<r.denom)
+    .slice(0, Math.max(1, n(limit)||3));
+}
+
+/* 未完の大器（#12）。規定に届かないが、規定到達者の中央値を超えている打者。
+   出番が足りなかっただけの選手を拾う。母数が小さいので断定はしない。 */
+function hiddenGemRows(){
+  const games=allGamesFlat();
+  const teamG=games.length;
+  const need=qualPaMin(teamG);
+  const rows=aggBatting(games).filter(r=>(r.AB+r.BB+r.SH)>0);
+  const qual=rows.filter(r=>(r.AB+r.BB+r.SH)>=need).map(r=>r.OPS).sort((a,b)=>a-b);
+  if(!qual.length) return {rows:[], median:0, need};
+  const median=qual.length%2? qual[(qual.length-1)/2] : (qual[qual.length/2-1]+qual[qual.length/2])/2;
+  const out=rows.filter(r=>(r.AB+r.BB+r.SH)<need && r.AB>=LAB_GEM_AB_MIN && r.OPS>median)
+    .map(r=>({...r, PAcount:r.AB+r.BB+r.SH, need, median, retired:isPlayerRetired(r.pid)}))
+    .sort((a,b)=>b.OPS-a.OPS);
+  return {rows:out, median, need};
+}
+const LAB_GEM_AB_MIN=10;  // これ未満は運の範囲なので拾わない
+
+/* 守備位置別の失策率（#9）。Eは打者行にあるので、名簿のポジションで束ねる。
+   ポジションは選手の登録値で、その試合で実際に守った位置ではない。 */
+function errorByPositionRows(){
+  const games=allGamesFlat();
+  const rows=aggBatting(games);
+  const m=new Map();
+  let noPos=0;
+  for(const r of rows){
+    const pos=String(((DB.playerMeta||{})[r.pid]||{}).position||"").trim();
+    if(!pos){ if(r.G) noPos++; continue; }
+    if(!m.has(pos)) m.set(pos,{position:pos, E:0, G:0, players:0});
+    const t=m.get(pos); t.E+=n(r.E); t.G+=n(r.G); t.players++;
+  }
+  const out=[...m.values()].map(t=>({...t, EperG:t.G? t.E/t.G : 0}));
+  out.sort((a,b)=>b.EperG-a.EperG);
+  return {rows:out, noPos};
+}
+
+/* 主将の代（#10）。主将フラグが立っている選手の在籍年度のチーム成績。
+   主将は手で設定する項目なので、設定されていない年度はここに出ない。 */
+function captainYearRows(){
+  const caps=[];
+  for(const [key,meta] of Object.entries(DB.playerMeta||{})){
+    if(!meta || !meta.captain) continue;
+    const ey=meta.enrollYear;
+    if(ey==null || isNaN(ey)) continue;
+    caps.push({pid:key, name:playerDisplayName(key, meta.name||key), enrollYear:Number(ey)});
+  }
+  if(!caps.length) return [];
+  const byNendo=new Map();
+  for(const {g,nendo} of labGameEntries()){
+    if(nendo==null) continue;
+    if(!byNendo.has(nendo)) byNendo.set(nendo,[]);
+    byNendo.get(nendo).push(g);
+  }
+  const out=[];
+  for(const c of caps){
+    // 主将＝3年生の年度とみなす（入学年度+2）
+    const nendo=c.enrollYear+2;
+    const games=byNendo.get(nendo)||[];
+    const T=teamTotals(games);
+    out.push({...c, nendo, G:games.length, W:T.W, L:T.L, D:T.D,
+      // 試合が1つも無い年度は勝率を出さない（実データで未来の代が「率.000」と出た）
+      winRate:(T.W+T.L)? T.W/(T.W+T.L) : null, RF:T.RF, RA:T.RA});
+  }
+  out.sort((a,b)=>b.nendo-a.nendo);
+  return out;
+}
+
+/* 打者の四象限（#7）。ISO（長打率−打率）で長打力、BB/K で選球眼を見る。
+   境目は歴代の中央値。「平均より上か下か」を見るためのもので、絶対的な線ではない。 */
+function batterQuadrantRows(){
+  const games=allGamesFlat();
+  const need=qualPaMin(games.length);
+  const rows=aggBatting(games)
+    .filter(r=>(r.AB+r.BB+r.SH)>=need && r.AB>0)
+    .map(r=>({pid:r.pid, name:r.name, ISO:r.SLG-r.AVG, BBK:r.SO? r.BB/r.SO : (r.BB? Infinity:0),
+      BB:r.BB, SO:r.SO, AVG:r.AVG, OPS:r.OPS}))
+    .filter(r=>isFinite(r.BBK));
+  return {rows, need, xMid:labMedian(rows.map(r=>r.BBK)), yMid:labMedian(rows.map(r=>r.ISO))};
+}
+/* 投手の四象限（#13）。奪三振率と与四球率。右上＝奪って与えない。 */
+function pitcherQuadrantRows(){
+  const games=allGamesFlat();
+  const need=qualOutsMin(games.length);
+  const rows=aggPitching(games)
+    .filter(r=>r.outs>=need && r.ipNum>0)
+    .map(r=>({pid:r.pid, name:r.name, K9:r.K*9/r.ipNum, BB9:r.BB*9/r.ipNum, ERA:r.ERA, IPstr:r.IPstr}));
+  return {rows, need, xMid:labMedian(rows.map(r=>r.BB9)), yMid:labMedian(rows.map(r=>r.K9))};
+}
+function labMedian(arr){
+  const a=(arr||[]).filter(v=>isFinite(v)).slice().sort((x,y)=>x-y);
+  if(!a.length) return 0;
+  return a.length%2? a[(a.length-1)/2] : (a[a.length/2-1]+a[a.length/2])/2;
+}
+
+/* 球数効率（#14）。aggPitching が既に PPI（球/回）を持っているのでそれを使う。
+   球数は後付け取り込みなので、入っていない登板がある。分母を明示する。 */
+function pitchEfficiencyRows(){
+  const games=allGamesFlat();
+  const rows=[];
+  let withP=0, totalApp=0;
+  for(const g of games) for(const p of (g.pitchers||[])){
+    if(!p || !p.name) continue;
+    totalApp++; if(n(p.P)>0) withP++;
+  }
+  for(const r of aggPitching(games)){
+    if(!r.P || !r.outsWithP) continue;
+    rows.push({pid:r.pid, name:r.name, P:r.P, PPI:r.PPI,
+      PPB:r.BF? r.P/r.BF : 0, GwithP:r.GwithP, ipWithP:r.outsWithP/3, G:r.G});
+  }
+  rows.sort((a,b)=>a.PPI-b.PPI);
+  return {rows, withP, totalApp};
+}
+
+/* 連投耐性（#15）。前回登板からの中何日かで防御率を分ける。
+   日付のある試合だけが対象。同じ日に2試合ある場合は中0日として扱う。 */
+const REST_BUCKETS=[{key:"中0日",max:1},{key:"中1日",max:2},{key:"中2〜3日",max:4},{key:"中4日以上",max:Infinity}];
+function restDayRows(){
+  const per=new Map(); // pid -> [{date,p,g}]
+  for(const {g} of labGameEntries()){
+    if(!g.date) continue;
+    for(const p of (g.pitchers||[])){
+      if(!p || !p.name) continue;
+      const k=pidOf(p);
+      if(!per.has(k)) per.set(k,[]);
+      per.get(k).push({date:g.date, p, g});
+    }
+  }
+  const agg=new Map(REST_BUCKETS.map(b=>[b.key,{bucket:b.key, outs:0, ER:0, H:0, BB:0, K:0, app:0}]));
+  const perPlayer=[];
+  for(const [key,list] of per){
+    list.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const mine=new Map(REST_BUCKETS.map(b=>[b.key,{bucket:b.key, outs:0, ER:0, app:0}]));
+    for(let i=1;i<list.length;i++){
+      const d=labDayDiff(list[i-1].date, list[i].date);
+      if(d==null) continue;
+      const b=REST_BUCKETS.find(x=>d<=x.max) || REST_BUCKETS[REST_BUCKETS.length-1];
+      const p=list[i].p;
+      const t=agg.get(b.key); t.outs+=ip2outs(p.IP); t.ER+=n(p.ER); t.H+=n(p.H); t.BB+=n(p.BB); t.K+=n(p.K); t.app++;
+      const mt=mine.get(b.key); mt.outs+=ip2outs(p.IP); mt.ER+=n(p.ER); mt.app++;
+    }
+    const short=[...mine.values()].filter(x=>x.bucket==="中0日"||x.bucket==="中1日").reduce((s,x)=>({outs:s.outs+x.outs, ER:s.ER+x.ER, app:s.app+x.app}),{outs:0,ER:0,app:0});
+    const long=[...mine.values()].filter(x=>x.bucket!=="中0日"&&x.bucket!=="中1日").reduce((s,x)=>({outs:s.outs+x.outs, ER:s.ER+x.ER, app:s.app+x.app}),{outs:0,ER:0,app:0});
+    if(short.app>=LAB_REST_MIN_APP && long.app>=LAB_REST_MIN_APP && short.outs>0 && long.outs>0){
+      perPlayer.push({pid:key, name:playerDisplayName(key,(list[0].p.name)||key),
+        shortERA:short.ER*27/short.outs, longERA:long.ER*27/long.outs,
+        shortApp:short.app, longApp:long.app,
+        diff:(short.ER*27/short.outs)-(long.ER*27/long.outs)});
+    }
+  }
+  perPlayer.sort((a,b)=>a.diff-b.diff);
+  const buckets=[...agg.values()].map(t=>({...t, ERA:t.outs? t.ER*27/t.outs : 0, IP:t.outs/3}));
+  return {buckets, perPlayer};
+}
+const LAB_REST_MIN_APP=2;  // 片側1登板だけの比較は運の範囲なので並べない（実データで9.95と出た）
+function labDayDiff(a,b){
+  const pa=Date.parse(String(a)+"T00:00:00Z"), pb=Date.parse(String(b)+"T00:00:00Z");
+  if(isNaN(pa)||isNaN(pb)) return null;
+  return Math.round((pb-pa)/86400000);
+}
+
+/* 立ち上がり（#16）。先発投手が1回にいくつ失点したか。
+   相手の1回の得点を使うので、イニング別得点が入っていて先発が1回を投げ切った試合だけが対象。 */
+function firstInningRows(){
+  const per=new Map();
+  let used=0, skipped=0;
+  for(const {g} of labGameEntries()){
+    const pit=(g.pitchers||[]).filter(x=>x && x.name);
+    if(!pit.length){ continue; }
+    const side=resolveSide(g);
+    const inn=g.innings||{};
+    const oppArr = side==="top"? (inn.bottom||[]) : side==="bottom"? (inn.top||[]) : null;
+    if(!side || !oppArr || !oppArr.length || oppArr[0]==null || String(oppArr[0]).trim()===""){ skipped++; continue; }
+    const starter=pit[0];
+    if(ip2outs(starter.IP) < 3){ skipped++; continue; }   // 1回を投げ切っていない先発は「立ち上がり」の主ではない
+    used++;
+    const k=pidOf(starter);
+    if(!per.has(k)) per.set(k,{pid:k, name:playerDisplayName(k, starter.name), GS:0, R1:0, clean:0, big:0});
+    const t=per.get(k); t.GS++;
+    const r=n(String(oppArr[0]).replace(/[^0-9]/g,""));
+    t.R1+=r;
+    if(r===0) t.clean++;
+    if(r>=LAB_BIG_FIRST) t.big++;
+  }
+  const rows=[...per.values()].map(t=>({...t, avgR1:t.GS? t.R1/t.GS : 0, cleanRate:t.GS? t.clean/t.GS : 0}));
+  rows.sort((a,b)=>a.avgR1-b.avgR1);
+  return {rows, used, skipped};
+}
+const LAB_BIG_FIRST=3;   // 初回にこれだけ取られたら「立ち上がりを失敗した」
+
+/* 被本塁打の重み（#18）。1本浴びた試合でどれだけ勝てているか。 */
+function hrAllowedImpact(){
+  let withHR={W:0,L:0,D:0,G:0}, without={W:0,L:0,D:0,G:0};
+  const per=new Map();
+  for(const g of allGamesFlat()){
+    const pit=(g.pitchers||[]).filter(x=>x && x.name);
+    if(!pit.length) continue;
+    const hr=pit.reduce((s,p)=>s+n(p.HR),0);
+    const rf=n(g.runsFor), ra=n(g.runsAgainst);
+    const res=rf>ra?"W":rf<ra?"L":"D";
+    const bucket=hr>0? withHR : without;
+    bucket[res]++; bucket.G++;
+  }
+  for(const r of aggPitching(allGamesFlat())){
+    if(!r.ipNum) continue;
+    per.set(r.pid,{pid:r.pid, name:r.name, HR:r.HR, HR9:r.HR*9/r.ipNum, IPstr:r.IPstr, outs:r.outs});
+  }
+  const need=qualOutsMin(allGamesFlat().length);
+  const rows=[...per.values()].filter(r=>r.outs>=need).sort((a,b)=>b.HR9-a.HR9);
+  return {withHR, without, rows, need};
+}
+
+/* 与四球で崩れた試合（#19）。チームの与四球が閾値以上の試合と、そうでない試合の勝率。 */
+const LAB_WALK_THRESHOLD=4;
+function walkBlowupRows(){
+  let many={W:0,L:0,D:0,G:0,RA:0}, few={W:0,L:0,D:0,G:0,RA:0};
+  for(const g of allGamesFlat()){
+    const pit=(g.pitchers||[]).filter(x=>x && x.name);
+    if(!pit.length) continue;
+    const bb=pit.reduce((s,p)=>s+n(p.BB),0);
+    const rf=n(g.runsFor), ra=n(g.runsAgainst);
+    const res=rf>ra?"W":rf<ra?"L":"D";
+    const b=bb>=LAB_WALK_THRESHOLD? many : few;
+    b[res]++; b.G++; b.RA+=ra;
+  }
+  const need=qualOutsMin(allGamesFlat().length);
+  const rows=aggPitching(allGamesFlat())
+    .filter(r=>r.outs>=need && r.ipNum>0)
+    .map(r=>({pid:r.pid, name:r.name, BB:r.BB, BB9:r.BB*9/r.ipNum, IPstr:r.IPstr}))
+    .sort((a,b)=>b.BB9-a.BB9);
+  return {many, few, rows, need, threshold:LAB_WALK_THRESHOLD};
+}
+
+/* ---- 選手ページ側（1人ぶん） ---- */
+
+/* 学年ごとの通算（成長曲線の学年ラベル用・#1） */
+function gradeSplitStats(key){
+  const buckets=gradeBuckets();
+  const out=[];
+  for(const gr of LAB_GRADES){
+    const pm=buckets.get(gr); if(!pm || !pm.has(key)) continue;
+    const games=pm.get(key);
+    const b=aggBatting(games).find(r=>r.pid===key)||null;
+    const p=aggPitching(games).find(r=>r.pid===key)||null;
+    out.push({grade:gr, G:games.length, bat:b, pit:p});
+  }
+  return out;
+}
+
+/* キャリアハイ（#4）。打者はOPS、投手は防御率で自己最高シーズンを選ぶ。
+   シーズンが1つしかない選手には出さない（比べる相手がいない）。 */
+function careerHighOf(key){
+  /* 第174弾: 対象は**公式戦のシーズンだけ**。実データで検証したら「2033練習試合 OPS1.850」が
+     自己最高に選ばれてしまった。練習試合は格下相手なので「最高のシーズン」としては成立しない。
+     通算成績は練習試合込み（アプリ全体の方針）だが、ここはマイルストーンと同じく公式戦に固定する。 */
+  const bat=[], pit=[];
+  for(const [sname,s] of officialSeasonEntries()){
+    const games=((s&&s.games)||[]).filter(g=>
+      (g.batters||[]).some(x=>pidOf(x)===key) || (g.pitchers||[]).some(x=>pidOf(x)===key));
+    if(!games.length) continue;
+    const b=aggBatting(games).find(r=>r.pid===key);
+    const p=aggPitching(games).find(r=>r.pid===key);
+    if(b && b.AB>0) bat.push({season:sname, ...b});
+    if(p && p.ipNum>0) pit.push({season:sname, ...p});
+  }
+  const out={};
+  if(bat.length>=2){ out.bat=bat.slice().sort((a,b)=>b.OPS-a.OPS)[0]; out.batSeasons=bat.length; }
+  if(pit.length>=2){ out.pit=pit.slice().sort((a,b)=>a.ERA-b.ERA)[0]; out.pitSeasons=pit.length; }
+  return (out.bat||out.pit)? out : null;
+}
+
+/* デビュー戦（#5）。公式戦の初出場。引退試合（retirementGameCardHtml）と対になる。 */
+function debutGameOf(key){
+  const apps=[];
+  for(const [sname,s] of officialSeasonEntries()){
+    for(const g of ((s&&s.games)||[])){
+      const b=(g.batters||[]).find(x=>pidOf(x)===key);
+      const p=(g.pitchers||[]).find(x=>pidOf(x)===key);
+      if(!b && !p) continue;
+      apps.push({date:g.date||"", season:sname, opp:g.opponent||"", gid:g.id, b, p, g});
+    }
+  }
+  if(apps.length<2) return null;   // 1試合しか出ていない選手はデビュー戦＝全部なので出さない
+  apps.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  return apps[0];
+}
+
+/* 打順ごとの成績（#8）。既存の battingOrderBreakdown は出場本数だけなので、
+   その打順で実際どう打ったかを足す。 */
+function orderSplitStats(key, games){
+  const m=new Map();
+  for(const g of games){
+    const b=(g.batters||[]).find(x=>pidOf(x)===key);
+    if(!b) continue;
+    let slot;
+    if(b.sub) slot="途中出場";
+    else if(b.order==null || b.order==="") continue;
+    else slot=`${n(b.order)}番`;
+    if(!m.has(slot)) m.set(slot,{label:slot, sub:slot==="途中出場", G:0, AB:0,H:0,BB:0,SH:0,"2B":0,"3B":0,HR:0,RBI:0});
+    const t=m.get(slot); t.G++;
+    for(const k of ["AB","H","BB","SH","2B","3B","HR","RBI"]) t[k]+=n(b[k]);
+  }
+  const rows=[...m.values()].map(t=>{
+    const tb=t.H+t["2B"]+2*t["3B"]+3*t.HR;
+    const obp=(t.AB+t.BB)? (t.H+t.BB)/(t.AB+t.BB) : 0;
+    const slg=t.AB? tb/t.AB : 0;
+    return {...t, AVG:t.AB? t.H/t.AB : 0, OBP:obp, SLG:slg, OPS:obp+slg};
+  });
+  rows.sort((a,b)=>{
+    if(a.sub!==b.sub) return a.sub? 1 : -1;
+    return (parseInt(a.label,10)||0)-(parseInt(b.label,10)||0);
+  });
+  return rows;
+}
+
+/* ---- 選手分析タブの描画 ---- */
+let labGradePick="3年";
+
+// 四象限の散布図。境目は中央値（歴代の真ん中）。
+function labQuadrantSvg(data, opt){
+  const rows=data.rows||[];
+  if(rows.length<LAB_QUAD_MIN) return `<div class="empty">${esc(opt.emptyMsg||"人数が足りません。")}</div>`;
+  const w=340,h=260,ml=42,mr=14,mt=16,mb=30;
+  const xs=rows.map(r=>r[opt.x]), ys=rows.map(r=>r[opt.y]);
+  let x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const padx=(x1-x0)*0.12||0.1, pady=(y1-y0)*0.12||0.1;
+  x0-=padx; x1+=padx; y0-=pady; y1+=pady;
+  const pw=w-ml-mr, ph=h-mt-mb;
+  const gx=v=>ml+((v-x0)/(x1-x0))*pw;
+  const gy=v=>mt+ph-((v-y0)/(y1-y0))*ph;
+  let s=`<rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="none" stroke="var(--line)"/>`;
+  s+=`<line x1="${gx(data.xMid)}" y1="${mt}" x2="${gx(data.xMid)}" y2="${mt+ph}" stroke="var(--line2)" stroke-dasharray="3 3"/>`;
+  s+=`<line x1="${ml}" y1="${gy(data.yMid)}" x2="${ml+pw}" y2="${gy(data.yMid)}" stroke="var(--line2)" stroke-dasharray="3 3"/>`;
+  for(const r of rows){
+    const cx=gx(r[opt.x]), cy=gy(r[opt.y]);
+    const hi=(r[opt.x]>data.xMid)===!!opt.xGoodHigh && (r[opt.y]>data.yMid);
+    s+=`<circle cx="${cx}" cy="${cy}" r="4" fill="${hi?"var(--amber)":"var(--line2)"}" stroke="var(--bg)" stroke-width="1"/>`;
+    s+=`<text x="${cx}" y="${cy-7}" fill="var(--muted)" font-size="8" text-anchor="middle">${esc(r.name)}</text>`;
+  }
+  s+=`<text x="${ml+pw/2}" y="${h-6}" fill="var(--muted)" font-size="9" text-anchor="middle">${esc(opt.xLabel)} →</text>`;
+  s+=`<text x="10" y="${mt+ph/2}" fill="var(--muted)" font-size="9" text-anchor="middle" transform="rotate(-90 10 ${mt+ph/2})">${esc(opt.yLabel)} →</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w*1.6}px;height:auto">${s}</svg>`;
+}
+const LAB_QUAD_MIN=3;
+
+function labTable(head, rows){
+  if(!rows.length) return "";
+  return `<div class="scroll"><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function labPct(x){ return isFinite(x)? (x*100).toFixed(1)+"%" : "-"; }
+function labSigned(x, digits){
+  if(!isFinite(x)) return "-";
+  const s=x.toFixed(digits==null?3:digits).replace(/^0/,"").replace(/^-0/,"-");
+  return (x>0? "+" : "")+s;
+}
+
+function renderPlayerLab(){
+  if(!$("#tab-playerLab")) return;
+  renderLabGradeRank();
+  renderLabForm();
+  renderLabAttendance();
+  renderLabBatQuadrant();
+  renderLabErrorPos();
+  renderLabCaptain();
+  renderLabGem();
+  renderLabPitQuadrant();
+  renderLabPitchEff();
+  renderLabRest();
+  renderLabFirstInning();
+  renderLabHR();
+  renderLabWalk();
+}
+
+function renderLabGradeRank(){
+  const el=$("#labGradeRank"); if(!el) return;
+  document.querySelectorAll("[data-labgrade]").forEach(b=>{
+    b.classList.toggle("ghost", b.dataset.labgrade!==labGradePick);
+  });
+  const d=gradeLeaderRows(labGradePick);
+  if(!d.bat.length && !d.pit.length){
+    el.innerHTML=`<div class="empty">${esc(labGradePick)}生の記録がありません（入学年度が設定されていない選手は学年が出ません）。</div>`;
+    return;
+  }
+  const need=qualPaMin(d.teamG), needP=qualOutsMin(d.teamG);
+  let html=`<div class="dim" style="font-size:12px;margin-bottom:6px">${esc(labGradePick)}生が出た試合 ${d.teamG}試合 ／ 規定 ${Math.ceil(need)}打席・${(needP/3).toFixed(1)}投球回。規定未満は下に灰色で並べます。</div>`;
+  if(d.bat.length){
+    html+=`<div style="font-weight:600;font-size:13px;margin:8px 0 4px"><span class="tag">打</span> 打撃</div>`;
+    html+=labTable(["選手","試合","打席","打率","OPS","本","打点"], d.bat.slice(0,LAB_RANK_MAX).map(r=>[
+      plinkHtml(r.pid,r.name)+(r.qualified?"":` <span class="dim" style="font-size:11px">規定未満</span>`),
+      r.G, r.AB+r.BB+r.SH, `<span class="num">${avg3(r.AVG)}</span>`, `<span class="num">${avg3(r.OPS)}</span>`, r.HR, r.RBI]));
+  }
+  if(d.pit.length){
+    html+=`<div style="font-weight:600;font-size:13px;margin:12px 0 4px"><span class="tag p">投</span> 投手</div>`;
+    html+=labTable(["選手","登板","投球回","防御率","奪三振","与四球"], d.pit.slice(0,LAB_RANK_MAX).map(r=>[
+      plinkHtml(r.pid,r.name)+(r.qualified?"":` <span class="dim" style="font-size:11px">規定未満</span>`),
+      r.G, r.IPstr, `<span class="num">${r.ipNum? r.ERA.toFixed(2):"-"}</span>`, r.K, r.BB]));
+  }
+  el.innerHTML=html;
+}
+const LAB_RANK_MAX=15;
+
+function renderLabForm(){
+  const el=$("#labForm"); if(!el) return;
+  const rows=formTrendRows(FORM_RECENT_GAMES).filter(r=>!r.retired);
+  if(!rows.length){ el.innerHTML=`<div class="empty">直近${FORM_RECENT_GAMES}試合と通算を比べられる現役選手がまだいません（出場${FORM_RECENT_GAMES*2}試合以上が対象）。</div>`; return; }
+  const up=rows.slice(0,5), down=rows.slice(-5).reverse().filter(r=>r.diff<0);
+  let html=labTable(["上がり調子","出場","通算OPS",`直近${FORM_RECENT_GAMES}試合OPS`,"差"], up.map(r=>[
+    plinkHtml(r.pid,r.name), r.G, `<span class="num">${avg3(r.careerOPS)}</span>`,
+    `<span class="num">${avg3(r.recentOPS)}</span>`,
+    `<span class="num" style="color:${r.diff>=0?"var(--green)":"var(--muted)"}">${labSigned(r.diff)}</span>`]));
+  if(down.length) html+=`<div style="margin-top:10px">`+labTable(["落ちている","出場","通算OPS",`直近${FORM_RECENT_GAMES}試合OPS`,"差"], down.map(r=>[
+    plinkHtml(r.pid,r.name), r.G, `<span class="num">${avg3(r.careerOPS)}</span>`,
+    `<span class="num">${avg3(r.recentOPS)}</span>`,
+    `<span class="num" style="color:var(--red,#e06c75)">${labSigned(r.diff)}</span>`]))+`</div>`;
+  el.innerHTML=html;
+}
+
+function renderLabAttendance(){
+  const el=$("#labAttendance"); if(!el) return;
+  const rows=perfectAttendanceRows();
+  if(!rows.length){
+    const near=nearAttendanceRows(3);
+    el.innerHTML=`<div class="dim" style="font-size:13px;margin-bottom:6px">在籍中の全試合に出た選手はまだいません。一番近いのはこの3人です。</div>`
+      + labTable(["選手","出場","在籍中の試合","出場率","期間"], near.map(r=>[
+        plinkHtml(r.key,r.name), r.G, r.denom, `<span class="num">${labPct(r.rate)}</span>`, esc(r.scope)]));
+    return;
+  }
+  el.innerHTML=labTable(["選手","出場","在籍中の試合","期間"], rows.map(r=>[
+    plinkHtml(r.key,r.name), r.G, r.denom, esc(r.scope)]));
+}
+
+function renderLabBatQuadrant(){
+  const el=$("#labBatQuadrant"); if(!el) return;
+  const d=batterQuadrantRows();
+  el.innerHTML=labQuadrantSvg(d,{x:"BBK",y:"ISO",xLabel:"四球/三振（選球眼）",yLabel:"ISO（長打力）",xGoodHigh:true,
+      emptyMsg:`規定打席（${Math.ceil(d.need)}打席）に届いた打者が${LAB_QUAD_MIN}人未満です。`})
+    + (d.rows.length>=LAB_QUAD_MIN? `<div class="dim" style="font-size:12px;margin-top:4px">境目は歴代の中央値（BB/K ${d.xMid.toFixed(2)}・ISO ${avg3(d.yMid)}）。右上が「選んで長打も打てる」区画です。</div>`:"");
+}
+
+function renderLabErrorPos(){
+  const el=$("#labErrorPos"); if(!el) return;
+  const d=errorByPositionRows();
+  if(!d.rows.length){ el.innerHTML=`<div class="empty">ポジションが設定された選手の失策記録がまだありません。</div>`; return; }
+  const max=Math.max(...d.rows.map(r=>r.EperG),0.0001);
+  el.innerHTML=d.rows.map(r=>{
+    const pct=Math.max(2,Math.round(r.EperG/max*100));
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 2px">
+      <span style="width:80px">${esc(r.position)}</span>
+      <span style="flex:1;background:var(--line);border-radius:4px;height:10px;overflow:hidden">
+        <span style="display:block;height:100%;width:${pct}%;background:var(--amber)"></span></span>
+      <span class="num" style="width:120px;text-align:right">${r.EperG.toFixed(3)} / 試合</span>
+      <span class="dim" style="width:96px;text-align:right;font-size:12px">失策${r.E}・${r.players}人</span>
+    </div>`;
+  }).join("") + (d.noPos? `<div class="dim" style="font-size:12px;margin-top:6px">ポジション未設定の選手${d.noPos}人はここに入っていません。</div>`:"");
+}
+
+function renderLabCaptain(){
+  const el=$("#labCaptain"); if(!el) return;
+  const rows=captainYearRows();
+  if(!rows.length){ el.innerHTML=`<div class="empty">主将が設定された選手がまだいません。選手ページの「主将」にチェックを入れると、その代の成績がここに出ます。</div>`; return; }
+  el.innerHTML=labTable(["年度","主将","試合","勝敗","勝率","得点","失点"], rows.map(r=>[
+    `${r.nendo}年度`, plinkHtml(r.pid,r.name), r.G,
+    r.G? `${r.W}勝${r.L}敗${r.D?r.D+"分":""}` : `<span class="dim">まだ試合がありません</span>`,
+    `<span class="num">${r.winRate==null? "-" : avg3(r.winRate)}</span>`, r.RF, r.RA]));
+}
+
+function renderLabGem(){
+  const el=$("#labGem"); if(!el) return;
+  const d=hiddenGemRows();
+  if(!d.rows.length){ el.innerHTML=`<div class="empty">規定（${Math.ceil(d.need)}打席）未満で、規定到達者の中央値OPS ${avg3(d.median)} を超えている選手はいません。</div>`; return; }
+  el.innerHTML=`<div class="dim" style="font-size:12px;margin-bottom:6px">規定＝${Math.ceil(d.need)}打席、規定到達者の中央値OPS＝${avg3(d.median)}。打数${LAB_GEM_AB_MIN}以上が対象です。</div>`
+    + labTable(["選手","打席","打数","打率","OPS","本","状態"], d.rows.slice(0,LAB_RANK_MAX).map(r=>[
+      plinkHtml(r.pid,r.name), r.PAcount, r.AB, `<span class="num">${avg3(r.AVG)}</span>`,
+      `<span class="num">${avg3(r.OPS)}</span>`, r.HR, r.retired? "卒業":"現役"]));
+}
+
+function renderLabPitQuadrant(){
+  const el=$("#labPitQuadrant"); if(!el) return;
+  const d=pitcherQuadrantRows();
+  el.innerHTML=labQuadrantSvg(d,{x:"BB9",y:"K9",xLabel:"与四球率(BB/9)",yLabel:"奪三振率(K/9)",xGoodHigh:false,
+      emptyMsg:`規定投球回（${(d.need/3).toFixed(1)}回）に届いた投手が${LAB_QUAD_MIN}人未満です。`})
+    + (d.rows.length>=LAB_QUAD_MIN? `<div class="dim" style="font-size:12px;margin-top:4px">境目は歴代の中央値（BB/9 ${d.xMid.toFixed(2)}・K/9 ${d.yMid.toFixed(2)}）。<strong>左上</strong>が「奪って与えない」区画です。</div>`:"");
+}
+
+function renderLabPitchEff(){
+  const el=$("#labPitchEff"); if(!el) return;
+  const d=pitchEfficiencyRows();
+  if(!d.rows.length){ el.innerHTML=`<div class="empty">球数が入っている登板がまだありません（データタブの「球数の後付け取り込み」で入ります）。</div>`; return; }
+  el.innerHTML=`<div class="dim" style="font-size:12px;margin-bottom:6px">球数が入っているのは ${d.withP} / ${d.totalApp} 登板。<strong>球数のある登板だけ</strong>で計算しています。</div>`
+    + labTable(["投手","球数","球/回","球/打者","対象登板"], d.rows.slice(0,LAB_RANK_MAX).map(r=>[
+      plinkHtml(r.pid,r.name), r.P, `<span class="num">${r.PPI.toFixed(1)}</span>`,
+      `<span class="num">${r.PPB? r.PPB.toFixed(2):"-"}</span>`, `${r.GwithP} / ${r.G}`]));
+}
+
+function renderLabRest(){
+  const el=$("#labRest"); if(!el) return;
+  const d=restDayRows();
+  const used=d.buckets.filter(b=>b.app>0);
+  if(!used.length){ el.innerHTML=`<div class="empty">同じ投手が2回以上登板した記録がまだありません（日付のある試合が対象）。</div>`; return; }
+  let html=labTable(["登板間隔","登板","投球回","防御率","奪三振","与四球"], used.map(b=>[
+    esc(b.bucket), b.app, b.IP.toFixed(1), `<span class="num">${b.outs? b.ERA.toFixed(2):"-"}</span>`, b.K, b.BB]));
+  if(d.perPlayer.length){
+    html+=`<div style="margin-top:10px;font-weight:600;font-size:13px">投手ごと（中1日以内 vs 中2日以上）</div>`
+      +`<div class="dim" style="font-size:12px;margin-bottom:4px">どちらも${LAB_REST_MIN_APP}登板以上ある投手だけを並べます。マイナスなら短い間隔の方が良い成績です。</div>`
+      + labTable(["投手","中1日以内","中2日以上","差"], d.perPlayer.map(r=>[
+        plinkHtml(r.pid,r.name),
+        `<span class="num">${r.shortERA.toFixed(2)}</span> <span class="dim" style="font-size:11px">(${r.shortApp}登板)</span>`,
+        `<span class="num">${r.longERA.toFixed(2)}</span> <span class="dim" style="font-size:11px">(${r.longApp}登板)</span>`,
+        `<span class="num" style="color:${r.diff<=0?"var(--green)":"var(--muted)"}">${labSigned(r.diff,2)}</span>`]));
+  }
+  el.innerHTML=html;
+}
+
+function renderLabFirstInning(){
+  const el=$("#labFirstInning"); if(!el) return;
+  const d=firstInningRows();
+  if(!d.rows.length){ el.innerHTML=`<div class="empty">イニング別得点が入っていて、先発が1回を投げ切った試合がまだありません。</div>`; return; }
+  el.innerHTML=`<div class="dim" style="font-size:12px;margin-bottom:6px">対象 ${d.used}試合（イニング別得点が無い・先発が1回を投げ切っていない ${d.skipped}試合は除外）。</div>`
+    + labTable(["先発","先発数","初回平均失点","無失点発進","無失点率",`初回${LAB_BIG_FIRST}失点以上`], d.rows.map(r=>[
+      plinkHtml(r.pid,r.name), r.GS, `<span class="num">${r.avgR1.toFixed(2)}</span>`, r.clean,
+      `<span class="num">${labPct(r.cleanRate)}</span>`, r.big]));
+}
+
+function renderLabHR(){
+  const el=$("#labHR"); if(!el) return;
+  const d=hrAllowedImpact();
+  const line=(lbl,b)=>{
+    const dec=b.W+b.L;
+    return `<div style="display:flex;gap:10px;font-size:13px;padding:3px 2px">
+      <span style="flex:1">${lbl}</span><span>${b.G}試合</span>
+      <span>${b.W}勝${b.L}敗${b.D?b.D+"分":""}</span>
+      <span class="num" style="width:60px;text-align:right">${dec? avg3(b.W/dec):"-"}</span></div>`;
+  };
+  let html=line("本塁打を浴びた試合", d.withHR)+line("浴びなかった試合", d.without);
+  if(d.rows.length) html+=`<div style="margin-top:10px">`+labTable(["投手","被本塁打","HR/9","投球回"], d.rows.map(r=>[
+    plinkHtml(r.pid,r.name), r.HR, `<span class="num">${r.HR9.toFixed(2)}</span>`, r.IPstr]))+`</div>`;
+  el.innerHTML=html;
+}
+
+function renderLabWalk(){
+  const el=$("#labWalk"); if(!el) return;
+  const d=walkBlowupRows();
+  const line=(lbl,b)=>{
+    const dec=b.W+b.L;
+    return `<div style="display:flex;gap:10px;font-size:13px;padding:3px 2px">
+      <span style="flex:1">${lbl}</span><span>${b.G}試合</span>
+      <span>${b.W}勝${b.L}敗${b.D?b.D+"分":""}</span>
+      <span class="num" style="width:60px;text-align:right">${dec? avg3(b.W/dec):"-"}</span>
+      <span class="dim" style="width:86px;text-align:right;font-size:12px">失点${b.G? (b.RA/b.G).toFixed(1):"-"}/試合</span></div>`;
+  };
+  let html=line(`与四球${d.threshold}以上の試合`, d.many)+line(`${d.threshold}未満の試合`, d.few);
+  if(d.rows.length) html+=`<div style="margin-top:10px">`+labTable(["投手","与四球","BB/9","投球回"], d.rows.map(r=>[
+    plinkHtml(r.pid,r.name), r.BB, `<span class="num">${r.BB9.toFixed(2)}</span>`, r.IPstr]))+`</div>`;
+  el.innerHTML=html;
+}
+
+/* ---- 選手ページに足すカード ---- */
+
+function careerHighCardHtml(key){
+  const d=careerHighOf(key); if(!d) return "";
+  let inner="";
+  if(d.bat) inner+=`<div style="margin-bottom:8px"><div class="dim" style="font-size:12px"><span class="tag">打</span> 自己最高シーズン（OPS・${d.batSeasons}シーズン中）</div>
+    <div style="font-size:14px;font-weight:600;margin-top:2px">${esc(d.bat.season)}</div>
+    <div class="kpis">${kpi("打率",avg3(d.bat.AVG),"a")}${kpi("OPS",avg3(d.bat.OPS))}${kpi("本塁打",d.bat.HR,"g")}${kpi("打点",d.bat.RBI)}${kpi("試合",d.bat.G)}</div></div>`;
+  if(d.pit) inner+=`<div><div class="dim" style="font-size:12px"><span class="tag p">投</span> 自己最高シーズン（防御率・${d.pitSeasons}シーズン中）</div>
+    <div style="font-size:14px;font-weight:600;margin-top:2px">${esc(d.pit.season)}</div>
+    <div class="kpis">${kpi("防御率",d.pit.ipNum? d.pit.ERA.toFixed(2):"-","a")}${kpi("投球回",d.pit.IPstr)}${kpi("奪三振",d.pit.K)}${kpi("勝利",d.pit.W)}${kpi("登板",d.pit.G)}</div></div>`;
+  if(!inner) return "";
+  return `<section class="card"><h2 style="font-size:15px">キャリアハイ</h2>
+    <div class="note">公式戦のシーズンだけが対象です（練習試合は格下相手なので最高記録には数えません）。シーズンが2つ以上ある選手だけに出ます。</div>${inner}</section>`;
+}
+
+function debutGameCardHtml(key){
+  const d=debutGameOf(key); if(!d) return "";
+  let statLine="";
+  if(d.b){ const b=d.b;
+    statLine+=`<div style="font-size:13px;margin-top:2px"><span class="tag">打</span> ${n(b.AB)}打数${n(b.H)}安打`
+      +(n(b.HR)?`　本塁打${n(b.HR)}`:"")+(n(b.RBI)?`　打点${n(b.RBI)}`:"")+(n(b.SB)?`　盗塁${n(b.SB)}`:"")+`</div>`; }
+  if(d.p){ const p=d.p;
+    statLine+=`<div style="font-size:13px;margin-top:2px"><span class="tag p">投</span> ${esc(String(p.IP))}回　自責${n(p.ER)}　奪三振${n(p.K)}　与四球${n(p.BB)}</div>`; }
+  return `<section class="card"><h2 style="font-size:15px">デビュー戦</h2>
+    <div class="note">公式戦での初出場です（練習試合は含みません）。</div>
+    <div style="font-size:14px">
+      <span class="glink num" role="link" tabindex="0" data-gid="${esc(String(d.gid))}">${esc(d.date||"日付なし")}</span>
+      <span style="margin-left:8px">${esc(d.season)}　対${esc(d.opp||"?")}</span>
+    </div>${statLine}</section>`;
+}
+
+function orderSplitCardHtml(key, games){
+  const rows=orderSplitStats(key, games).filter(r=>r.AB>0);
+  if(rows.length<2) return "";
+  return `<section class="card"><h2 style="font-size:15px">打順ごとの成績</h2>
+    <div class="note">その打順で入った試合だけを集計しています。打席数が少ない打順は数字が振れやすいので、上の本数と合わせて見てください。</div>
+    ${labTable(["打順","試合","打席","打率","出塁率","OPS","本","打点"], rows.map(r=>[
+      esc(r.label)+(r.sub?` <span class="dim" style="font-size:11px">交代出場</span>`:""),
+      r.G, r.AB+r.BB+r.SH, `<span class="num">${avg3(r.AVG)}</span>`,
+      `<span class="num">${avg3(r.OBP)}</span>`, `<span class="num">${avg3(r.OPS)}</span>`, r.HR, r.RBI]))}</section>`;
+}
+
 
 /* ---------- 監督室 ---------- */
 function renderManager(){
@@ -4831,22 +5623,6 @@ function renderEnrollYearTab(){
   el.innerHTML = shown? html : `<div class="empty">条件に合う選手がいません。</div>`;
   if(cntEl) cntEl.textContent = shown===total? `${total}人` : `${shown}人 / 全${total}人`;
 }
-function renderPlayerPicker(){
-  const el=$("#playerPickerList"); if(!el) return;
-  const groups=rosterGroups();
-  if(!groups.length){ el.innerHTML=`<div class="dim" style="font-size:13px">選手がまだ登録されていません。</div>`; return; }
-  const cur=currentPlayerKey();
-  el.innerHTML=groups.map(g=>{
-    const title = g.gkey==="none"? "入学年未設定" : `${g.label}${g.gradeLabel?`（現在${g.gradeLabel}）`:""}`;
-    const chips=g.members.map(([key,nm])=>
-      `<button type="button" class="chip${key===cur?' selected':''}" data-pickplayer="${esc(key)}">${esc(fullNameOf(key,nm))}${metaMarks(key)}</button>`).join(" ");
-    return `<div style="margin-bottom:8px">
-      <div class="dim" style="font-size:12px;font-weight:600;margin-bottom:4px">${esc(title)}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
-    </div>`;
-  }).join("");
-}
-// ◀ ▶ で名簿順の前後の選手へ。端まで行ったら反対側へ回り込む
 function stepPlayer(delta){
   const keys=rosterOrderedKeys();
   if(!keys.length){ toast("選手が登録されていません",true); return; }
@@ -5322,18 +6098,31 @@ function playerGrowthData(key){
       const b=(g.batters||[]).find(x=>pidOf(x)===key);
       const p=(g.pitchers||[]).find(x=>pidOf(x)===key);
       if(!b && !p) continue;
-      if(!yearly[y]) yearly[y]={year:y,AB:0,H:0,outs:0,ER:0};
-      if(b){ yearly[y].AB+=n(b.AB); yearly[y].H+=n(b.H); }
+      if(!yearly[y]) yearly[y]={year:y,AB:0,H:0,BB:0,SH:0,TB:0,outs:0,ER:0,grades:{}};
+      // 第174弾: 何年生のときかが読み取れるように学年も数える（年だけだと代が分からない）
+      const gl=labGradeAt(key, sname, g);
+      if(gl) yearly[y].grades[gl]=(yearly[y].grades[gl]||0)+1;
+      if(b){ yearly[y].AB+=n(b.AB); yearly[y].H+=n(b.H); yearly[y].BB+=n(b.BB); yearly[y].SH+=n(b.SH);
+             yearly[y].TB+=n(b.H)+n(b["2B"])+2*n(b["3B"])+3*n(b.HR); }
       if(p){ yearly[y].outs+=ip2outs(p.IP); yearly[y].ER+=n(p.ER); }
     }
   }
   const arr=Object.values(yearly).sort((a,b)=>a.year-b.year);
-  arr.forEach(o=>{ o.AVG=o.AB?o.H/o.AB:0; o.ERA=o.outs?o.ER*27/o.outs:0; o.hasBat=o.AB>0; o.hasPit=o.outs>0; });
+  arr.forEach(o=>{
+    o.AVG=o.AB?o.H/o.AB:0; o.ERA=o.outs?o.ER*27/o.outs:0; o.hasBat=o.AB>0; o.hasPit=o.outs>0;
+    const obp=(o.AB+o.BB)? (o.H+o.BB)/(o.AB+o.BB) : 0;
+    const slg=o.AB? o.TB/o.AB : 0;
+    o.OBP=obp; o.SLG=slg; o.OPS=obp+slg;
+    // その年に一番多かった学年をラベルにする（年度をまたぐシーズンがあるので多数決）
+    const gs=Object.entries(o.grades||{}).sort((a,b)=>b[1]-a[1]);
+    o.gradeLabel=gs.length? gs[0][0] : "";
+    o.label=o.gradeLabel? `${o.year}\n${o.gradeLabel}` : String(o.year);
+  });
   return arr;
 }
 function miniSparkline(pts, getVal, color, fmtLabel){
   const w=300,h=92,ml=10,mr=10,mt=14,mb=18;
-  const arr=pts.map((d,i)=>({i,v:getVal(d),year:d.year}));
+  const arr=pts.map((d,i)=>({i,v:getVal(d),year:d.year,sub:d.gradeLabel||""}));
   const vals=arr.map(p=>p.v);
   let mn=Math.min(...vals), mx=Math.max(...vals);
   if(mn===mx){ mn-=Math.abs(mn)*0.1+0.01; mx+=Math.abs(mx)*0.1+0.01; }
@@ -5343,7 +6132,8 @@ function miniSparkline(pts, getVal, color, fmtLabel){
   let s=`<polyline points="${arr.map(p=>`${gx(p.i)},${gy(p.v)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
   for(const p of arr){
     s+=`<circle cx="${gx(p.i)}" cy="${gy(p.v)}" r="3" fill="var(--bg)" stroke="${color}" stroke-width="2"/>`;
-    s+=`<text x="${gx(p.i)}" y="${h-5}" fill="var(--muted)" font-size="9" text-anchor="middle">${p.year}</text>`;
+    s+=`<text x="${gx(p.i)}" y="${p.sub? h-11 : h-5}" fill="var(--muted)" font-size="9" text-anchor="middle">${p.year}</text>`;
+    if(p.sub) s+=`<text x="${gx(p.i)}" y="${h-3}" fill="var(--amber)" font-size="8" text-anchor="middle">${esc(p.sub)}</text>`;
     s+=`<text x="${gx(p.i)}" y="${gy(p.v)-6}" fill="${color}" font-size="9" text-anchor="middle">${esc(fmtLabel(p.v))}</text>`;
   }
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w}px;height:auto">${s}</svg>`;
@@ -5354,9 +6144,12 @@ function playerGrowthHtml(key){
   const pitYears=data.filter(d=>d.hasPit);
   let inner="";
   if(batYears.length>=2) inner+=`<div style="margin-bottom:10px"><div class="dim" style="font-size:12px;margin-bottom:2px">打率の推移</div>${miniSparkline(batYears,d=>d.AVG,"var(--amber)",v=>avg3(v))}</div>`;
+  // 第174弾: 打率だけだと「四球で出て長打も打つ」型の伸びが見えないのでOPSも並べる
+  if(batYears.length>=2) inner+=`<div style="margin-bottom:10px"><div class="dim" style="font-size:12px;margin-bottom:2px">OPSの推移</div>${miniSparkline(batYears,d=>d.OPS,"var(--amber)",v=>avg3(v))}</div>`;
   if(pitYears.length>=2) inner+=`<div><div class="dim" style="font-size:12px;margin-bottom:2px">防御率の推移</div>${miniSparkline(pitYears,d=>d.ERA,"var(--green)",v=>v.toFixed(2))}</div>`;
   if(!inner) return "";
-  return `<section class="card"><h2 style="font-size:15px">成長曲線</h2><div class="note">年度ごとの打率／防御率の推移（2年以上データがある指標だけ表示。練習試合も含む）。</div>${inner}</section>`;
+  return `<section class="card"><h2 style="font-size:15px">成長曲線</h2><div class="note">年ごとの打率／OPS／防御率の推移（2年以上データがある指標だけ表示。練習試合も含む）。
+    <strong>年の下の「1年」「2年」はその年に一番多かった学年</strong>です（入学年度を設定している選手だけ出ます）。</div>${inner}</section>`;
 }
 // playerMetaの1項目を更新する共通処理（空文字/未指定/falseなら項目ごと削除）。
 // 選手タブのメタ編集フォームと選手名簿タブのインライン編集の両方がこれを使う（同じ処理を二重に書かない）
@@ -5436,9 +6229,12 @@ function renderPlayerContent(){
     SV:careerQS.SV, HLD:careerQS.HLD, SVH:careerQS.SVH, GS:careerQS.GS, startRate:careerQS.startRate
   }) : careerPit;
   html+=nicknameCardHtml(careerBat, pitForNick);
+  html+=debutGameCardHtml(key);              // 第174弾: 引退試合と対にする
   html+=retirementGameCardHtml(key, enrollYear);
+  html+=careerHighCardHtml(key);              // 第174弾: 自己最高シーズン
   html+=nextMilestonesCardHtml(key);
   html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
+  html+=orderSplitCardHtml(key, careerGames); // 第174弾: 打順ごとの「本数」だけでなく成績も
 
   // 代打・途中出場成績（#10）: sub=true の打席のみ集計
   const subStat=subBattingBreakdown(key,careerGames);
@@ -5668,14 +6464,6 @@ async function exportPlayerCard(key) {
     document.body.removeChild(card);
   }
 }
-
-/* ---------- 選手タグ（性格・特能） ---------- */
-const FIXED_TAGS = [
-  "内気", "天才肌", "お調子者", "したたか",
-  "キャッチャーA", "キャッチャーB", "ムード◯", "威圧感(野)", "アベレージヒッター", "パワーヒッター", "チャンスA", "チャンスB", "盗塁A", "盗塁B",
-  "威圧感(投)", "対ピンチA", "対ピンチB", "打たれ強さA", "打たれ強さB", "奪三振", "ノビA", "ノビB",
-  "転生", "キャプテン", "★"
-];
 
 function archiveGames(){
   const rows=[];
@@ -6018,7 +6806,6 @@ function dupDisplayNameSet(){
   __dupNameCache=new Set([...cnt.entries()].filter(([,c])=>c>1).map(([nm])=>nm));
   return __dupNameCache;
 }
-function invalidateDupNameCache(){ __dupNameCache=null; }
 function playerQualifier(key,name){
   const nm=playerDisplayName(key,name);
   if(!nm || !dupDisplayNameSet().has(nm)) return "";
@@ -10538,15 +11325,6 @@ function highlightEntryCells(badCols){
     });
   });
 }
-function clearEntryHighlights(){
-  $$("#batEntry tbody tr").forEach(tr=>{
-    tr.classList.remove("row-badrow");
-    $$("input[data-k]",tr).forEach(i=>i.classList.remove("cell-colbad"));
-  });
-  $$("#pitEntry tbody input[data-k='IP']").forEach(i=>i.classList.remove("cell-colbad"));
-  $$("#pitEntry tbody tr").forEach(tr=>tr.classList.remove("row-badrow"));
-}
-// 投球回の合計が合わないときは投球回セルを赤く、行内矛盾がある投手行は黄色くする（第112/113弾）
 function highlightPitchOuts(bad){
   $$("#pitEntry tbody input[data-k='IP']").forEach(i=>i.classList.toggle("cell-colbad", !!bad && String(i.value).trim()!==""));
   $$("#pitEntry tbody tr").forEach(tr=>{
@@ -10739,7 +11517,7 @@ async function runFreshOcr(){
 }
 
 /* ---------- tabs ---------- */
-const TAB_NAMES=["summary","period","report","timeline","enrollYear","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
+const TAB_NAMES=["summary","period","report","timeline","enrollYear","playerLab","seasonCompare","vs","games","add","guide","manager","data","bestnine","awards","videopool"];
 function switchTab(name,mode){
   // 第164弾: 廃止した「選手」タブのURLは名簿タブへ寄せる（古いブックマーク対策）
   if(name==="player") name="enrollYear";
@@ -10998,6 +11776,11 @@ async function wireSeasonForm(){
       });
     } }
   { const r=$("#reportNendoSel"); if(r) r.addEventListener("change",e=>{ reportNendoPick=e.target.value; renderReportTab(); }); }
+  // 第174弾: 選手分析の学年切替
+  { const g=$("#labGradeBtns"); if(g) g.addEventListener("click",e=>{
+      const b=e.target.closest("[data-labgrade]"); if(!b) return;
+      labGradePick=b.dataset.labgrade; renderLabGradeRank();
+    }); }
   $("#awardSeasonSel").addEventListener("change",e=>{ awardSeasonPick=e.target.value; renderAwards(); });
   $("#btnGraphAvg").addEventListener("click", () => {
     currentGraphType = "AVG";
@@ -11945,7 +12728,11 @@ async function init(){
   openInitialView();
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
-window.__test={ getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
+window.__test={ /* 第174弾: 選手分析 */ labGradeAt, nearAttendanceRows, gradeBuckets, gradeLeaderRows, formTrendRows, perfectAttendanceRows,
+  hiddenGemRows, errorByPositionRows, captainYearRows, batterQuadrantRows, pitcherQuadrantRows, labMedian,
+  pitchEfficiencyRows, restDayRows, labDayDiff, firstInningRows, hrAllowedImpact, walkBlowupRows,
+  gradeSplitStats, careerHighOf, debutGameOf, orderSplitStats, playerGrowthData,
+  getDB:()=>DB, setDB:v=>{DB=v; __dupNameCache=null;}, n, hasPA, OCR_PROMPT, DEF_MODEL, DEF_OR_MODEL, detectGameBadges, getPlayerStats, checkMilestonesDiff, getYearlyStats, fpSampleTimes, voteOcrReads, selectBestNine, mergeDB, migrate, drawGenerationCard, metaMarks, curKey:()=>curKey(), getProfiles:()=>PROFILES, getCurProfile:()=>curProfileId, switchProfile, createProfile, saveDB, loadDB, initProfiles, fpPickRecommended, FP_MIN_REC,
   // 第93弾: 分析カード群の純粋関数
   pythagExpected, pythagSummary, computeStreaks, gameResultSeq, monthlyStats, saberFrom, saberRows,
   // 第139弾: 率で並べたときの規定判定
