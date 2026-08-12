@@ -802,7 +802,7 @@
 
   </div>
 
-  <!-- 選手分析（第174弾） -->
+  <!-- 選手分析（第175弾） -->
   <div id="tab-playerLab" style="display:none">
     <section class="card">
       <h2>選手分析</h2>
@@ -2924,6 +2924,7 @@ function ocrLogAdd(kind, detail){
   }catch(e){/* ログ失敗は本処理に影響させない */}
   renderOcrLog();
 }
+
 function renderOcrLog(){
   const el=$("#ocrLog"); if(!el) return;
   const a=ocrLogGet();
@@ -3676,7 +3677,7 @@ function render(){
 }
 
 
-/* ================= 第174弾: 選手分析 =================
+/* ================= 第175弾: 選手分析 =================
    ここに置くのは「選手を**横断で並べて**見る」もの。1人ぶんの詳細は選手ページ側。
    集計スコープは通算系にそろえて練習試合も含める（seasonEntries）。
    イニングが要るもの（立ち上がり）だけは innings のある試合に限る。
@@ -4030,7 +4031,7 @@ function gradeSplitStats(key){
 /* キャリアハイ（#4）。打者はOPS、投手は防御率で自己最高シーズンを選ぶ。
    シーズンが1つしかない選手には出さない（比べる相手がいない）。 */
 function careerHighOf(key){
-  /* 第174弾: 対象は**公式戦のシーズンだけ**。実データで検証したら「2033練習試合 OPS1.850」が
+  /* 第175弾: 対象は**公式戦のシーズンだけ**。実データで検証したら「2033練習試合 OPS1.850」が
      自己最高に選ばれてしまった。練習試合は格下相手なので「最高のシーズン」としては成立しない。
      通算成績は練習試合込み（アプリ全体の方針）だが、ここはマイルストーンと同じく公式戦に固定する。 */
   const bat=[], pit=[];
@@ -6099,7 +6100,7 @@ function playerGrowthData(key){
       const p=(g.pitchers||[]).find(x=>pidOf(x)===key);
       if(!b && !p) continue;
       if(!yearly[y]) yearly[y]={year:y,AB:0,H:0,BB:0,SH:0,TB:0,outs:0,ER:0,grades:{}};
-      // 第174弾: 何年生のときかが読み取れるように学年も数える（年だけだと代が分からない）
+      // 第175弾: 何年生のときかが読み取れるように学年も数える（年だけだと代が分からない）
       const gl=labGradeAt(key, sname, g);
       if(gl) yearly[y].grades[gl]=(yearly[y].grades[gl]||0)+1;
       if(b){ yearly[y].AB+=n(b.AB); yearly[y].H+=n(b.H); yearly[y].BB+=n(b.BB); yearly[y].SH+=n(b.SH);
@@ -6144,7 +6145,7 @@ function playerGrowthHtml(key){
   const pitYears=data.filter(d=>d.hasPit);
   let inner="";
   if(batYears.length>=2) inner+=`<div style="margin-bottom:10px"><div class="dim" style="font-size:12px;margin-bottom:2px">打率の推移</div>${miniSparkline(batYears,d=>d.AVG,"var(--amber)",v=>avg3(v))}</div>`;
-  // 第174弾: 打率だけだと「四球で出て長打も打つ」型の伸びが見えないのでOPSも並べる
+  // 第175弾: 打率だけだと「四球で出て長打も打つ」型の伸びが見えないのでOPSも並べる
   if(batYears.length>=2) inner+=`<div style="margin-bottom:10px"><div class="dim" style="font-size:12px;margin-bottom:2px">OPSの推移</div>${miniSparkline(batYears,d=>d.OPS,"var(--amber)",v=>avg3(v))}</div>`;
   if(pitYears.length>=2) inner+=`<div><div class="dim" style="font-size:12px;margin-bottom:2px">防御率の推移</div>${miniSparkline(pitYears,d=>d.ERA,"var(--green)",v=>v.toFixed(2))}</div>`;
   if(!inner) return "";
@@ -6229,12 +6230,12 @@ function renderPlayerContent(){
     SV:careerQS.SV, HLD:careerQS.HLD, SVH:careerQS.SVH, GS:careerQS.GS, startRate:careerQS.startRate
   }) : careerPit;
   html+=nicknameCardHtml(careerBat, pitForNick);
-  html+=debutGameCardHtml(key);              // 第174弾: 引退試合と対にする
+  html+=debutGameCardHtml(key);              // 第175弾: 引退試合と対にする
   html+=retirementGameCardHtml(key, enrollYear);
-  html+=careerHighCardHtml(key);              // 第174弾: 自己最高シーズン
+  html+=careerHighCardHtml(key);              // 第175弾: 自己最高シーズン
   html+=nextMilestonesCardHtml(key);
   html+=battingOrderBarsHtml(battingOrderBreakdown(key,careerGames));
-  html+=orderSplitCardHtml(key, careerGames); // 第174弾: 打順ごとの「本数」だけでなく成績も
+  html+=orderSplitCardHtml(key, careerGames); // 第175弾: 打順ごとの「本数」だけでなく成績も
 
   // 代打・途中出場成績（#10）: sub=true の打席のみ集計
   const subStat=subBattingBreakdown(key,careerGames);
@@ -8597,22 +8598,61 @@ function posShort(p){
   if(s.length===1) return s;
   return {"投手":"投","捕手":"捕","一塁":"一","二塁":"二","三塁":"三","遊撃":"遊","外野":"外"}[s] || s.charAt(0);
 }
-function pickLineupByPosition(cands){
+/* 第177弾: 枠が埋まらないときに人を残したまま8人以下で出していたのをやめ、
+   **候補がいる限り9人そろえる**。実データでは在校生に三塁が1人もおらず、
+   二塁が2人いるのに1人（岩田）が余ったまま7人しか出ていなかった。
+
+   埋める順番は「確からしい順」で、どう埋めたかを fill に残して画面で断る:
+     main   … 本職のポジション（規定打席あり）
+     sub    … サブポジション
+     mainLow/subLow … 打席が規定に足りない選手
+     any    … 空いた守備枠を、余っている中で一番打てる選手で埋めた（本職ではない）
+   規定を「足切り」ではなく「優先」にする考え方はベストナイン（selectPositionBestNine）と同じ。
+   spare には規定未満の候補を渡す（省略可・省略時は従来どおり規定を満たす候補だけで組む）。 */
+function pickLineupByPosition(cands, spare){
   const pool=(cands||[]).filter(c=>c&&c.key);
+  const extra=(spare||[]).filter(c=>c&&c.key);
   const used=new Set();
   const picked=[];
   const better=(a,b)=> fnum(b.OPS)-fnum(a.OPS) || fnum(b.PA)-fnum(a.PA) || String(a.name).localeCompare(String(b.name),"ja");
-  for(const def of LINEUP_SLOTS_DEF){
-    const avail=pool.filter(c=>!used.has(c.key) && posShort(c.pos)===def.pos).sort(better);
-    for(let i=0;i<def.n;i++){
-      const c=avail[i];
-      if(c){ used.add(c.key); picked.push({...c, slotPos:def.pos}); }
+  const pick=(arr,fn)=>arr.filter(c=>!used.has(c.key) && fn(c)).sort(better)[0]||null;
+  const take=(c,slotPos,fill)=>{ used.add(c.key); picked.push({...c, slotPos, fill}); };
+  const notPitcher=c=>posShort(c.pos)!=="投";   // DH制なので投手は打線に入れない
+  const slots=[];
+  for(const def of LINEUP_SLOTS_DEF) for(let i=0;i<def.n;i++) slots.push(def.pos);
+  for(const pos of slots){
+    let c=pick(pool,x=>posShort(x.pos)===pos), fill="main";
+    if(!c){ c=pick(pool,x=>posShort(x.subPos)===pos); fill="sub"; }
+    if(!c){ c=pick(extra,x=>posShort(x.pos)===pos); fill="mainLow"; }
+    if(!c){ c=pick(extra,x=>posShort(x.subPos)===pos); fill="subLow"; }
+    if(c) take(c,pos,fill);
+  }
+  { // DH: 守備枠に入らなかった選手のうち一番打てる人
+    let c=pick(pool,notPitcher), fill="main";
+    if(!c){ c=pick(extra,notPitcher); fill="mainLow"; }
+    if(c) take(c,"DH",fill);
+  }
+  // 空いたままの守備枠を、余っている選手で埋める（本職ではないので印をつける）
+  if(picked.length<9){
+    for(const def of LINEUP_SLOTS_DEF){
+      let need=def.n - picked.filter(p=>p.slotPos===def.pos).length;
+      while(need-->0 && picked.length<9){
+        const c=pick(pool,notPitcher) || pick(extra,notPitcher);
+        if(!c) return picked;   // もう誰も残っていない＝水増しはしない
+        take(c,def.pos,"any");
+      }
     }
   }
-  // DH: 守備枠に入らなかった選手のうち一番打てる人（投手は除く＝DH制のため打席に立たない）
-  const dh=pool.filter(c=>!used.has(c.key) && posShort(c.pos)!=="投").sort(better)[0];
-  if(dh){ used.add(dh.key); picked.push({...dh, slotPos:"DH"}); }
   return picked;
+}
+/* 第177弾: 枠を埋めるために入れた選手（打席不足・本職でない配置）は**下位打線に回す**。
+   9人そろえるようにしたら、通算8打席の選手が5番に座ってしまった。
+   fill を持たない呼び出し（歴代打線）では全員 0 になるので、並びは従来どおり変わらない。 */
+function lineupFillRank(p){
+  const f=p&&p.fill;
+  if(f==="mainLow"||f==="subLow") return 2;   // 打席が足りない
+  if(f==="any") return 1;                     // 本職ではない配置
+  return 0;
 }
 function historicalLineupOrder(players){
   const pool=(players||[]).slice();
@@ -8622,7 +8662,9 @@ function historicalLineupOrder(players){
     let best=null;
     for(const p of pool){
       if(used.has(p.key)) continue;
-      if(!best || fnum(p[def.stat])>fnum(best[def.stat])) best=p;
+      if(!best){ best=p; continue; }
+      const dr=lineupFillRank(p)-lineupFillRank(best);
+      if(dr<0 || (dr===0 && fnum(p[def.stat])>fnum(best[def.stat]))) best=p;
     }
     if(best){ used.add(best.key); out.push({slot:def.slot, statLabel:def.label, stat:def.stat, key:best.key, name:best.name, pos:best.pos, val:fnum(best[def.stat])}); }
     else out.push({slot:def.slot, statLabel:def.label, stat:def.stat, key:null, name:"-", pos:"", val:0});
@@ -8643,11 +8685,12 @@ function currentLineupRows(){
   const all=aggBatting(games).filter(hasPA).map(r=>{
     const key=pidOf(r);
     const meta=(DB.playerMeta&&DB.playerMeta[key])||{};
-    return {key, name:r.name, pos:meta.position||"", PA:n(r.PA), G:n(r.G),
+    return {key, name:r.name, pos:meta.position||"", subPos:meta.subPosition||"", PA:n(r.PA), G:n(r.G),
             OBP:fnum(r.OBP), OPS:fnum(r.OPS), SLG:fnum(r.SLG)};
   }).filter(c=>!isPlayerRetired(c.key));      // 卒業した選手は除く
   const cands=all.filter(c=>c.PA>=LINEUP_PA_MIN);
-  const picked=pickLineupByPosition(cands);
+  const spare=all.filter(c=>c.PA<LINEUP_PA_MIN);   // 第177弾: 枠が埋まらないときだけ使う
+  const picked=pickLineupByPosition(cands, spare);
   if(!picked.length) return {rows:[], teamG:games.length, pool:cands.length, under:all.length-cands.length};
   const order=historicalLineupOrder(picked).filter(r=>r.key);
   const byKey=new Map(picked.map(p=>[p.key,p]));
@@ -8664,23 +8707,33 @@ function renderCurrentLineup(){
   }
   const body=rows.map(r=>{
     const s=r.src;
+    // 第177弾: どう埋めた枠なのかを断る。本職でない配置や打席不足を黙って出さない
+    let note="";
+    if(s.fill==="sub") note=`<span class="dim" style="font-size:11px;color:var(--amber)">　サブ</span>`;
+    else if(s.fill==="any") note=`<span class="dim" style="font-size:11px;color:var(--amber)">　本職は${esc(s.pos||"未設定")}</span>`;
+    if(s.fill==="mainLow"||s.fill==="subLow"||n(s.PA)<LINEUP_PA_MIN)
+      note+=`<span class="dim" style="font-size:11px;color:var(--amber)">　${n(s.PA)}打席</span>`;
     return `<tr>
       <td class="num" style="color:var(--amber);width:36px">${r.slot}番</td>
       <td style="text-align:left">${plinkHtml(r.key,r.name)}${metaMarks(r.key)}
-        <span class="dim" style="font-size:11px">${esc(s.slotPos||"")}</span></td>
+        <span class="dim" style="font-size:11px">${esc(s.slotPos||"")}</span>${note}</td>
       <td class="num">${avg3(s.OBP||0)}</td>
       <td class="num" style="color:var(--amber)">${avg3(s.OPS||0)}</td>
       <td class="num">${avg3(s.SLG||0)}</td>
       <td class="dim" style="font-size:11px;text-align:left">${esc(r.statLabel)}重視</td>
     </tr>`;
   }).join("");
-  // 9人に満たない場合は理由を添える（守備位置が未設定だと枠に入れられないため）
+  /* 第177弾: 9人に満たないのは「在校生そのものが9人いない」ときだけになった。
+     以前は枠に合う選手がいないと人が余ったまま8人以下で出ていた（実データで7人）。 */
   const short = rows.length<9
-    ? `<div class="hint" style="margin-top:6px;color:var(--amber)">${9-rows.length}人ぶん埋まりませんでした。捕手・内野・外野の枠に入る選手が足りないか、選手名簿で守備位置が未設定の可能性があります（選手名簿タブで設定できます）。</div>`
+    ? `<div class="hint" style="margin-top:6px;color:var(--amber)">${9-rows.length}人ぶん埋まりませんでした。打席のある在校生が9人に足りていません。</div>`
     : "";
   el.innerHTML=`<div class="scroll"><table><thead><tr><th style="text-align:left">打順</th><th style="text-align:left">選手（守備）</th><th>出塁率</th><th>OPS</th><th>長打率</th><th style="text-align:left">基準</th></tr></thead><tbody>${body}</tbody></table></div>`
     + short
-    +`<div class="hint" style="margin-top:6px">在校生${pool}人の<strong>通算成績</strong>から選出（卒業した選手は除く／全期間${teamG}試合・練習試合を含む）。実際の打順との比較は監督室の「打順別成績」で見られます。</div>`;
+    +`<div class="hint" style="margin-top:6px">在校生${pool}人の<strong>通算成績</strong>から選出（卒業した選手は除く／全期間${teamG}試合・練習試合を含む）。
+      本職のポジション → サブポジション → 打席の少ない選手 → 余っている中で一番打てる選手、の順に9枠を埋めます。
+      <strong>「本職は◯◯」と付いた選手は守備位置が足りずに置いただけ</strong>なので、そのまま起用できるとは限りません。
+      実際の打順との比較は監督室の「打順別成績」で見られます。</div>`;
 }
 /* ==================== 第130弾: おすすめ投手リレー ====================
    打線と同じ考え方で、投手を先発・中継ぎ・抑えに割り当てた参考の継投案を出す。
@@ -11776,7 +11829,7 @@ async function wireSeasonForm(){
       });
     } }
   { const r=$("#reportNendoSel"); if(r) r.addEventListener("change",e=>{ reportNendoPick=e.target.value; renderReportTab(); }); }
-  // 第174弾: 選手分析の学年切替
+  // 第175弾: 選手分析の学年切替
   { const g=$("#labGradeBtns"); if(g) g.addEventListener("click",e=>{
       const b=e.target.closest("[data-labgrade]"); if(!b) return;
       labGradePick=b.dataset.labgrade; renderLabGradeRank();
@@ -12728,7 +12781,7 @@ async function init(){
   openInitialView();
 }
 // テスト用フック（tests.htmlが利用。let/constはwindowに載らないため明示的に公開する。アプリ動作には影響しない）
-window.__test={ /* 第174弾: 選手分析 */ labGradeAt, nearAttendanceRows, gradeBuckets, gradeLeaderRows, formTrendRows, perfectAttendanceRows,
+window.__test={ /* 第175弾: 選手分析 */ labGradeAt, nearAttendanceRows, gradeBuckets, gradeLeaderRows, formTrendRows, perfectAttendanceRows,
   hiddenGemRows, errorByPositionRows, captainYearRows, batterQuadrantRows, pitcherQuadrantRows, labMedian,
   pitchEfficiencyRows, restDayRows, labDayDiff, firstInningRows, hrAllowedImpact, walkBlowupRows,
   gradeSplitStats, careerHighOf, debutGameOf, orderSplitStats, playerGrowthData,
@@ -12778,7 +12831,7 @@ window.__test={ /* 第174弾: 選手分析 */ labGradeAt, nearAttendanceRows, gr
   // 第113弾: 投手行の矛盾判定 / 第115弾: 投球回の分数補正
   pitRowContradiction, suggestIpFix, ip2outs, outs2ip,
   // 第116弾: 試合のシーズン移動 / 第117弾: 守備位置を考慮した打線
-  moveGameToSeason, pickLineupByPosition, posShort };
+  moveGameToSeason, pickLineupByPosition, posShort, historicalLineupOrder, lineupFillRank };
 init().catch(e=>{console.error(e);toast("初期化でエラー: "+e.message,true);});
 function showUpdateBar(msg){
   // sw.jsの更新（=新バージョンのデプロイ）を検出したときのリロード案内
