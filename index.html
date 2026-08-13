@@ -3702,45 +3702,59 @@ function isLabGrade(x){ return LAB_GRADES.includes(x); }
 
 /* 学年ごとに「誰がどの試合に出たか」を1回のなめでまとめる。
    学年は選手単位ではなく**試合単位**で判定する（在籍は年度をまたぐため）。 */
+/* 学年ごとに「誰がどの試合に出たか」と「その学年だった期間にチームが戦った試合数」をまとめる。
+   学年は選手単位ではなく**試合単位**で判定する（在籍は年度をまたぐため）。
+
+   第178弾: teamG は**選手ごと**に持つ。以前は「その学年の誰かが出た試合」を全部足していたが、
+   これは全世代の1年生の試合を足し合わせた数（実データで62試合）になっていて、
+   1人の1年生が戦える試合数（1年度ぶん＝20試合前後）とは別物だった。
+   その62試合で規定を課すと60打席が必要になり、13試合58打席の1年生まで「規定未満」に落ちていた。
+   分母は「その選手がその学年だった間にチームが戦った試合数」——出場率(appearanceRates)と同じ考え方にする。 */
 function gradeBuckets(){
-  const m=new Map(); // grade -> Map(pid -> games[])
+  const m=new Map();                    // grade -> Map(pid -> {games:[], teamG:0})
+  const roster=playerRoster().map(([k])=>k);
   for(const {g,season} of labGameEntries()){
-    const seen=new Set();
+    const played=new Set();
     for(const arr of [g.batters||[], g.pitchers||[]]) for(const x of arr){
       if(!x || !x.name) continue;
-      const key=pidOf(x);
-      if(seen.has(key)) continue; seen.add(key);
+      played.add(pidOf(x));
+    }
+    for(const key of roster){
       const gr=labGradeAt(key, season, g);
       if(!isLabGrade(gr)) continue;
       if(!m.has(gr)) m.set(gr,new Map());
       const pm=m.get(gr);
-      if(!pm.has(key)) pm.set(key,[]);
-      pm.get(key).push(g);
+      if(!pm.has(key)) pm.set(key,{games:[], teamG:0});
+      const e=pm.get(key);
+      e.teamG++;                        // 出場していなくても、その学年だった試合として分母に数える
+      if(played.has(key)) e.games.push(g);
     }
   }
   return m;
 }
-/* 学年別ランキング（#2）。規定は「その学年でチームが戦った試合数」を基準にする。
-   3年生は夏で引退するので分母が小さい。全期間の試合数で規定を課すと3年生が全員消える。 */
+/* 学年別ランキング（#2）。規定は選手ごとに、その学年だった期間のチーム試合数から決める。 */
 function gradeLeaderRows(grade){
   const buckets=gradeBuckets();
   const pm=buckets.get(grade);
-  if(!pm || !pm.size) return {bat:[], pit:[], teamG:0};
-  const teamGames=new Set();
-  for(const gs of pm.values()) for(const g of gs) teamGames.add(g);
-  const teamG=teamGames.size;
+  if(!pm || !pm.size) return {bat:[], pit:[], teamG:0, needMin:0, needMax:0};
   const bat=[], pit=[];
-  for(const [key,games] of pm){
-    const b=aggBatting(games).find(r=>r.pid===key);
-    const p=aggPitching(games).find(r=>r.pid===key);
-    if(b && (b.AB+b.BB+b.SH)>0) bat.push({...b, qualified:(b.AB+b.BB+b.SH)>=qualPaMin(teamG)});
-    if(p && p.outs>0) pit.push({...p, qualified:p.outs>=qualOutsMin(teamG)});
+  let teamG=0;
+  for(const [key,e] of pm){
+    if(!e.games.length) continue;       // その学年で1試合も出ていない選手は並べない
+    teamG=Math.max(teamG, e.teamG);
+    const need=qualPaMin(e.teamG), needOuts=qualOutsMin(e.teamG);
+    const b=aggBatting(e.games).find(r=>r.pid===key);
+    const p=aggPitching(e.games).find(r=>r.pid===key);
+    if(b && (b.AB+b.BB+b.SH)>0) bat.push({...b, teamG:e.teamG, need, qualified:(b.AB+b.BB+b.SH)>=need});
+    if(p && p.outs>0) pit.push({...p, teamG:e.teamG, needOuts, qualified:p.outs>=needOuts});
   }
   bat.sort((a,b)=>(b.qualified-a.qualified)||(b.OPS-a.OPS));
   pit.sort((a,b)=>(b.qualified-a.qualified)||(a.ERA-b.ERA));
-  return {bat, pit, teamG};
+  const needs=bat.map(r=>r.need);
+  return {bat, pit, teamG,
+    needMin: needs.length? Math.ceil(Math.min(...needs)) : 0,
+    needMax: needs.length? Math.ceil(Math.max(...needs)) : 0};
 }
-
 /* 調子の波（#3）。直近N試合のOPSと通算OPSの差。
    「直近」はチームの最新試合ではなく**本人の出場試合**から数える（控えは間隔が空くため）。 */
 const FORM_RECENT_GAMES=5;
@@ -4020,7 +4034,8 @@ function gradeSplitStats(key){
   const out=[];
   for(const gr of LAB_GRADES){
     const pm=buckets.get(gr); if(!pm || !pm.has(key)) continue;
-    const games=pm.get(key);
+    const games=pm.get(key).games;
+    if(!games.length) continue;
     const b=aggBatting(games).find(r=>r.pid===key)||null;
     const p=aggPitching(games).find(r=>r.pid===key)||null;
     out.push({grade:gr, G:games.length, bat:b, pit:p});
@@ -4163,19 +4178,22 @@ function renderLabGradeRank(){
     el.innerHTML=`<div class="empty">${esc(labGradePick)}生の記録がありません（入学年度が設定されていない選手は学年が出ません）。</div>`;
     return;
   }
-  const need=qualPaMin(d.teamG), needP=qualOutsMin(d.teamG);
-  let html=`<div class="dim" style="font-size:12px;margin-bottom:6px">${esc(labGradePick)}生が出た試合 ${d.teamG}試合 ／ 規定 ${Math.ceil(need)}打席・${(needP/3).toFixed(1)}投球回。規定未満は下に灰色で並べます。</div>`;
+  /* 第178弾: 規定は選手ごと。1年生の在籍は1年度ぶんなので、
+     全世代の1年生の試合を足した数で規定を課すと、その学年でフル出場しても届かなくなる。 */
+  const needTxt = d.needMin===d.needMax? `${d.needMax}打席` : `${d.needMin}〜${d.needMax}打席`;
+  let html=`<div class="dim" style="font-size:12px;margin-bottom:6px">規定は<strong>その選手が${esc(labGradePick)}だった間にチームが戦った試合数</strong>から決めます（今回は${needTxt}）。
+    入学年度が違えば試合数も違うので、選手ごとに規定が変わります。規定未満は下に灰色で並べます。</div>`;
   if(d.bat.length){
     html+=`<div style="font-weight:600;font-size:13px;margin:8px 0 4px"><span class="tag">打</span> 打撃</div>`;
-    html+=labTable(["選手","試合","打席","打率","OPS","本","打点"], d.bat.slice(0,LAB_RANK_MAX).map(r=>[
-      plinkHtml(r.pid,r.name)+(r.qualified?"":` <span class="dim" style="font-size:11px">規定未満</span>`),
-      r.G, r.AB+r.BB+r.SH, `<span class="num">${avg3(r.AVG)}</span>`, `<span class="num">${avg3(r.OPS)}</span>`, r.HR, r.RBI]));
+    html+=labTable(["選手","出場/チーム","打席","打率","OPS","本","打点"], d.bat.slice(0,LAB_RANK_MAX).map(r=>[
+      plinkHtml(r.pid,r.name)+(r.qualified?"":` <span class="dim" style="font-size:11px">規定${Math.ceil(r.need)}打席に未達</span>`),
+      `${r.G} / ${r.teamG}`, r.AB+r.BB+r.SH, `<span class="num">${avg3(r.AVG)}</span>`, `<span class="num">${avg3(r.OPS)}</span>`, r.HR, r.RBI]));
   }
   if(d.pit.length){
     html+=`<div style="font-weight:600;font-size:13px;margin:12px 0 4px"><span class="tag p">投</span> 投手</div>`;
-    html+=labTable(["選手","登板","投球回","防御率","奪三振","与四球"], d.pit.slice(0,LAB_RANK_MAX).map(r=>[
-      plinkHtml(r.pid,r.name)+(r.qualified?"":` <span class="dim" style="font-size:11px">規定未満</span>`),
-      r.G, r.IPstr, `<span class="num">${r.ipNum? r.ERA.toFixed(2):"-"}</span>`, r.K, r.BB]));
+    html+=labTable(["選手","登板/チーム","投球回","防御率","奪三振","与四球"], d.pit.slice(0,LAB_RANK_MAX).map(r=>[
+      plinkHtml(r.pid,r.name)+(r.qualified?"":` <span class="dim" style="font-size:11px">規定${(r.needOuts/3).toFixed(1)}回に未達</span>`),
+      `${r.G} / ${r.teamG}`, r.IPstr, `<span class="num">${r.ipNum? r.ERA.toFixed(2):"-"}</span>`, r.K, r.BB]));
   }
   el.innerHTML=html;
 }
