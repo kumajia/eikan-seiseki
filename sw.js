@@ -2,7 +2,10 @@
 //  - ページ本体(navigate)は毎回 no-store で取りに行き、ブラウザのHTTPキャッシュに邪魔されないようにする
 //  - キャッシュから配信した場合はアプリへ知らせ、通信が戻ったら更新を促せるようにする
 //  - バージョンを上げることで activate 時に古いキャッシュが破棄される
-const CACHE = "eikan-stats-v18";
+//  - kumajia.github.io は FMlncGen / prank と同じ origin で Cache Storage を共有する。
+//    activate で消すのは CACHE_PREFIX で始まる自分の旧版だけ（他アプリのキャッシュは消さない）
+const CACHE_PREFIX = "eikan-stats-";
+const CACHE = CACHE_PREFIX + "v18";
 const SHARE_CACHE = "eikan-share-tmp";
 const CORE_FILES = ["./", "./index.html", "./manifest.json"];
 
@@ -13,7 +16,7 @@ self.addEventListener("install", e => {
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE && k !== SHARE_CACHE).map(k => caches.delete(k))
+      keys.filter(k => k.startsWith(CACHE_PREFIX) && k !== CACHE).map(k => caches.delete(k))
     ))
   );
   self.clients.claim();
